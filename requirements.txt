@@ -1,8 +1,8 @@
 # Google Gen AI SDK
 google-genai>=1.0.0
 
-# 图像处理
+# Image processing
 Pillow>=10.0.0
 
-# 环境变量管理
+# Environment variables
 python-dotenv>=1.0.0
