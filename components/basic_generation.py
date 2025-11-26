@@ -8,10 +8,9 @@ from i18n import Translator
 from services import (
     ImageGenerator,
     GenerationStateManager,
-    get_throttle_remaining,
     get_history_sync,
 )
-from utils import run_async, display_image_with_zoom
+from utils import run_async
 
 
 def render_basic_generation(t: Translator, settings: dict, generator: ImageGenerator):
@@ -71,11 +70,6 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
                 GenerationStateManager.cancel_generation()
                 st.toast(t("generation.cancelled"), icon="⚠️")
                 st.rerun()
-
-    # Show throttle warning
-    throttle_remaining = get_throttle_remaining()
-    if throttle_remaining > 0 and not is_generating:
-        st.caption(f"⏳ {t('generation.throttle_wait', seconds=f'{throttle_remaining:.1f}')}")
 
     # Handle generation
     if generate_clicked and prompt.strip() and can_generate:
@@ -181,8 +175,8 @@ def _display_result(t: Translator, image, text: str, thinking: str,
         with st.expander(t("basic.thinking_label"), expanded=False):
             st.write(thinking)
 
-    # Show image with zoom capability
-    display_image_with_zoom(image, key=f"result_{filename}")
+    # Show image
+    st.image(image, use_container_width=True)
 
     # Action bar: timing info and download button
     col1, col2 = st.columns([3, 1])
@@ -214,8 +208,8 @@ def _display_history_item(t: Translator, item: dict):
         with st.expander(t("basic.thinking_label"), expanded=False):
             st.write(item["thinking"])
 
-    # Show image with zoom capability
-    display_image_with_zoom(item["image"], key=f"history_{item.get('filename', 'latest')}")
+    # Show image
+    st.image(item["image"], use_container_width=True)
 
     # Action bar
     col1, col2 = st.columns([3, 1])

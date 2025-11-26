@@ -1,11 +1,130 @@
 """
 Image generation history component.
 """
+import base64
 from io import BytesIO
 from datetime import datetime
 import streamlit as st
+from PIL import Image
 from i18n import Translator
 from services import get_storage, get_history_sync
+
+
+def _image_to_base64(image: Image.Image) -> str:
+    """Convert PIL Image to base64 string."""
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode()
+
+
+def _render_clickable_image(image: Image.Image, key: str):
+    """
+    Render an image that opens fullscreen when clicked/double-clicked.
+
+    Args:
+        image: PIL Image to display
+        key: Unique key for the component
+    """
+    img_base64 = _image_to_base64(image)
+
+    html = f"""
+    <style>
+    .clickable-img-{key} {{
+        cursor: pointer;
+        border-radius: 8px;
+        width: 100%;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }}
+    .clickable-img-{key}:hover {{
+        transform: scale(1.02);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }}
+    .fullscreen-overlay-{key} {{
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.95);
+        z-index: 999999;
+        justify-content: center;
+        align-items: center;
+        cursor: zoom-out;
+    }}
+    .fullscreen-overlay-{key}.active {{
+        display: flex;
+    }}
+    .fullscreen-img-{key} {{
+        max-width: 95vw;
+        max-height: 95vh;
+        object-fit: contain;
+    }}
+    .close-btn-{key} {{
+        position: fixed;
+        top: 15px;
+        right: 25px;
+        color: white;
+        font-size: 35px;
+        cursor: pointer;
+        z-index: 1000000;
+        font-weight: bold;
+        opacity: 0.8;
+        transition: opacity 0.2s;
+    }}
+    .close-btn-{key}:hover {{
+        opacity: 1;
+    }}
+    .hint-{key} {{
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: white;
+        font-size: 13px;
+        opacity: 0.6;
+    }}
+    </style>
+
+    <img class="clickable-img-{key}"
+         src="data:image/png;base64,{img_base64}"
+         onclick="openFullscreen_{key}()"
+         title="Click to view fullscreen">
+
+    <div class="fullscreen-overlay-{key}" id="overlay_{key}" onclick="closeFullscreen_{key}()">
+        <span class="close-btn-{key}" onclick="closeFullscreen_{key}()">×</span>
+        <img class="fullscreen-img-{key}" src="data:image/png;base64,{img_base64}">
+        <div class="hint-{key}">Click anywhere or press ESC to close</div>
+    </div>
+
+    <script>
+    function openFullscreen_{key}() {{
+        document.getElementById('overlay_{key}').classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }}
+    function closeFullscreen_{key}() {{
+        document.getElementById('overlay_{key}').classList.remove('active');
+        document.body.style.overflow = 'auto';
+    }}
+    document.addEventListener('keydown', function(e) {{
+        if (e.key === 'Escape') {{
+            var overlay = document.getElementById('overlay_{key}');
+            if (overlay) {{
+                overlay.classList.remove('active');
+                document.body.style.overflow = 'auto';
+            }}
+        }}
+    }});
+    </script>
+    """
+
+    # Calculate height based on image aspect ratio
+    width, height = image.size
+    aspect = height / width
+    container_height = int(300 * aspect) + 10  # Base width ~300px
+    container_height = min(max(container_height, 150), 400)  # Clamp between 150-400
+
+    st.components.v1.html(html, height=container_height)
 
 
 def render_history(t: Translator):
@@ -93,9 +212,9 @@ def render_history(t: Translator):
 
             with col:
                 with st.container(border=True):
-                    # Image
+                    # Image with click-to-fullscreen
                     if item.get("image"):
-                        st.image(item["image"], use_container_width=True)
+                        _render_clickable_image(item["image"], key=f"hist_{item_idx}")
 
                     # Prompt
                     prompt_text = item.get('prompt', 'N/A')

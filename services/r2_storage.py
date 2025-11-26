@@ -48,19 +48,29 @@ class R2Storage:
 
     def __init__(self):
         """Initialize the R2 storage service."""
-        # Read from both st.secrets and os.environ
-        self.enabled = get_config_value("R2_ENABLED", "false").lower() == "true"
+        # Hardcode R2_ENABLED=true for debugging
+        # Note: Set to True directly to bypass config issues
+        self.enabled = True  # Hardcoded for debugging
         self.account_id = get_config_value("R2_ACCOUNT_ID", "")
         self.access_key_id = get_config_value("R2_ACCESS_KEY_ID", "")
         self.secret_access_key = get_config_value("R2_SECRET_ACCESS_KEY", "")
         self.bucket_name = get_config_value("R2_BUCKET_NAME", "nano-banana-images")
         self.public_url = get_config_value("R2_PUBLIC_URL", "")
 
+        # Debug output
+        print(f"[R2 Debug] enabled={self.enabled}")
+        print(f"[R2 Debug] account_id={'***' if self.account_id else 'EMPTY'}")
+        print(f"[R2 Debug] access_key_id={'***' if self.access_key_id else 'EMPTY'}")
+        print(f"[R2 Debug] secret_access_key={'***' if self.secret_access_key else 'EMPTY'}")
+        print(f"[R2 Debug] bucket_name={self.bucket_name}")
+        print(f"[R2 Debug] BOTO3_AVAILABLE={BOTO3_AVAILABLE}")
+
         self._client = None
         self._metadata_cache = None
 
         if self.enabled and BOTO3_AVAILABLE:
             self._init_client()
+            print(f"[R2 Debug] Client initialized: {self._client is not None}")
 
     def _init_client(self):
         """Initialize the S3-compatible client for R2."""

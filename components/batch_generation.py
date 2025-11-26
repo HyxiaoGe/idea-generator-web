@@ -14,7 +14,6 @@ from i18n import Translator
 from services import (
     ImageGenerator,
     GenerationStateManager,
-    get_throttle_remaining,
     get_history_sync,
 )
 from services.cost_estimator import estimate_cost
@@ -126,11 +125,6 @@ def render_batch_generation(t: Translator, settings: dict, generator: ImageGener
                 GenerationStateManager.cancel_generation()
                 st.toast(t("generation.cancelled"), icon="⚠️")
                 st.rerun()
-
-    # Show throttle warning
-    throttle_remaining = get_throttle_remaining()
-    if throttle_remaining > 0 and not is_generating:
-        st.caption(f"⏳ {t('generation.throttle_wait', seconds=f'{throttle_remaining:.1f}')}")
 
     if generate_clicked and prompt.strip() and can_generate:
         # Start generation task

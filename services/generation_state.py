@@ -42,11 +42,8 @@ class GenerationTask:
 class GenerationStateManager:
     """
     Manages generation state across the application.
-    Provides locking, throttling, and progress tracking.
+    Provides locking and progress tracking.
     """
-
-    # Throttle settings
-    MIN_INTERVAL_SECONDS = 3.0  # Minimum time between generations
 
     # Estimated generation times by resolution (seconds)
     ESTIMATED_TIMES = {
@@ -69,7 +66,6 @@ class GenerationStateManager:
         """Initialize generation state in session state."""
         keys = {
             "current_task": None,
-            "last_generation_time": 0.0,
             "generation_history": [],
             "is_generating": False,
         }
@@ -100,16 +96,6 @@ class GenerationStateManager:
         # Check if already generating
         if GenerationStateManager.is_generating():
             return False, "generation_in_progress"
-
-        # Check throttle
-        last_time = st.session_state.get(
-            GenerationStateManager._get_state_key("last_generation_time"),
-            0.0
-        )
-        elapsed = time.time() - last_time
-        if elapsed < GenerationStateManager.MIN_INTERVAL_SECONDS:
-            remaining = GenerationStateManager.MIN_INTERVAL_SECONDS - elapsed
-            return False, f"throttle:{remaining:.1f}"
 
         return True, ""
 
@@ -148,7 +134,6 @@ class GenerationStateManager:
 
         st.session_state[GenerationStateManager._get_state_key("current_task")] = task
         st.session_state[GenerationStateManager._get_state_key("is_generating")] = True
-        st.session_state[GenerationStateManager._get_state_key("last_generation_time")] = time.time()
 
         return task
 
@@ -243,22 +228,3 @@ class GenerationStateManager:
         return (datetime.now() - task.started_at).total_seconds()
 
 
-def get_throttle_remaining() -> float:
-    """Get remaining throttle time in seconds."""
-    GenerationStateManager.init_session_state()
-    last_time = st.session_state.get(
-        GenerationStateManager._get_state_key("last_generation_time"),
-        0.0
-    )
-    elapsed = time.time() - last_time
-    remaining = GenerationStateManager.MIN_INTERVAL_SECONDS - elapsed
-    return max(0, remaining)
-
-
-def should_auto_refresh() -> bool:
-    """
-    Check if the page should auto-refresh to update throttle status.
-    Returns True if we're in a throttle period and should refresh.
-    """
-    remaining = get_throttle_remaining()
-    return 0 < remaining < GenerationStateManager.MIN_INTERVAL_SECONDS

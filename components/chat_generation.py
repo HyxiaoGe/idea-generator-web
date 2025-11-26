@@ -7,7 +7,6 @@ from i18n import Translator
 from services import (
     ChatSession,
     GenerationStateManager,
-    get_throttle_remaining,
     get_history_sync,
 )
 from utils import run_async
@@ -98,11 +97,6 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
     # Check generation state
     is_generating = GenerationStateManager.is_generating()
     can_generate, block_reason = GenerationStateManager.can_start_generation()
-
-    # Show throttle warning
-    throttle_remaining = get_throttle_remaining()
-    if throttle_remaining > 0 and not is_generating:
-        st.caption(f"⏳ {t('generation.throttle_wait', seconds=f'{throttle_remaining:.1f}')}")
 
     # Chat input (disabled during generation)
     if prompt := st.chat_input(t("chat.input_placeholder"), disabled=is_generating):
