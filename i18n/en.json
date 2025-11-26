@@ -39,6 +39,18 @@
       "thinking": "Show Thinking Process",
       "search": "Enable Search Grounding"
     },
+    "safety": {
+      "title": "Content Safety",
+      "level_label": "Safety Level",
+      "help": "Controls how strictly content is filtered. Higher levels block more potentially sensitive content.",
+      "none_warning": "⚠️ Safety filters are disabled. Generated content may include inappropriate material.",
+      "levels": {
+        "strict": "Strict - Block most sensitive content",
+        "moderate": "Moderate - Balanced filtering (recommended)",
+        "relaxed": "Relaxed - Allow more content",
+        "none": "None - No filtering (use with caution)"
+      }
+    },
     "stats": "Statistics",
     "about": "About",
     "about_text": "A learning project for exploring Google Gemini Pro Image capabilities."

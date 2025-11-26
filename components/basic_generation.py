@@ -57,10 +57,12 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
                 resolution=settings["resolution"],
                 enable_thinking=settings["enable_thinking"],
                 enable_search=settings["enable_search"],
+                safety_level=settings.get("safety_level", "moderate"),
             ))
 
         if result.error:
-            st.toast(f"{t('basic.error')}: {result.error}", icon="❌")
+            icon = "🛡️" if result.safety_blocked else "❌"
+            st.toast(f"{t('basic.error')}: {result.error}", icon=icon)
         elif result.image:
             # Save to disk
             storage = get_storage()

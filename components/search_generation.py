@@ -47,11 +47,13 @@ def render_search_generation(t: Translator, settings: dict, generator: ImageGene
             with st.spinner(t("basic.generating")):
                 result = asyncio.run(generator.generate_with_search(
                     prompt=prompt,
-                    aspect_ratio=settings["aspect_ratio"]
+                    aspect_ratio=settings["aspect_ratio"],
+                    safety_level=settings.get("safety_level", "moderate"),
                 ))
 
             if result.error:
-                st.toast(f"{t('basic.error')}: {result.error}", icon="❌")
+                icon = "🛡️" if result.safety_blocked else "❌"
+                st.toast(f"{t('basic.error')}: {result.error}", icon=icon)
             elif result.image:
                 st.subheader(t("basic.result"))
                 st.image(result.image, use_container_width=True)
