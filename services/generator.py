@@ -4,6 +4,7 @@ Async Image Generator Service using Google GenAI.
 import os
 import time
 import asyncio
+import logging
 from typing import Optional, Tuple, List
 from dataclasses import dataclass
 from PIL import Image
@@ -14,6 +15,8 @@ from google.genai import types
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 # Safety level presets
@@ -30,6 +33,30 @@ HARM_CATEGORIES = [
     types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
     types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
 ]
+
+
+# Retry configuration
+MAX_RETRIES = 3
+RETRY_DELAYS = [2, 4, 8]  # Exponential backoff delays in seconds
+
+# Network-related error keywords that should trigger retry
+RETRYABLE_ERRORS = [
+    "server disconnected",
+    "connection reset",
+    "connection refused",
+    "timeout",
+    "network",
+    "unavailable",
+    "503",
+    "502",
+    "504",
+]
+
+
+def is_retryable_error(error_msg: str) -> bool:
+    """Check if an error is retryable based on error message."""
+    error_lower = error_msg.lower()
+    return any(keyword in error_lower for keyword in RETRYABLE_ERRORS)
 
 
 def build_safety_settings(level: str = "moderate") -> List[types.SafetySetting]:
@@ -146,83 +173,96 @@ class ImageGenerator:
         """
         start_time = time.time()
         result = GenerationResult()
+        last_error = None
 
-        try:
-            # Build config
-            config_dict = {
-                "response_modalities": ["Text", "Image"],
-                "image_config": {
-                    "aspect_ratio": aspect_ratio,
-                },
-                "safety_settings": build_safety_settings(safety_level),
-            }
+        # Build config once
+        config_dict = {
+            "response_modalities": ["Text", "Image"],
+            "image_config": {
+                "aspect_ratio": aspect_ratio,
+            },
+            "safety_settings": build_safety_settings(safety_level),
+        }
 
-            # Add resolution for higher quality
-            if resolution in ["2K", "4K"]:
-                config_dict["image_config"]["image_size"] = resolution
+        # Add resolution for higher quality
+        if resolution in ["2K", "4K"]:
+            config_dict["image_config"]["image_size"] = resolution
 
-            # Add thinking config
-            if enable_thinking:
-                config_dict["thinking_config"] = {"include_thoughts": True}
+        # Add thinking config
+        if enable_thinking:
+            config_dict["thinking_config"] = {"include_thoughts": True}
 
-            # Add search tool
-            tools = []
-            if enable_search:
-                tools = [{"google_search": {}}]
+        config = types.GenerateContentConfig(**config_dict)
 
-            config = types.GenerateContentConfig(**config_dict)
+        # Retry loop
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                # Make async API call
+                response = await self.client.aio.models.generate_content(
+                    model=self.MODEL_ID,
+                    contents=prompt,
+                    config=config,
+                )
 
-            # Make async API call
-            response = await self.client.aio.models.generate_content(
-                model=self.MODEL_ID,
-                contents=prompt,
-                config=config,
-            )
+                # Check for safety blocks
+                if response.candidates:
+                    candidate = response.candidates[0]
 
-            # Check for safety blocks
-            if response.candidates:
-                candidate = response.candidates[0]
+                    # Get safety ratings
+                    if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
+                        result.safety_ratings = [
+                            {"category": str(r.category), "probability": str(r.probability)}
+                            for r in candidate.safety_ratings
+                        ]
 
-                # Get safety ratings
-                if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
-                    result.safety_ratings = [
-                        {"category": str(r.category), "probability": str(r.probability)}
-                        for r in candidate.safety_ratings
-                    ]
+                    # Check if blocked by safety filter
+                    if hasattr(candidate, 'finish_reason'):
+                        if str(candidate.finish_reason) == "SAFETY":
+                            result.safety_blocked = True
+                            result.error = "Content blocked by safety filter"
+                            result.duration = time.time() - start_time
+                            return result
 
-                # Check if blocked by safety filter
-                if hasattr(candidate, 'finish_reason'):
-                    if str(candidate.finish_reason) == "SAFETY":
-                        result.safety_blocked = True
-                        result.error = "Content blocked by safety filter"
-                        result.duration = time.time() - start_time
-                        return result
+                    # Process response parts
+                    if hasattr(candidate, 'content') and candidate.content:
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'thought') and part.thought:
+                                result.thinking = part.text
+                            elif hasattr(part, 'text') and part.text:
+                                result.text = part.text
+                            elif hasattr(part, 'inline_data') and part.inline_data:
+                                # Convert to PIL Image
+                                image_data = part.inline_data.data
+                                result.image = Image.open(BytesIO(image_data))
 
-                # Process response parts
-                if hasattr(candidate, 'content') and candidate.content:
-                    for part in candidate.content.parts:
-                        if hasattr(part, 'thought') and part.thought:
-                            result.thinking = part.text
-                        elif hasattr(part, 'text') and part.text:
-                            result.text = part.text
-                        elif hasattr(part, 'inline_data') and part.inline_data:
-                            # Convert to PIL Image
-                            image_data = part.inline_data.data
-                            result.image = Image.open(BytesIO(image_data))
+                result.duration = time.time() - start_time
+                self._record_stats(result.duration)
+                return result  # Success, return immediately
 
-            result.duration = time.time() - start_time
-            self._record_stats(result.duration)
+            except Exception as e:
+                error_msg = str(e)
+                last_error = error_msg
 
-        except Exception as e:
-            error_msg = str(e)
-            # Check if error is safety related
-            if "safety" in error_msg.lower() or "blocked" in error_msg.lower():
-                result.safety_blocked = True
-                result.error = "Content blocked by safety filter"
-            else:
-                result.error = error_msg
-            result.duration = time.time() - start_time
+                # Check if error is safety related (no retry)
+                if "safety" in error_msg.lower() or "blocked" in error_msg.lower():
+                    result.safety_blocked = True
+                    result.error = "Content blocked by safety filter"
+                    result.duration = time.time() - start_time
+                    return result
 
+                # Check if error is retryable
+                if is_retryable_error(error_msg) and attempt < MAX_RETRIES:
+                    delay = RETRY_DELAYS[attempt]
+                    logger.warning(f"Retryable error on attempt {attempt + 1}: {error_msg}. Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                    continue
+
+                # Non-retryable error or max retries reached
+                break
+
+        # All retries failed
+        result.error = last_error
+        result.duration = time.time() - start_time
         return result
 
     def _record_stats(self, duration: float):
@@ -261,66 +301,80 @@ class ImageGenerator:
         """
         start_time = time.time()
         result = GenerationResult()
+        last_error = None
 
         if not images:
             result.error = "No images provided for blending"
             return result
 
-        try:
-            # Build contents with prompt and images
-            contents = [prompt] + images
+        # Build contents and config once
+        contents = [prompt] + images
+        config = types.GenerateContentConfig(
+            response_modalities=["Text", "Image"],
+            image_config=types.ImageConfig(
+                aspect_ratio=aspect_ratio
+            ),
+            safety_settings=build_safety_settings(safety_level),
+        )
 
-            config = types.GenerateContentConfig(
-                response_modalities=["Text", "Image"],
-                image_config=types.ImageConfig(
-                    aspect_ratio=aspect_ratio
-                ),
-                safety_settings=build_safety_settings(safety_level),
-            )
+        # Retry loop
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                # Make async API call
+                response = await self.client.aio.models.generate_content(
+                    model=self.MODEL_ID,
+                    contents=contents,
+                    config=config,
+                )
 
-            # Make async API call
-            response = await self.client.aio.models.generate_content(
-                model=self.MODEL_ID,
-                contents=contents,
-                config=config,
-            )
+                # Check for safety blocks and process response
+                if response.candidates:
+                    candidate = response.candidates[0]
 
-            # Check for safety blocks and process response
-            if response.candidates:
-                candidate = response.candidates[0]
+                    if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
+                        result.safety_ratings = [
+                            {"category": str(r.category), "probability": str(r.probability)}
+                            for r in candidate.safety_ratings
+                        ]
 
-                if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
-                    result.safety_ratings = [
-                        {"category": str(r.category), "probability": str(r.probability)}
-                        for r in candidate.safety_ratings
-                    ]
+                    if hasattr(candidate, 'finish_reason') and str(candidate.finish_reason) == "SAFETY":
+                        result.safety_blocked = True
+                        result.error = "Content blocked by safety filter"
+                        result.duration = time.time() - start_time
+                        return result
 
-                if hasattr(candidate, 'finish_reason') and str(candidate.finish_reason) == "SAFETY":
+                    if hasattr(candidate, 'content') and candidate.content:
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                result.text = part.text
+                            elif hasattr(part, 'inline_data') and part.inline_data:
+                                image_data = part.inline_data.data
+                                result.image = Image.open(BytesIO(image_data))
+
+                result.duration = time.time() - start_time
+                self._record_stats(result.duration)
+                return result  # Success
+
+            except Exception as e:
+                error_msg = str(e)
+                last_error = error_msg
+
+                if "safety" in error_msg.lower() or "blocked" in error_msg.lower():
                     result.safety_blocked = True
                     result.error = "Content blocked by safety filter"
                     result.duration = time.time() - start_time
                     return result
 
-                if hasattr(candidate, 'content') and candidate.content:
-                    for part in candidate.content.parts:
-                        if hasattr(part, 'text') and part.text:
-                            result.text = part.text
-                        elif hasattr(part, 'inline_data') and part.inline_data:
-                            image_data = part.inline_data.data
-                            result.image = Image.open(BytesIO(image_data))
+                if is_retryable_error(error_msg) and attempt < MAX_RETRIES:
+                    delay = RETRY_DELAYS[attempt]
+                    logger.warning(f"Retryable error on attempt {attempt + 1}: {error_msg}. Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                    continue
 
-            result.duration = time.time() - start_time
-            self._record_stats(result.duration)
+                break
 
-        except Exception as e:
-            error_msg = str(e)
-            if "safety" in error_msg.lower() or "blocked" in error_msg.lower():
-                result.safety_blocked = True
-                result.error = "Content blocked by safety filter"
-            else:
-                result.error = error_msg
-            result.duration = time.time() - start_time
-
+        result.error = last_error
+        result.duration = time.time() - start_time
         return result
 
     async def generate_with_search(
@@ -342,64 +396,79 @@ class ImageGenerator:
         """
         start_time = time.time()
         result = GenerationResult()
+        last_error = None
 
-        try:
-            config = types.GenerateContentConfig(
-                response_modalities=["Text", "Image"],
-                image_config=types.ImageConfig(
-                    aspect_ratio=aspect_ratio
-                ),
-                tools=[{"google_search": {}}],
-                safety_settings=build_safety_settings(safety_level),
-            )
+        config = types.GenerateContentConfig(
+            response_modalities=["Text", "Image"],
+            image_config=types.ImageConfig(
+                aspect_ratio=aspect_ratio
+            ),
+            tools=[{"google_search": {}}],
+            safety_settings=build_safety_settings(safety_level),
+        )
 
-            # Make async API call
-            response = await self.client.aio.models.generate_content(
-                model=self.MODEL_ID,
-                contents=prompt,
-                config=config,
-            )
+        # Retry loop
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                # Make async API call
+                response = await self.client.aio.models.generate_content(
+                    model=self.MODEL_ID,
+                    contents=prompt,
+                    config=config,
+                )
 
-            # Check for safety blocks and process response
-            if response.candidates:
-                candidate = response.candidates[0]
+                # Check for safety blocks and process response
+                if response.candidates:
+                    candidate = response.candidates[0]
 
-                if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
-                    result.safety_ratings = [
-                        {"category": str(r.category), "probability": str(r.probability)}
-                        for r in candidate.safety_ratings
-                    ]
+                    if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
+                        result.safety_ratings = [
+                            {"category": str(r.category), "probability": str(r.probability)}
+                            for r in candidate.safety_ratings
+                        ]
 
-                if hasattr(candidate, 'finish_reason') and str(candidate.finish_reason) == "SAFETY":
+                    if hasattr(candidate, 'finish_reason') and str(candidate.finish_reason) == "SAFETY":
+                        result.safety_blocked = True
+                        result.error = "Content blocked by safety filter"
+                        result.duration = time.time() - start_time
+                        return result
+
+                    if hasattr(candidate, 'content') and candidate.content:
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                result.text = part.text
+                            elif hasattr(part, 'inline_data') and part.inline_data:
+                                image_data = part.inline_data.data
+                                result.image = Image.open(BytesIO(image_data))
+
+                    # Get search sources
+                    if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
+                        metadata = candidate.grounding_metadata
+                        if hasattr(metadata, 'search_entry_point') and metadata.search_entry_point:
+                            result.search_sources = metadata.search_entry_point.rendered_content
+
+                result.duration = time.time() - start_time
+                self._record_stats(result.duration)
+                return result  # Success
+
+            except Exception as e:
+                error_msg = str(e)
+                last_error = error_msg
+
+                if "safety" in error_msg.lower() or "blocked" in error_msg.lower():
                     result.safety_blocked = True
                     result.error = "Content blocked by safety filter"
                     result.duration = time.time() - start_time
                     return result
 
-                if hasattr(candidate, 'content') and candidate.content:
-                    for part in candidate.content.parts:
-                        if hasattr(part, 'text') and part.text:
-                            result.text = part.text
-                        elif hasattr(part, 'inline_data') and part.inline_data:
-                            image_data = part.inline_data.data
-                            result.image = Image.open(BytesIO(image_data))
+                if is_retryable_error(error_msg) and attempt < MAX_RETRIES:
+                    delay = RETRY_DELAYS[attempt]
+                    logger.warning(f"Retryable error on attempt {attempt + 1}: {error_msg}. Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                    continue
 
-                # Get search sources
-                if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
-                    metadata = candidate.grounding_metadata
-                    if hasattr(metadata, 'search_entry_point') and metadata.search_entry_point:
-                        result.search_sources = metadata.search_entry_point.rendered_content
+                break
 
-            result.duration = time.time() - start_time
-            self._record_stats(result.duration)
-
-        except Exception as e:
-            error_msg = str(e)
-            if "safety" in error_msg.lower() or "blocked" in error_msg.lower():
-                result.safety_blocked = True
-                result.error = "Content blocked by safety filter"
-            else:
-                result.error = error_msg
-            result.duration = time.time() - start_time
-
+        result.error = last_error
+        result.duration = time.time() - start_time
         return result

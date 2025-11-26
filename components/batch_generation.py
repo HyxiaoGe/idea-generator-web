@@ -172,7 +172,7 @@ def render_batch_generation(t: Translator, settings: dict, generator: ImageGener
 
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))
-                    st.toast(f"{t('basic.error')}: {str(e)}", icon="❌")
+                    st.error(f"❌ {t('basic.error')}: {str(e)}")
                     return
 
             # Display results

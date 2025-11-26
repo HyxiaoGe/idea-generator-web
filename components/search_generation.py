@@ -79,12 +79,12 @@ def render_search_generation(t: Translator, settings: dict, generator: ImageGene
                     GenerationStateManager.complete_generation(result=result)
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))
-                    st.toast(f"{t('basic.error')}: {str(e)}", icon="❌")
+                    st.error(f"❌ {t('basic.error')}: {str(e)}")
                     return
 
             if result.error:
                 icon = "🛡️" if result.safety_blocked else "❌"
-                st.toast(f"{t('basic.error')}: {result.error}", icon=icon)
+                st.error(f"{icon} {t('basic.error')}: {result.error}")
             elif result.image:
                 st.subheader(t("basic.result"))
                 st.image(result.image, use_container_width=True)
@@ -129,4 +129,4 @@ def render_search_generation(t: Translator, settings: dict, generator: ImageGene
                 if filename:
                     st.toast(t("toast.image_saved", filename=filename), icon="✅")
             else:
-                st.toast(t("basic.no_image"), icon="⚠️")
+                st.warning(f"⚠️ {t('basic.no_image')}")

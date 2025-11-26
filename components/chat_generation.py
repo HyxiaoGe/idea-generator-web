@@ -107,7 +107,7 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
     # Chat input (disabled during generation)
     if prompt := st.chat_input(t("chat.input_placeholder"), disabled=is_generating):
         if not can_generate:
-            st.toast(block_reason, icon="⚠️")
+            st.warning(f"⚠️ {block_reason}")
             return
 
         # Add user message
@@ -145,12 +145,12 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
                     GenerationStateManager.complete_generation(result=response)
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))
-                    st.toast(f"{t('basic.error')}: {str(e)}", icon="❌")
+                    st.error(f"❌ {t('basic.error')}: {str(e)}")
                     st.rerun()
 
             if response.error:
                 icon = "🛡️" if response.safety_blocked else "❌"
-                st.toast(f"{t('basic.error')}: {response.error}", icon=icon)
+                st.error(f"{icon} {t('basic.error')}: {response.error}")
                 st.session_state.chat_messages.append({
                     "role": "assistant",
                     "content": f"Error: {response.error}",

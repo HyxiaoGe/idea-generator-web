@@ -109,12 +109,12 @@ def render_style_transfer_mode(t: Translator, settings: dict, generator: ImageGe
                     GenerationStateManager.complete_generation(result=result)
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))
-                    st.toast(f"{t('basic.error')}: {str(e)}", icon="❌")
+                    st.error(f"❌ {t('basic.error')}: {str(e)}")
                     return
 
             if result.error:
                 icon = "🛡️" if result.safety_blocked else "❌"
-                st.toast(f"{t('basic.error')}: {result.error}", icon=icon)
+                st.error(f"{icon} {t('basic.error')}: {result.error}")
             elif result.image:
                 st.subheader(t("basic.result"))
                 st.image(result.image, use_container_width=True)
@@ -147,7 +147,7 @@ def render_style_transfer_mode(t: Translator, settings: dict, generator: ImageGe
                     text_response=result.text,
                 )
 
-                # Toast notification for save success
+                # Success notification (keep as toast since it's positive feedback)
                 if filename:
                     st.toast(t("toast.image_saved", filename=filename), icon="✅")
 
@@ -212,12 +212,12 @@ def render_blend_mode(t: Translator, settings: dict, generator: ImageGenerator):
                     GenerationStateManager.complete_generation(result=result)
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))
-                    st.toast(f"{t('basic.error')}: {str(e)}", icon="❌")
+                    st.error(f"❌ {t('basic.error')}: {str(e)}")
                     return
 
             if result.error:
                 icon = "🛡️" if result.safety_blocked else "❌"
-                st.toast(f"{t('basic.error')}: {result.error}", icon=icon)
+                st.error(f"{icon} {t('basic.error')}: {result.error}")
             elif result.image:
                 st.subheader(t("basic.result"))
                 st.image(result.image, use_container_width=True)
@@ -250,6 +250,6 @@ def render_blend_mode(t: Translator, settings: dict, generator: ImageGenerator):
                     text_response=result.text,
                 )
 
-                # Toast notification for save success
+                # Success notification (keep as toast since it's positive feedback)
                 if filename:
                     st.toast(t("toast.image_saved", filename=filename), icon="✅")

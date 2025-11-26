@@ -131,8 +131,8 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
 
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))
-                    st.toast(f"{t('basic.error')}: {str(e)}", icon="❌")
-                    st.rerun()
+                    st.error(f"❌ {t('basic.error')}: {str(e)}")
+                    return
 
             # Clear progress containers
             progress_container.empty()
@@ -141,7 +141,7 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
             # Handle result
             if result.error:
                 icon = "🛡️" if result.safety_blocked else "❌"
-                st.toast(f"{t('basic.error')}: {result.error}", icon=icon)
+                st.error(f"{icon} {t('basic.error')}: {result.error}")
             elif result.image:
                 # Save using history sync manager
                 history_sync = get_history_sync()
@@ -163,7 +163,7 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
                 _display_result(t, result.image, result.text, result.thinking,
                                result.duration, filename)
             else:
-                st.toast(t("basic.no_image"), icon="⚠️")
+                st.warning(f"⚠️ {t('basic.no_image')}")
 
     # Show last generated image if exists (when not generating)
     elif not is_generating and "history" in st.session_state and st.session_state.history:

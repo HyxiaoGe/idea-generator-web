@@ -179,12 +179,12 @@ def render_templates(t: Translator, settings: dict, generator: ImageGenerator):
                     GenerationStateManager.complete_generation(result=result)
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))
-                    st.toast(f"{t('basic.error')}: {str(e)}", icon="❌")
+                    st.error(f"❌ {t('basic.error')}: {str(e)}")
                     return
 
             if result.error:
                 icon = "🛡️" if result.safety_blocked else "❌"
-                st.toast(f"{t('basic.error')}: {result.error}", icon=icon)
+                st.error(f"{icon} {t('basic.error')}: {result.error}")
             elif result.image:
                 st.subheader(t("basic.result"))
 
@@ -228,4 +228,4 @@ def render_templates(t: Translator, settings: dict, generator: ImageGenerator):
                 if filename:
                     st.toast(t("toast.image_saved", filename=filename), icon="✅")
             else:
-                st.toast(t("basic.no_image"), icon="⚠️")
+                st.warning(f"⚠️ {t('basic.no_image')}")
