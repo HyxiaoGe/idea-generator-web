@@ -5,31 +5,7 @@ from io import BytesIO
 from datetime import datetime
 import streamlit as st
 from i18n import Translator
-from services import get_storage
-
-
-def load_history_from_disk():
-    """Load history from disk storage if session state is empty."""
-    storage = get_storage()
-    disk_history = storage.get_history(limit=50)
-
-    if disk_history:
-        loaded_history = []
-        for record in disk_history:
-            image = storage.load_image(record["filename"])
-            if image:
-                loaded_history.append({
-                    "prompt": record.get("prompt", ""),
-                    "image": image,
-                    "text": record.get("text_response"),
-                    "thinking": record.get("thinking"),
-                    "duration": record.get("duration", 0),
-                    "settings": record.get("settings", {}),
-                    "filename": record["filename"],
-                    "created_at": record.get("created_at"),
-                })
-        return loaded_history
-    return []
+from services import get_storage, get_history_sync
 
 
 def render_history(t: Translator):
@@ -42,46 +18,59 @@ def render_history(t: Translator):
     st.header(t("history.title"))
     st.caption(t("history.description"))
 
-    # Load from disk if session state is empty
+    # Get history sync manager
+    history_sync = get_history_sync()
+
+    # Sync from disk on load or refresh
     if "history" not in st.session_state or not st.session_state.history:
-        with st.spinner(t("history.loading") if hasattr(t, "__call__") else "Loading history..."):
-            st.session_state.history = load_history_from_disk()
+        with st.spinner(t("history.loading")):
+            history_sync.sync_from_disk(force=True)
 
-    # Check if history exists
-    if not st.session_state.history:
-        st.info(t("history.empty"))
+    # Header row with actions
+    col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
 
-        # Show storage location hint
-        storage = get_storage()
-        st.caption(f"📁 {t('history.storage_path')}: `{storage.output_dir}`")
-        return
-
-    # Clear history button
-    col1, col2, col3 = st.columns([1, 1, 3])
     with col1:
-        if st.button(t("history.clear_btn"), type="secondary"):
-            st.session_state.show_clear_confirm = True
+        # Refresh button to sync from disk
+        if st.button(f"🔄 {t('history.refresh_btn')}", use_container_width=True):
+            with st.spinner(t("history.loading")):
+                history_sync.sync_from_disk(force=True)
+            st.rerun()
 
     with col2:
-        # Show storage info
-        storage = get_storage()
-        st.caption(f"📁 `{storage.output_dir}`")
+        if st.button(t("history.clear_btn"), type="secondary", use_container_width=True):
+            st.session_state.show_clear_confirm = True
 
-    # Confirmation dialog
+    with col3:
+        # Show storage info and R2 status
+        storage = get_storage()
+        status_icon = "☁️" if storage.r2_enabled else "💾"
+        st.caption(f"{status_icon} `{storage.base_output_dir}`")
+
+    # Show count
+    history_count = len(st.session_state.get("history", []))
+    if history_count > 0:
+        st.caption(f"📊 {t('history.count', count=history_count)}")
+
+    # Check if history exists
+    if not st.session_state.get("history"):
+        st.info(t("history.empty"))
+        return
+
+    # Confirmation dialog for clear
     if st.session_state.get("show_clear_confirm"):
         with st.container():
             st.warning(t("history.clear_confirm"))
             col1, col2, col3 = st.columns([1, 1, 3])
             with col1:
-                if st.button("Yes", type="primary"):
-                    # Clear both session state and disk storage
+                if st.button(t("history.yes_btn"), type="primary"):
                     storage = get_storage()
                     storage.clear_history()
                     st.session_state.history = []
                     st.session_state.show_clear_confirm = False
+                    st.toast(t("history.cleared"), icon="🗑️")
                     st.rerun()
             with col2:
-                if st.button("No"):
+                if st.button(t("history.no_btn")):
                     st.session_state.show_clear_confirm = False
                     st.rerun()
 
@@ -119,18 +108,27 @@ def render_history(t: Translator):
                     settings_str = f"{settings.get('aspect_ratio', 'N/A')} | {settings.get('resolution', 'N/A')}"
                     st.caption(settings_str)
 
-                    # Duration and filename
+                    # Duration and time
                     duration = item.get("duration", 0)
+                    created_at = item.get("created_at", "")
+                    if created_at:
+                        try:
+                            dt = datetime.fromisoformat(created_at)
+                            time_str = dt.strftime("%m/%d %H:%M")
+                        except:
+                            time_str = ""
+                    else:
+                        time_str = ""
+
                     info_parts = [f"⏱️ {duration:.2f}s"]
-                    if item.get("filename"):
-                        info_parts.append(f"📄 {item['filename']}")
+                    if time_str:
+                        info_parts.append(f"📅 {time_str}")
                     st.caption(" | ".join(info_parts))
 
                     # Download button
                     if item.get("image"):
                         buf = BytesIO()
                         item["image"].save(buf, format="PNG")
-                        # Get descriptive filename
                         filename = item.get("filename", f"history_{item_idx}.png")
                         if "/" in filename:
                             filename = filename.split("/")[-1]

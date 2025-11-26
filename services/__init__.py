@@ -7,6 +7,13 @@ from .cost_estimator import estimate_cost, format_cost, get_pricing_table, CostE
 from .image_storage import ImageStorage, get_storage
 from .r2_storage import R2Storage, get_r2_storage
 from .persistence import PersistenceService, get_persistence, init_from_persistence
+from .generation_state import (
+    GenerationStateManager,
+    GenerationStatus,
+    GenerationTask,
+    get_throttle_remaining,
+)
+from .history_sync import HistorySyncManager, get_history_sync
 
 __all__ = [
     "ImageGenerator",
@@ -22,4 +29,10 @@ __all__ = [
     "PersistenceService",
     "get_persistence",
     "init_from_persistence",
+    "GenerationStateManager",
+    "GenerationStatus",
+    "GenerationTask",
+    "get_throttle_remaining",
+    "HistorySyncManager",
+    "get_history_sync",
 ]

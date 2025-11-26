@@ -5,7 +5,12 @@ import asyncio
 from io import BytesIO
 import streamlit as st
 from i18n import Translator
-from services import ImageGenerator, get_storage
+from services import (
+    ImageGenerator,
+    GenerationStateManager,
+    get_throttle_remaining,
+    get_history_sync,
+)
 
 
 # Template categories with example prompts
@@ -70,6 +75,9 @@ def render_templates(t: Translator, settings: dict, generator: ImageGenerator):
         settings: Current settings from sidebar
         generator: ImageGenerator instance
     """
+    # Initialize generation state
+    GenerationStateManager.init_session_state()
+
     st.header(t("templates.title"))
     st.caption(t("templates.description"))
 
@@ -138,18 +146,41 @@ def render_templates(t: Translator, settings: dict, generator: ImageGenerator):
         with st.expander(t("templates.preview_label"), expanded=True):
             st.code(final_prompt, language=None)
 
+    # Check generation state
+    is_generating = GenerationStateManager.is_generating()
+    can_generate, block_reason = GenerationStateManager.can_start_generation()
+
+    # Show throttle warning
+    throttle_remaining = get_throttle_remaining()
+    if throttle_remaining > 0 and not is_generating:
+        st.caption(f"⏳ {t('generation.throttle_wait', seconds=f'{throttle_remaining:.1f}')}")
+
     # Generate button
-    if st.button(t("basic.generate_btn"), type="primary", disabled=not final_prompt.strip()):
-        if final_prompt.strip():
+    button_disabled = not final_prompt.strip() or not can_generate
+    if st.button(t("basic.generate_btn"), type="primary", disabled=button_disabled):
+        if final_prompt.strip() and can_generate:
+            # Start generation task
+            task = GenerationStateManager.start_generation(
+                prompt=final_prompt,
+                mode="template",
+                resolution=settings["resolution"]
+            )
+
             with st.spinner(t("basic.generating")):
-                result = asyncio.run(generator.generate(
-                    prompt=final_prompt,
-                    aspect_ratio=settings["aspect_ratio"],
-                    resolution=settings["resolution"],
-                    enable_thinking=settings["enable_thinking"],
-                    enable_search=settings["enable_search"],
-                    safety_level=settings.get("safety_level", "moderate"),
-                ))
+                try:
+                    result = asyncio.run(generator.generate(
+                        prompt=final_prompt,
+                        aspect_ratio=settings["aspect_ratio"],
+                        resolution=settings["resolution"],
+                        enable_thinking=settings["enable_thinking"],
+                        enable_search=settings["enable_search"],
+                        safety_level=settings.get("safety_level", "moderate"),
+                    ))
+                    GenerationStateManager.complete_generation(result=result)
+                except Exception as e:
+                    GenerationStateManager.complete_generation(error=str(e))
+                    st.toast(f"{t('basic.error')}: {str(e)}", icon="❌")
+                    return
 
             if result.error:
                 icon = "🛡️" if result.safety_blocked else "❌"
@@ -181,12 +212,9 @@ def render_templates(t: Translator, settings: dict, generator: ImageGenerator):
                         use_container_width=True
                     )
 
-                # Add to history and save to disk
-                if "history" not in st.session_state:
-                    st.session_state.history = []
-
-                storage = get_storage()
-                filename = storage.save_image(
+                # Save to history using sync manager
+                history_sync = get_history_sync()
+                filename = history_sync.save_to_history(
                     image=result.image,
                     prompt=final_prompt,
                     settings=settings,
@@ -197,16 +225,7 @@ def render_templates(t: Translator, settings: dict, generator: ImageGenerator):
                 )
 
                 # Toast notification for save success
-                st.toast(t("toast.image_saved", filename=filename), icon="✅")
-
-                st.session_state.history.insert(0, {
-                    "prompt": final_prompt,
-                    "image": result.image,
-                    "text": result.text,
-                    "thinking": result.thinking,
-                    "duration": result.duration,
-                    "settings": settings.copy(),
-                    "filename": filename,
-                })
+                if filename:
+                    st.toast(t("toast.image_saved", filename=filename), icon="✅")
             else:
                 st.toast(t("basic.no_image"), icon="⚠️")
