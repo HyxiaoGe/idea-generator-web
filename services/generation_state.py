@@ -253,3 +253,12 @@ def get_throttle_remaining() -> float:
     elapsed = time.time() - last_time
     remaining = GenerationStateManager.MIN_INTERVAL_SECONDS - elapsed
     return max(0, remaining)
+
+
+def should_auto_refresh() -> bool:
+    """
+    Check if the page should auto-refresh to update throttle status.
+    Returns True if we're in a throttle period and should refresh.
+    """
+    remaining = get_throttle_remaining()
+    return 0 < remaining < GenerationStateManager.MIN_INTERVAL_SECONDS

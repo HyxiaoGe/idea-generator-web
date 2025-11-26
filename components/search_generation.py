@@ -1,7 +1,6 @@
 """
 Search-grounded image generation component.
 """
-import asyncio
 from io import BytesIO
 import streamlit as st
 from i18n import Translator
@@ -11,6 +10,7 @@ from services import (
     get_throttle_remaining,
     get_history_sync,
 )
+from utils import run_async
 
 
 def render_search_generation(t: Translator, settings: dict, generator: ImageGenerator):
@@ -71,7 +71,7 @@ def render_search_generation(t: Translator, settings: dict, generator: ImageGene
 
             with st.spinner(t("basic.generating")):
                 try:
-                    result = asyncio.run(generator.generate_with_search(
+                    result = run_async(generator.generate_with_search(
                         prompt=prompt,
                         aspect_ratio=settings["aspect_ratio"],
                         safety_level=settings.get("safety_level", "moderate"),

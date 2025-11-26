@@ -1,7 +1,6 @@
 """
 Style transfer and image blending component.
 """
-import asyncio
 from io import BytesIO
 import streamlit as st
 from PIL import Image
@@ -12,6 +11,7 @@ from services import (
     get_throttle_remaining,
     get_history_sync,
 )
+from utils import run_async
 
 
 def render_style_transfer(t: Translator, settings: dict, generator: ImageGenerator):
@@ -100,7 +100,7 @@ def render_style_transfer_mode(t: Translator, settings: dict, generator: ImageGe
                 style_img = Image.open(style_file)
 
                 try:
-                    result = asyncio.run(generator.blend_images(
+                    result = run_async(generator.blend_images(
                         prompt=prompt,
                         images=[content_img, style_img],
                         aspect_ratio=settings["aspect_ratio"],
@@ -203,7 +203,7 @@ def render_blend_mode(t: Translator, settings: dict, generator: ImageGenerator):
                 images = [Image.open(f) for f in uploaded_files]
 
                 try:
-                    result = asyncio.run(generator.blend_images(
+                    result = run_async(generator.blend_images(
                         prompt=prompt,
                         images=images,
                         aspect_ratio=settings["aspect_ratio"],

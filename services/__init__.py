@@ -12,6 +12,7 @@ from .generation_state import (
     GenerationStatus,
     GenerationTask,
     get_throttle_remaining,
+    should_auto_refresh,
 )
 from .history_sync import HistorySyncManager, get_history_sync
 from .health_check import (
@@ -39,6 +40,7 @@ __all__ = [
     "GenerationStatus",
     "GenerationTask",
     "get_throttle_remaining",
+    "should_auto_refresh",
     "HistorySyncManager",
     "get_history_sync",
     "HealthCheckService",
