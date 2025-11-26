@@ -20,6 +20,29 @@ A learning project exploring Google Gemini 3 Pro Image (Nano Banana Pro) capabil
 | 05 | Multilingual | `experiments/05_multilang.py` | Multi-turn chat for cross-language image translation | ✅ |
 | 06 | Image Blending | `experiments/06_blend.py` | Combine multiple images with style transfer | ✅ |
 
+### Streamlit Web UI
+
+A full-featured web interface for interactive image generation.
+
+```bash
+# Run the web UI
+streamlit run app.py
+```
+
+**Features:**
+- 🌐 **Internationalization (i18n)** - English and Chinese support
+- 🔑 **API Key Management** - Use environment variable or input your own key in UI
+- 🎨 **Multiple Generation Modes:**
+  - Basic Generation - Simple text-to-image
+  - Chat & Refine - Iterative image improvement through conversation
+  - Batch Generation - Generate multiple variations with progress tracking
+  - Style Transfer - Apply artistic styles between images
+  - Search Grounding - Generate images with real-time search data
+  - Templates - Start with curated prompt templates
+- 📊 **Cost Estimation** - See estimated costs before batch generation
+- 📦 **ZIP Download** - Download all batch images in one file
+- 📜 **History** - View and download previously generated images
+
 ### Function Details
 
 #### 01_basic.py - Basic Image Generation
@@ -145,6 +168,22 @@ nano-banana-lab/
 ├── .env                # Your API Key (do not commit)
 ├── requirements.txt    # Python dependencies
 ├── config.py           # Client initialization & timing instrumentation
+├── app.py              # Streamlit Web UI entry point
+├── components/         # UI components
+│   ├── sidebar.py      # Settings & API key management
+│   ├── basic.py        # Basic generation mode
+│   ├── chat.py         # Chat & refine mode
+│   ├── batch.py        # Batch generation mode
+│   ├── blend.py        # Style transfer mode
+│   ├── search.py       # Search grounding mode
+│   ├── templates.py    # Prompt templates mode
+│   └── history.py      # Generation history
+├── services/           # Backend services
+│   ├── generator.py    # Async image generator
+│   └── chat_session.py # Chat session manager
+├── i18n/               # Internationalization
+│   ├── en.json         # English translations
+│   └── zh.json         # Chinese translations
 ├── experiments/        # Experiment scripts
 │   ├── 01_basic.py     # Basic text-to-image
 │   ├── 02_thinking.py  # Thinking process visualization
@@ -153,6 +192,8 @@ nano-banana-lab/
 │   ├── 05_multilang.py # Multilingual support
 │   └── 06_blend.py     # Image blending & style transfer
 ├── outputs/            # Generated images
+├── Dockerfile          # Docker configuration
+├── docker-compose.yml  # Docker Compose config
 └── README.md
 ```
 
@@ -187,6 +228,29 @@ nano-banana-lab/
 | 04 | 4K 生成 | `experiments/04_4k.py` | 超高分辨率图像生成（最高 4096x4096） | ✅ |
 | 05 | 多语言 | `experiments/05_multilang.py` | 多轮对话实现跨语言图像翻译 | ✅ |
 | 06 | 图像混合 | `experiments/06_blend.py` | 多图融合与风格迁移 | ✅ |
+
+### Streamlit Web 界面
+
+功能完善的 Web 交互界面。
+
+```bash
+# 运行 Web 界面
+streamlit run app.py
+```
+
+**功能特性：**
+- 🌐 **国际化 (i18n)** - 支持中英文切换
+- 🔑 **API Key 管理** - 支持环境变量或在页面输入自己的密钥
+- 🎨 **多种生成模式：**
+  - 基础生成 - 简单文本生图
+  - 对话微调 - 通过对话迭代优化图像
+  - 批量生成 - 生成多个变体，带进度显示
+  - 风格迁移 - 在图像之间应用艺术风格
+  - 搜索增强 - 使用实时搜索数据生成图像
+  - 模板库 - 从精选提示词模板开始
+- 📊 **成本估算** - 批量生成前查看预估费用
+- 📦 **ZIP 下载** - 一键打包下载所有批量图像
+- 📜 **历史记录** - 查看和下载之前生成的图像
 
 ### 功能详解
 
@@ -313,6 +377,22 @@ nano-banana-lab/
 ├── .env                # 你的 API Key（不要提交到 Git）
 ├── requirements.txt    # Python 依赖
 ├── config.py           # 客户端初始化与计时统计
+├── app.py              # Streamlit Web 界面入口
+├── components/         # UI 组件
+│   ├── sidebar.py      # 设置与 API Key 管理
+│   ├── basic.py        # 基础生成模式
+│   ├── chat.py         # 对话微调模式
+│   ├── batch.py        # 批量生成模式
+│   ├── blend.py        # 风格迁移模式
+│   ├── search.py       # 搜索增强模式
+│   ├── templates.py    # 提示词模板模式
+│   └── history.py      # 生成历史
+├── services/           # 后端服务
+│   ├── generator.py    # 异步图像生成器
+│   └── chat_session.py # 聊天会话管理器
+├── i18n/               # 国际化
+│   ├── en.json         # 英文翻译
+│   └── zh.json         # 中文翻译
 ├── experiments/        # 实验脚本
 │   ├── 01_basic.py     # 基础文本生图
 │   ├── 02_thinking.py  # 思考过程可视化
@@ -321,6 +401,8 @@ nano-banana-lab/
 │   ├── 05_multilang.py # 多语言支持
 │   └── 06_blend.py     # 图像混合与风格迁移
 ├── outputs/            # 生成的图片
+├── Dockerfile          # Docker 配置
+├── docker-compose.yml  # Docker Compose 配置
 └── README.md
 ```
 
