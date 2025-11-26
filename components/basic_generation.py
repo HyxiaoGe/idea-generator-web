@@ -1,7 +1,6 @@
 """
 Basic image generation component.
 """
-import asyncio
 import time
 from io import BytesIO
 import streamlit as st
@@ -12,6 +11,7 @@ from services import (
     get_throttle_remaining,
     get_history_sync,
 )
+from utils import run_async, display_image_with_zoom
 
 
 def render_basic_generation(t: Translator, settings: dict, generator: ImageGenerator):
@@ -111,7 +111,7 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
                         st.rerun()
 
                     # Run async generation
-                    result = asyncio.run(generator.generate(
+                    result = run_async(generator.generate(
                         prompt=prompt,
                         aspect_ratio=settings["aspect_ratio"],
                         resolution=settings["resolution"],
@@ -181,8 +181,8 @@ def _display_result(t: Translator, image, text: str, thinking: str,
         with st.expander(t("basic.thinking_label"), expanded=False):
             st.write(thinking)
 
-    # Show image
-    st.image(image, use_container_width=True)
+    # Show image with zoom capability
+    display_image_with_zoom(image, key=f"result_{filename}")
 
     # Action bar: timing info and download button
     col1, col2 = st.columns([3, 1])
@@ -214,7 +214,8 @@ def _display_history_item(t: Translator, item: dict):
         with st.expander(t("basic.thinking_label"), expanded=False):
             st.write(item["thinking"])
 
-    st.image(item["image"], use_container_width=True)
+    # Show image with zoom capability
+    display_image_with_zoom(item["image"], key=f"history_{item.get('filename', 'latest')}")
 
     # Action bar
     col1, col2 = st.columns([3, 1])

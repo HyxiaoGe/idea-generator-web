@@ -18,6 +18,7 @@ from services import (
     get_history_sync,
 )
 from services.cost_estimator import estimate_cost
+from utils import run_async
 
 
 async def generate_batch(
@@ -155,7 +156,7 @@ def render_batch_generation(t: Translator, settings: dict, generator: ImageGener
 
                 try:
                     # Run batch generation
-                    results = asyncio.run(generate_batch(
+                    results = run_async(generate_batch(
                         generator=generator,
                         prompt=prompt,
                         count=count,

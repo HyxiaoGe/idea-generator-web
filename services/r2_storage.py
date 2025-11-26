@@ -10,6 +10,13 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from PIL import Image
 
+# Try to import streamlit for secrets
+try:
+    import streamlit as st
+    HAS_STREAMLIT = True
+except ImportError:
+    HAS_STREAMLIT = False
+
 # Try to import boto3 for R2 support
 try:
     import boto3
@@ -19,17 +26,35 @@ except ImportError:
     BOTO3_AVAILABLE = False
 
 
+def get_config_value(key: str, default: str = "") -> str:
+    """
+    Get configuration value from multiple sources.
+    Priority: st.secrets > os.environ > default
+    """
+    # Try Streamlit secrets first (for Streamlit Cloud)
+    if HAS_STREAMLIT:
+        try:
+            if hasattr(st, 'secrets') and key in st.secrets:
+                return str(st.secrets[key])
+        except Exception:
+            pass
+
+    # Fall back to environment variables
+    return os.getenv(key, default)
+
+
 class R2Storage:
     """Service for storing and retrieving images from Cloudflare R2."""
 
     def __init__(self):
         """Initialize the R2 storage service."""
-        self.enabled = os.getenv("R2_ENABLED", "false").lower() == "true"
-        self.account_id = os.getenv("R2_ACCOUNT_ID", "")
-        self.access_key_id = os.getenv("R2_ACCESS_KEY_ID", "")
-        self.secret_access_key = os.getenv("R2_SECRET_ACCESS_KEY", "")
-        self.bucket_name = os.getenv("R2_BUCKET_NAME", "nano-banana-images")
-        self.public_url = os.getenv("R2_PUBLIC_URL", "")
+        # Read from both st.secrets and os.environ
+        self.enabled = get_config_value("R2_ENABLED", "false").lower() == "true"
+        self.account_id = get_config_value("R2_ACCOUNT_ID", "")
+        self.access_key_id = get_config_value("R2_ACCESS_KEY_ID", "")
+        self.secret_access_key = get_config_value("R2_SECRET_ACCESS_KEY", "")
+        self.bucket_name = get_config_value("R2_BUCKET_NAME", "nano-banana-images")
+        self.public_url = get_config_value("R2_PUBLIC_URL", "")
 
         self._client = None
         self._metadata_cache = None

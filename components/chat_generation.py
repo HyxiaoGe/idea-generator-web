@@ -1,7 +1,6 @@
 """
 Chat-based image generation component for iterative refinement.
 """
-import asyncio
 from io import BytesIO
 import streamlit as st
 from i18n import Translator
@@ -11,6 +10,7 @@ from services import (
     get_throttle_remaining,
     get_history_sync,
 )
+from utils import run_async
 
 
 def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSession):
@@ -137,7 +137,7 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
 
                 try:
                     # Send message
-                    response = asyncio.run(chat_session.send_message(
+                    response = run_async(chat_session.send_message(
                         message=prompt,
                         aspect_ratio=settings["aspect_ratio"],
                         safety_level=settings.get("safety_level", "moderate"),

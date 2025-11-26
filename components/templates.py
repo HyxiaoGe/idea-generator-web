@@ -1,7 +1,6 @@
 """
 Prompt templates library component.
 """
-import asyncio
 from io import BytesIO
 import streamlit as st
 from i18n import Translator
@@ -11,6 +10,7 @@ from services import (
     get_throttle_remaining,
     get_history_sync,
 )
+from utils import run_async
 
 
 # Template categories with example prompts
@@ -168,7 +168,7 @@ def render_templates(t: Translator, settings: dict, generator: ImageGenerator):
 
             with st.spinner(t("basic.generating")):
                 try:
-                    result = asyncio.run(generator.generate(
+                    result = run_async(generator.generate(
                         prompt=final_prompt,
                         aspect_ratio=settings["aspect_ratio"],
                         resolution=settings["resolution"],
