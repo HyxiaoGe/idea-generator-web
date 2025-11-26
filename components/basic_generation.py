@@ -11,7 +11,6 @@ from services import (
     get_history_sync,
     get_friendly_error_message,
 )
-from utils import run_async
 
 
 def render_basic_generation(t: Translator, settings: dict, generator: ImageGenerator):
@@ -105,15 +104,15 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
                         GenerationStateManager.complete_generation(error="Cancelled by user")
                         st.rerun()
 
-                    # Run async generation
-                    result = run_async(generator.generate(
+                    # Run sync generation
+                    result = generator.generate(
                         prompt=prompt,
                         aspect_ratio=settings["aspect_ratio"],
                         resolution=settings["resolution"],
                         enable_thinking=settings["enable_thinking"],
                         enable_search=settings["enable_search"],
                         safety_level=settings.get("safety_level", "moderate"),
-                    ))
+                    )
 
                     # Update progress to 100%
                     progress_bar.progress(1.0, text=t("generation.complete"))

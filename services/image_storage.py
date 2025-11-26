@@ -139,7 +139,9 @@ class ImageStorage:
             record["thinking"] = thinking[:500]
 
         # Save to R2 if enabled
+        print(f"[Storage] R2 available: {self._r2.is_available}")
         if self._r2.is_available:
+            print(f"[Storage] Saving to R2...")
             r2_key = self._r2.save_image(
                 image=image,
                 prompt=prompt,
@@ -152,6 +154,11 @@ class ImageStorage:
             if r2_key:
                 record["r2_key"] = r2_key
                 record["r2_url"] = self._r2.get_public_url(r2_key)
+                print(f"[Storage] R2 save complete - key={r2_key}")
+            else:
+                print("[Storage] R2 save returned None")
+        else:
+            print("[Storage] R2 not available, skipping cloud storage")
 
         self.metadata["images"].insert(0, record)
 

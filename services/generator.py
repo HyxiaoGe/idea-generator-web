@@ -1,9 +1,8 @@
 """
-Async Image Generator Service using Google GenAI.
+Image Generator Service using Google GenAI.
 """
 import os
 import time
-import asyncio
 import logging
 from typing import Optional, Tuple, List
 from dataclasses import dataclass
@@ -114,7 +113,7 @@ class GenerationResult:
 
 
 class ImageGenerator:
-    """Async image generator using Google GenAI."""
+    """Image generator using Google GenAI."""
 
     MODEL_ID = "gemini-3-pro-image-preview"
 
@@ -172,7 +171,7 @@ class ImageGenerator:
             else:
                 return False, f"Validation failed: {error_msg[:100]}"
 
-    async def generate(
+    def generate(
         self,
         prompt: str,
         aspect_ratio: str = "16:9",
@@ -182,7 +181,7 @@ class ImageGenerator:
         safety_level: str = "moderate",
     ) -> GenerationResult:
         """
-        Generate an image from a text prompt asynchronously.
+        Generate an image from a text prompt.
 
         Args:
             prompt: Text description of the image to generate
@@ -221,8 +220,8 @@ class ImageGenerator:
         # Retry loop
         for attempt in range(MAX_RETRIES + 1):
             try:
-                # Make async API call
-                response = await self.client.aio.models.generate_content(
+                # Make sync API call
+                response = self.client.models.generate_content(
                     model=self.MODEL_ID,
                     contents=prompt,
                     config=config,
@@ -278,7 +277,7 @@ class ImageGenerator:
                 if is_retryable_error(error_msg) and attempt < MAX_RETRIES:
                     delay = RETRY_DELAYS[attempt]
                     logger.warning(f"Retryable error on attempt {attempt + 1}: {error_msg}. Retrying in {delay}s...")
-                    await asyncio.sleep(delay)
+                    time.sleep(delay)
                     continue
 
                 # Non-retryable error or max retries reached
@@ -304,7 +303,7 @@ class ImageGenerator:
         avg = total / len(self.stats)
         return f"Generations: {len(self.stats)} | Total: {total:.2f}s | Avg: {avg:.2f}s"
 
-    async def blend_images(
+    def blend_images(
         self,
         prompt: str,
         images: List[Image.Image],
@@ -344,8 +343,8 @@ class ImageGenerator:
         # Retry loop
         for attempt in range(MAX_RETRIES + 1):
             try:
-                # Make async API call
-                response = await self.client.aio.models.generate_content(
+                # Make sync API call
+                response = self.client.models.generate_content(
                     model=self.MODEL_ID,
                     contents=contents,
                     config=config,
@@ -392,7 +391,7 @@ class ImageGenerator:
                 if is_retryable_error(error_msg) and attempt < MAX_RETRIES:
                     delay = RETRY_DELAYS[attempt]
                     logger.warning(f"Retryable error on attempt {attempt + 1}: {error_msg}. Retrying in {delay}s...")
-                    await asyncio.sleep(delay)
+                    time.sleep(delay)
                     continue
 
                 break
@@ -401,7 +400,7 @@ class ImageGenerator:
         result.duration = time.time() - start_time
         return result
 
-    async def generate_with_search(
+    def generate_with_search(
         self,
         prompt: str,
         aspect_ratio: str = "16:9",
@@ -434,8 +433,8 @@ class ImageGenerator:
         # Retry loop
         for attempt in range(MAX_RETRIES + 1):
             try:
-                # Make async API call
-                response = await self.client.aio.models.generate_content(
+                # Make sync API call
+                response = self.client.models.generate_content(
                     model=self.MODEL_ID,
                     contents=prompt,
                     config=config,
@@ -488,7 +487,7 @@ class ImageGenerator:
                 if is_retryable_error(error_msg) and attempt < MAX_RETRIES:
                     delay = RETRY_DELAYS[attempt]
                     logger.warning(f"Retryable error on attempt {attempt + 1}: {error_msg}. Retrying in {delay}s...")
-                    await asyncio.sleep(delay)
+                    time.sleep(delay)
                     continue
 
                 break

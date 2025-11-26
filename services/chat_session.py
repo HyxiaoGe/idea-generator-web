@@ -3,7 +3,6 @@ Chat Session Manager for multi-turn image generation.
 """
 import os
 import time
-import asyncio
 from typing import Optional, List
 from dataclasses import dataclass, field
 from PIL import Image
@@ -79,7 +78,7 @@ class ChatSession:
         self.chat = None
         self.messages = []
 
-    async def send_message(
+    def send_message(
         self,
         message: str,
         aspect_ratio: Optional[str] = None,
@@ -115,13 +114,8 @@ class ChatSession:
                 "safety_settings": build_safety_settings(safety_level),
             }
 
-            # Use sync chat.send_message wrapped in executor
-            # because google-genai chat doesn't have async send_message yet
-            loop = asyncio.get_event_loop()
-            api_response = await loop.run_in_executor(
-                None,
-                lambda: self.chat.send_message(message, config=config)
-            )
+            # Direct sync call
+            api_response = self.chat.send_message(message, config=config)
 
             # Check for safety blocks
             if hasattr(api_response, 'candidates') and api_response.candidates:

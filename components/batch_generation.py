@@ -2,7 +2,6 @@
 Batch image generation component.
 Generate multiple image variations from a single prompt.
 """
-import asyncio
 from io import BytesIO
 from typing import List
 from datetime import datetime
@@ -18,10 +17,9 @@ from services import (
     get_friendly_error_message,
 )
 from services.cost_estimator import estimate_cost
-from utils import run_async
 
 
-async def generate_batch(
+def generate_batch(
     generator: ImageGenerator,
     prompt: str,
     count: int,
@@ -31,7 +29,7 @@ async def generate_batch(
     progress_callback=None,
     cancel_check=None
 ) -> List:
-    """Generate multiple images asynchronously."""
+    """Generate multiple images synchronously."""
     results = []
 
     for i in range(count):
@@ -39,7 +37,7 @@ async def generate_batch(
         if cancel_check and cancel_check():
             break
 
-        result = await generator.generate(
+        result = generator.generate(
             prompt=prompt,
             aspect_ratio=aspect_ratio,
             resolution=resolution,
@@ -151,7 +149,7 @@ def render_batch_generation(t: Translator, settings: dict, generator: ImageGener
 
                 try:
                     # Run batch generation
-                    results = run_async(generate_batch(
+                    results = generate_batch(
                         generator=generator,
                         prompt=prompt,
                         count=count,
@@ -160,7 +158,7 @@ def render_batch_generation(t: Translator, settings: dict, generator: ImageGener
                         safety_level=settings.get("safety_level", "moderate"),
                         progress_callback=update_progress,
                         cancel_check=check_cancelled
-                    ))
+                    )
 
                     # Complete the generation task
                     GenerationStateManager.complete_generation(result=results)

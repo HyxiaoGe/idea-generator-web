@@ -11,7 +11,6 @@ from services import (
     get_history_sync,
     get_friendly_error_message,
 )
-from utils import run_async
 
 
 def render_style_transfer(t: Translator, settings: dict, generator: ImageGenerator):
@@ -95,12 +94,12 @@ def render_style_transfer_mode(t: Translator, settings: dict, generator: ImageGe
                 style_img = Image.open(style_file)
 
                 try:
-                    result = run_async(generator.blend_images(
+                    result = generator.blend_images(
                         prompt=prompt,
                         images=[content_img, style_img],
                         aspect_ratio=settings["aspect_ratio"],
                         safety_level=settings.get("safety_level", "moderate"),
-                    ))
+                    )
                     GenerationStateManager.complete_generation(result=result)
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))
@@ -198,12 +197,12 @@ def render_blend_mode(t: Translator, settings: dict, generator: ImageGenerator):
                 images = [Image.open(f) for f in uploaded_files]
 
                 try:
-                    result = run_async(generator.blend_images(
+                    result = generator.blend_images(
                         prompt=prompt,
                         images=images,
                         aspect_ratio=settings["aspect_ratio"],
                         safety_level=settings.get("safety_level", "moderate"),
-                    ))
+                    )
                     GenerationStateManager.complete_generation(result=result)
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))

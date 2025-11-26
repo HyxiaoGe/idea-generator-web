@@ -10,7 +10,6 @@ from services import (
     get_history_sync,
     get_friendly_error_message,
 )
-from utils import run_async
 
 
 def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSession):
@@ -132,11 +131,11 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
 
                 try:
                     # Send message
-                    response = run_async(chat_session.send_message(
+                    response = chat_session.send_message(
                         message=prompt,
                         aspect_ratio=settings["aspect_ratio"],
                         safety_level=settings.get("safety_level", "moderate"),
-                    ))
+                    )
                     GenerationStateManager.complete_generation(result=response)
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))

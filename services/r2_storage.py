@@ -148,7 +148,9 @@ class R2Storage:
         Returns:
             The R2 key (path) of the saved image, or None if failed
         """
+        print(f"[R2 Save] Called - is_available={self.is_available}")
         if not self.is_available:
+            print("[R2 Save] Skipped - R2 not available")
             return None
 
         try:
@@ -184,10 +186,11 @@ class R2Storage:
             # Also save/update the history index
             self._update_history_index(key, prompt, settings, duration, mode, text_response, thinking)
 
+            print(f"[R2 Save] SUCCESS - key={key}")
             return key
 
         except Exception as e:
-            print(f"Failed to save image to R2: {e}")
+            print(f"[R2 Save] FAILED - error={e}")
             return None
 
     def _update_history_index(

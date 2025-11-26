@@ -10,7 +10,6 @@ from services import (
     get_history_sync,
     get_friendly_error_message,
 )
-from utils import run_async
 
 
 def render_search_generation(t: Translator, settings: dict, generator: ImageGenerator):
@@ -66,11 +65,11 @@ def render_search_generation(t: Translator, settings: dict, generator: ImageGene
 
             with st.spinner(t("basic.generating")):
                 try:
-                    result = run_async(generator.generate_with_search(
+                    result = generator.generate_with_search(
                         prompt=prompt,
                         aspect_ratio=settings["aspect_ratio"],
                         safety_level=settings.get("safety_level", "moderate"),
-                    ))
+                    )
                     GenerationStateManager.complete_generation(result=result)
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))

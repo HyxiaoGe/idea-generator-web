@@ -10,7 +10,6 @@ from services import (
     get_history_sync,
     get_friendly_error_message,
 )
-from utils import run_async
 
 
 # Template categories with example prompts
@@ -163,14 +162,14 @@ def render_templates(t: Translator, settings: dict, generator: ImageGenerator):
 
             with st.spinner(t("basic.generating")):
                 try:
-                    result = run_async(generator.generate(
+                    result = generator.generate(
                         prompt=final_prompt,
                         aspect_ratio=settings["aspect_ratio"],
                         resolution=settings["resolution"],
                         enable_thinking=settings["enable_thinking"],
                         enable_search=settings["enable_search"],
                         safety_level=settings.get("safety_level", "moderate"),
-                    ))
+                    )
                     GenerationStateManager.complete_generation(result=result)
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))

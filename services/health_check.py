@@ -2,7 +2,6 @@
 API Health Check Service for monitoring Google GenAI availability.
 """
 import time
-import asyncio
 import logging
 from typing import Optional
 from dataclasses import dataclass
@@ -76,7 +75,7 @@ class HealthCheckService:
         return st.session_state.health_check_in_progress
 
     @staticmethod
-    async def check_health(api_key: str) -> HealthCheckResult:
+    def check_health(api_key: str) -> HealthCheckResult:
         """
         Perform a health check by sending a simple text request.
 
@@ -99,23 +98,29 @@ class HealthCheckService:
         try:
             client = genai.Client(api_key=api_key)
 
-            # Simple text-only request to test connectivity
-            response = await asyncio.wait_for(
-                client.aio.models.generate_content(
-                    model=HEALTH_CHECK_MODEL,
-                    contents="Say 'OK' if you can read this.",
-                    config=types.GenerateContentConfig(
-                        response_modalities=["Text"],
-                        max_output_tokens=10,
-                    )
-                ),
-                timeout=HEALTH_CHECK_TIMEOUT
+            # Simple text-only request to test connectivity (sync call)
+            response = client.models.generate_content(
+                model=HEALTH_CHECK_MODEL,
+                contents="Say 'OK' if you can read this.",
+                config=types.GenerateContentConfig(
+                    response_modalities=["Text"],
+                    max_output_tokens=10,
+                )
             )
 
             response_time = time.time() - start_time
 
+            # Check timeout manually
+            if response_time > HEALTH_CHECK_TIMEOUT:
+                result = HealthCheckResult(
+                    status=HealthStatus.UNHEALTHY,
+                    message=f"API slow ({response_time:.1f}s)",
+                    response_time=response_time,
+                    timestamp=time.time(),
+                    error="Slow response"
+                )
             # Check if we got a valid response
-            if response.candidates and len(response.candidates) > 0:
+            elif response.candidates and len(response.candidates) > 0:
                 result = HealthCheckResult(
                     status=HealthStatus.HEALTHY,
                     message=f"API is responsive ({response_time:.1f}s)",
@@ -131,14 +136,6 @@ class HealthCheckService:
                     error="Empty response"
                 )
 
-        except asyncio.TimeoutError:
-            result = HealthCheckResult(
-                status=HealthStatus.UNHEALTHY,
-                message=f"API timeout ({HEALTH_CHECK_TIMEOUT}s)",
-                response_time=HEALTH_CHECK_TIMEOUT,
-                timestamp=time.time(),
-                error="Request timeout"
-            )
         except Exception as e:
             error_msg = str(e)
             response_time = time.time() - start_time
@@ -175,7 +172,7 @@ class HealthCheckService:
     @staticmethod
     def run_check(api_key: str) -> HealthCheckResult:
         """
-        Synchronous wrapper for health check.
+        Run health check (direct sync call).
 
         Args:
             api_key: Google API key to test
@@ -183,7 +180,7 @@ class HealthCheckService:
         Returns:
             HealthCheckResult with status and details
         """
-        return asyncio.run(HealthCheckService.check_health(api_key))
+        return HealthCheckService.check_health(api_key)
 
     @staticmethod
     def get_status_indicator() -> tuple[str, str]:
