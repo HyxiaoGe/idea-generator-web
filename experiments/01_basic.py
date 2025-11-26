@@ -8,6 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from config import client, PRO_MODEL_ID, OUTPUT_DIR
 from google.genai import types
 
+
 def generate_basic_image(prompt: str, aspect_ratio: str = "16:9"):
     """Generate an image with basic settings."""
 
