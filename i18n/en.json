@@ -1,0 +1,89 @@
+{
+  "app": {
+    "title": "Nano Banana Lab",
+    "subtitle": "AI Image Generation Playground",
+    "footer": "Powered by Google Gemini"
+  },
+  "sidebar": {
+    "title": "Settings",
+    "language": "Language",
+    "mode": "Mode",
+    "modes": {
+      "basic": "Basic Generation",
+      "chat": "Chat & Refine",
+      "history": "History"
+    },
+    "params": {
+      "title": "Parameters",
+      "aspect_ratio": "Aspect Ratio",
+      "resolution": "Resolution",
+      "thinking": "Show Thinking Process",
+      "search": "Enable Search Grounding"
+    },
+    "stats": "Statistics",
+    "about": "About",
+    "about_text": "A learning project for exploring Google Gemini Pro Image capabilities."
+  },
+  "basic": {
+    "title": "Basic Image Generation",
+    "prompt_label": "Enter your prompt",
+    "prompt_placeholder": "Describe the image you want to generate...",
+    "generate_btn": "Generate Image",
+    "generating": "Generating...",
+    "result": "Result",
+    "thinking_label": "Thinking Process",
+    "response_label": "Model Response",
+    "time_label": "Generation Time",
+    "seconds": "seconds",
+    "download_btn": "Download Image",
+    "error": "Error",
+    "no_image": "No image was generated. Please try a different prompt.",
+    "examples": {
+      "title": "Example Prompts",
+      "items": [
+        "A cute corgi wearing sunglasses, sitting on a beach at sunset, photorealistic",
+        "A futuristic cityscape with flying cars and neon lights, cyberpunk style",
+        "A cozy coffee shop interior with warm lighting, watercolor painting style",
+        "A majestic dragon flying over snow-capped mountains, fantasy art"
+      ]
+    }
+  },
+  "chat": {
+    "title": "Chat & Refine",
+    "description": "Have a conversation to iteratively refine your image. Start with a basic idea and improve it step by step.",
+    "start_btn": "Start New Chat",
+    "clear_btn": "Clear Chat",
+    "input_placeholder": "Describe changes or new instructions...",
+    "send_btn": "Send",
+    "welcome": "Welcome! Describe the image you'd like to create, and I'll help you refine it.",
+    "thinking_label": "Thinking",
+    "assistant_label": "Assistant",
+    "user_label": "You",
+    "new_session_tip": "Start a new chat to begin generating images.",
+    "refine_tips": {
+      "title": "Refinement Tips",
+      "items": [
+        "Try: 'Make the colors more vibrant'",
+        "Try: 'Change the background to a forest'",
+        "Try: 'Add more details to the face'",
+        "Try: 'Make it look more realistic'"
+      ]
+    }
+  },
+  "history": {
+    "title": "Generation History",
+    "description": "View your previously generated images.",
+    "empty": "No images generated yet. Start creating!",
+    "generated_at": "Generated at",
+    "prompt_label": "Prompt",
+    "clear_btn": "Clear History",
+    "clear_confirm": "Are you sure you want to clear all history?",
+    "download_btn": "Download"
+  },
+  "errors": {
+    "api_key_missing": "API key not configured. Please set GOOGLE_API_KEY in your .env file.",
+    "generation_failed": "Image generation failed: {error}",
+    "network_error": "Network error. Please check your connection.",
+    "rate_limit": "Rate limit exceeded. Please wait a moment and try again."
+  }
+}
