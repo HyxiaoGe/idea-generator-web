@@ -47,6 +47,7 @@ RETRYABLE_ERRORS = [
     "timeout",
     "network",
     "unavailable",
+    "overloaded",
     "503",
     "502",
     "504",
@@ -57,6 +58,29 @@ def is_retryable_error(error_msg: str) -> bool:
     """Check if an error is retryable based on error message."""
     error_lower = error_msg.lower()
     return any(keyword in error_lower for keyword in RETRYABLE_ERRORS)
+
+
+def get_friendly_error_message(error_msg: str) -> str:
+    """Convert technical error messages to user-friendly messages."""
+    error_lower = error_msg.lower()
+
+    if "overloaded" in error_lower or ("503" in error_lower and "unavailable" in error_lower):
+        return "模型繁忙，请稍后重试 (Model overloaded)"
+    elif "503" in error_lower or "unavailable" in error_lower:
+        return "服务暂时不可用，请稍后重试 (Service unavailable)"
+    elif "timeout" in error_lower:
+        return "请求超时，请重试 (Request timeout)"
+    elif "quota" in error_lower or "rate" in error_lower:
+        return "API 配额已用尽或请求过快 (Rate limited)"
+    elif "api_key" in error_lower or "invalid" in error_lower:
+        return "API Key 无效，请检查配置 (Invalid API key)"
+    elif "safety" in error_lower or "blocked" in error_lower:
+        return "内容被安全过滤器拦截 (Blocked by safety filter)"
+    elif "server disconnected" in error_lower or "connection" in error_lower:
+        return "网络连接异常，请重试 (Connection error)"
+    else:
+        # Return original message if no match, but truncate if too long
+        return error_msg[:200] if len(error_msg) > 200 else error_msg
 
 
 def build_safety_settings(level: str = "moderate") -> List[types.SafetySetting]:

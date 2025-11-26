@@ -9,6 +9,7 @@ from services import (
     ImageGenerator,
     GenerationStateManager,
     get_history_sync,
+    get_friendly_error_message,
 )
 from utils import run_async
 
@@ -125,7 +126,7 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
 
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))
-                    st.error(f"❌ {t('basic.error')}: {str(e)}")
+                    st.error(f"❌ {t('basic.error')}: {get_friendly_error_message(str(e))}")
                     return
 
             # Clear progress containers
@@ -135,7 +136,7 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
             # Handle result
             if result.error:
                 icon = "🛡️" if result.safety_blocked else "❌"
-                st.error(f"{icon} {t('basic.error')}: {result.error}")
+                st.error(f"{icon} {t('basic.error')}: {get_friendly_error_message(result.error)}")
             elif result.image:
                 # Save using history sync manager
                 history_sync = get_history_sync()
