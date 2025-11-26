@@ -4,6 +4,7 @@ Sidebar component with settings and configuration.
 import os
 import streamlit as st
 from i18n import LANGUAGES, Translator
+from services import get_persistence
 
 
 def render_api_key_section(t: Translator) -> bool:
@@ -60,6 +61,9 @@ def render_api_key_section(t: Translator) -> bool:
                         st.session_state.api_key_valid = True
                         st.session_state.api_key_source = "user"
                         st.session_state.api_key_changed = True
+                        # Save to browser storage for persistence
+                        persistence = get_persistence()
+                        persistence.save_api_key(api_key_input)
                         st.toast(t("sidebar.api_key.valid"), icon="✅")
                         st.rerun()
                     else:
@@ -73,6 +77,9 @@ def render_api_key_section(t: Translator) -> bool:
                 st.session_state.api_key_valid = has_env_key
                 st.session_state.api_key_source = "env" if has_env_key else "user"
                 st.session_state.api_key_changed = True
+                # Clear from browser storage
+                persistence = get_persistence()
+                persistence.clear_api_key()
                 st.rerun()
 
         # Link to get API key
@@ -120,9 +127,12 @@ def render_sidebar(t: Translator) -> dict:
             label_visibility="collapsed"
         )
 
-        # Update language in session state
+        # Update language in session state and persist
         if selected_lang != st.session_state.get("language"):
             st.session_state.language = selected_lang
+            # Save to browser storage
+            persistence = get_persistence()
+            persistence.save_language(selected_lang)
             st.rerun()
 
         st.divider()
@@ -150,32 +160,44 @@ def render_sidebar(t: Translator) -> dict:
 
         st.divider()
 
-        # Parameters
+        # Parameters - load saved settings if available
         st.subheader(t("sidebar.params.title"))
+
+        saved_settings = st.session_state.get("saved_settings", {})
+
+        # Aspect ratio
+        aspect_options = ["1:1", "16:9", "9:16", "4:3", "3:4"]
+        saved_aspect = saved_settings.get("aspect_ratio", "16:9")
+        aspect_index = aspect_options.index(saved_aspect) if saved_aspect in aspect_options else 1
 
         aspect_ratio = st.selectbox(
             t("sidebar.params.aspect_ratio"),
-            options=["1:1", "16:9", "9:16", "4:3", "3:4"],
-            index=1,
+            options=aspect_options,
+            index=aspect_index,
             key="aspect_ratio"
         )
 
+        # Resolution
+        resolution_options = ["1K", "2K", "4K"]
+        saved_resolution = saved_settings.get("resolution", "1K")
+        resolution_index = resolution_options.index(saved_resolution) if saved_resolution in resolution_options else 0
+
         resolution = st.selectbox(
             t("sidebar.params.resolution"),
-            options=["1K", "2K", "4K"],
-            index=0,
+            options=resolution_options,
+            index=resolution_index,
             key="resolution"
         )
 
         enable_thinking = st.checkbox(
             t("sidebar.params.thinking"),
-            value=False,
+            value=saved_settings.get("enable_thinking", False),
             key="enable_thinking"
         )
 
         enable_search = st.checkbox(
             t("sidebar.params.search"),
-            value=False,
+            value=saved_settings.get("enable_search", False),
             key="enable_search"
         )
 
@@ -191,11 +213,15 @@ def render_sidebar(t: Translator) -> dict:
             "none": t("sidebar.safety.levels.none"),
         }
 
+        safety_options = list(safety_levels.keys())
+        saved_safety = saved_settings.get("safety_level", "moderate")
+        safety_index = safety_options.index(saved_safety) if saved_safety in safety_options else 1
+
         safety_level = st.selectbox(
             t("sidebar.safety.level_label"),
-            options=list(safety_levels.keys()),
+            options=safety_options,
             format_func=lambda x: safety_levels[x],
-            index=1,  # Default to "moderate"
+            index=safety_index,
             key="safety_level",
             help=t("sidebar.safety.help"),
         )
@@ -210,6 +236,21 @@ def render_sidebar(t: Translator) -> dict:
         with st.expander(t("sidebar.about")):
             st.write(t("sidebar.about_text"))
             st.caption(t("app.footer"))
+
+    # Build current settings
+    current_settings = {
+        "aspect_ratio": aspect_ratio,
+        "resolution": resolution,
+        "enable_thinking": enable_thinking,
+        "enable_search": enable_search,
+        "safety_level": safety_level,
+    }
+
+    # Save settings if changed
+    if current_settings != saved_settings:
+        st.session_state.saved_settings = current_settings
+        persistence = get_persistence()
+        persistence.save_settings(current_settings)
 
     return {
         "language": selected_lang,

@@ -190,24 +190,29 @@ def render_batch_generation(t: Translator, settings: dict, generator: ImageGener
                     for idx, result in enumerate(failed):
                         st.write(f"Image {idx + 1}: {result.error}")
 
-            # Download all as ZIP
+            # Download all as ZIP - direct download without extra button
             if len(successful) > 1:
                 st.divider()
-                if st.button(t("batch.download_all"), use_container_width=True):
-                    import zipfile
-                    import io
+                import zipfile
+                import io
+                from datetime import datetime
 
-                    zip_buffer = io.BytesIO()
-                    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                        for idx, result in enumerate(successful):
-                            img_buffer = BytesIO()
-                            result.image.save(img_buffer, format="PNG")
-                            zip_file.writestr(f"image_{idx + 1}.png", img_buffer.getvalue())
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                    for idx, result in enumerate(successful):
+                        img_buffer = BytesIO()
+                        result.image.save(img_buffer, format="PNG")
+                        # Use descriptive filename in ZIP
+                        prompt_slug = "".join(c if c.isalnum() or c == " " else "" for c in prompt[:20])
+                        prompt_slug = "_".join(prompt_slug.split())
+                        zip_file.writestr(f"batch_{idx + 1}_{prompt_slug}.png", img_buffer.getvalue())
 
-                    st.download_button(
-                        t("batch.download_zip"),
-                        data=zip_buffer.getvalue(),
-                        file_name="batch_images.zip",
-                        mime="application/zip",
-                        key="download_batch_zip"
-                    )
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                st.download_button(
+                    f"📦 {t('batch.download_all')} ({len(successful)} {t('batch.images')})",
+                    data=zip_buffer.getvalue(),
+                    file_name=f"batch_{timestamp}.zip",
+                    mime="application/zip",
+                    key="download_batch_zip",
+                    use_container_width=True
+                )

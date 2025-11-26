@@ -115,13 +115,13 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
                 st.caption(f"{t('basic.time_label')}: {result.duration:.2f} {t('basic.seconds')}")
 
             with col3:
-                # Download button
+                # Download button with descriptive filename
                 buf = BytesIO()
                 result.image.save(buf, format="PNG")
                 st.download_button(
                     t("basic.download_btn"),
                     data=buf.getvalue(),
-                    file_name="generated_image.png",
+                    file_name=filename,  # Use the saved filename
                     mime="image/png"
                 )
         else:
@@ -149,9 +149,13 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
         with col3:
             buf = BytesIO()
             last["image"].save(buf, format="PNG")
+            # Use stored filename or generate one
+            download_name = last.get("filename", "generated_image.png")
+            if "/" in download_name:
+                download_name = download_name.split("/")[-1]
             st.download_button(
                 t("basic.download_btn"),
                 data=buf.getvalue(),
-                file_name="generated_image.png",
+                file_name=download_name,
                 mime="image/png"
             )

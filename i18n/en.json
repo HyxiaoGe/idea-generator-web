@@ -221,6 +221,7 @@
     "title": "Generation History",
     "description": "View your previously generated images. Images are automatically saved to disk.",
     "empty": "No images generated yet. Start creating!",
+    "loading": "Loading history...",
     "generated_at": "Generated at",
     "prompt_label": "Prompt",
     "clear_btn": "Clear History",

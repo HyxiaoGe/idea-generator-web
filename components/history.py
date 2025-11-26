@@ -44,7 +44,8 @@ def render_history(t: Translator):
 
     # Load from disk if session state is empty
     if "history" not in st.session_state or not st.session_state.history:
-        st.session_state.history = load_history_from_disk()
+        with st.spinner(t("history.loading") if hasattr(t, "__call__") else "Loading history..."):
+            st.session_state.history = load_history_from_disk()
 
     # Check if history exists
     if not st.session_state.history:
@@ -129,7 +130,10 @@ def render_history(t: Translator):
                     if item.get("image"):
                         buf = BytesIO()
                         item["image"].save(buf, format="PNG")
+                        # Get descriptive filename
                         filename = item.get("filename", f"history_{item_idx}.png")
+                        if "/" in filename:
+                            filename = filename.split("/")[-1]
                         st.download_button(
                             t("history.download_btn"),
                             data=buf.getvalue(),

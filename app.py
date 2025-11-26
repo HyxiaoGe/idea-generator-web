@@ -29,7 +29,7 @@ from components import (
     render_batch_generation,
 )
 from components.sidebar import get_current_api_key
-from services import ImageGenerator, ChatSession
+from services import ImageGenerator, ChatSession, init_from_persistence
 
 
 def init_services(api_key: str = None):
@@ -55,6 +55,9 @@ def init_services(api_key: str = None):
 
 def init_session_state():
     """Initialize session state variables."""
+    # Load persisted values first (API key, language, settings)
+    init_from_persistence()
+
     if "language" not in st.session_state:
         st.session_state.language = "en"
 
