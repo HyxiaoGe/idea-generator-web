@@ -8,6 +8,7 @@ from services import (
     ImageGenerator,
     GenerationStateManager,
     get_history_sync,
+    get_friendly_error_message,
 )
 from utils import run_async
 
@@ -73,12 +74,12 @@ def render_search_generation(t: Translator, settings: dict, generator: ImageGene
                     GenerationStateManager.complete_generation(result=result)
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))
-                    st.error(f"❌ {t('basic.error')}: {str(e)}")
+                    st.error(f"❌ {t('basic.error')}: {get_friendly_error_message(str(e))}")
                     return
 
             if result.error:
                 icon = "🛡️" if result.safety_blocked else "❌"
-                st.error(f"{icon} {t('basic.error')}: {result.error}")
+                st.error(f"{icon} {t('basic.error')}: {get_friendly_error_message(result.error)}")
             elif result.image:
                 st.subheader(t("basic.result"))
                 st.image(result.image, use_container_width=True)

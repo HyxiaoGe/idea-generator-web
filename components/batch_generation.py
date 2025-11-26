@@ -15,6 +15,7 @@ from services import (
     ImageGenerator,
     GenerationStateManager,
     get_history_sync,
+    get_friendly_error_message,
 )
 from services.cost_estimator import estimate_cost
 from utils import run_async
@@ -167,7 +168,7 @@ def render_batch_generation(t: Translator, settings: dict, generator: ImageGener
 
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))
-                    st.error(f"❌ {t('basic.error')}: {str(e)}")
+                    st.error(f"❌ {t('basic.error')}: {get_friendly_error_message(str(e))}")
                     return
 
             # Display results

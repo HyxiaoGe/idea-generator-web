@@ -8,6 +8,7 @@ from services import (
     ChatSession,
     GenerationStateManager,
     get_history_sync,
+    get_friendly_error_message,
 )
 from utils import run_async
 
@@ -139,15 +140,16 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
                     GenerationStateManager.complete_generation(result=response)
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))
-                    st.error(f"❌ {t('basic.error')}: {str(e)}")
+                    st.error(f"❌ {t('basic.error')}: {get_friendly_error_message(str(e))}")
                     st.rerun()
 
             if response.error:
                 icon = "🛡️" if response.safety_blocked else "❌"
-                st.error(f"{icon} {t('basic.error')}: {response.error}")
+                friendly_error = get_friendly_error_message(response.error)
+                st.error(f"{icon} {t('basic.error')}: {friendly_error}")
                 st.session_state.chat_messages.append({
                     "role": "assistant",
-                    "content": f"Error: {response.error}",
+                    "content": f"Error: {friendly_error}",
                     "image": None
                 })
             else:
