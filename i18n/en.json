@@ -11,6 +11,9 @@
     "modes": {
       "basic": "Basic Generation",
       "chat": "Chat & Refine",
+      "blend": "Style Transfer",
+      "search": "Search Grounding",
+      "templates": "Templates",
       "history": "History"
     },
     "params": {
@@ -67,6 +70,102 @@
         "Try: 'Change the background to a forest'",
         "Try: 'Add more details to the face'",
         "Try: 'Make it look more realistic'"
+      ]
+    }
+  },
+  "blend": {
+    "title": "Style Transfer & Image Blending",
+    "description": "Transfer artistic styles between images or blend multiple images together.",
+    "tab_style": "Style Transfer",
+    "tab_blend": "Multi-Image Blend",
+    "generate_btn": "Generate",
+    "style": {
+      "title": "Style Transfer",
+      "description": "Apply the artistic style from one image to another.",
+      "content_image": "Content Image",
+      "style_image": "Style Image",
+      "upload_content": "Upload content image",
+      "upload_style": "Upload style reference",
+      "prompt_label": "Transfer instruction",
+      "default_prompt": "Apply the artistic style from the second image to the first image"
+    },
+    "multi": {
+      "title": "Multi-Image Blending",
+      "description": "Blend multiple images into one coherent scene. Supports up to 14 images.",
+      "upload": "Upload images to blend",
+      "count": "Images uploaded",
+      "more": "+{count} more",
+      "prompt_label": "Blending instructions",
+      "prompt_placeholder": "Describe how you want to combine these images..."
+    }
+  },
+  "search": {
+    "title": "Search-Grounded Generation",
+    "description": "Generate images based on real-time search data. Perfect for current events, weather, and trending topics.",
+    "prompt_label": "Enter your prompt",
+    "prompt_placeholder": "Describe what you want to visualize with current information...",
+    "info": "This mode uses Google Search to gather real-time information before generating the image.",
+    "sources_label": "Search Sources",
+    "examples": {
+      "title": "Example Prompts",
+      "items": [
+        "Visualize the current weather forecast for the next 5 days in New York as a modern infographic",
+        "Create an image showing the top 3 trending movies this week",
+        "Generate a visual summary of today's major tech news",
+        "Illustrate the current stock market trends as a creative chart"
+      ]
+    }
+  },
+  "templates": {
+    "title": "Prompt Templates",
+    "description": "Start with curated prompt templates and customize them to your needs.",
+    "select_category": "Select a category",
+    "template": "Template",
+    "use_btn": "Use This",
+    "customize": "Customize Your Prompt",
+    "prompt_label": "Base prompt",
+    "prompt_placeholder": "Select a template or enter your own...",
+    "subject_label": "Subject / Object",
+    "subject_placeholder": "What is the main subject? (e.g., 'a golden retriever', 'vintage car')",
+    "preview_label": "Final Prompt Preview",
+    "categories": {
+      "portrait": "Portrait",
+      "product": "Product",
+      "landscape": "Landscape",
+      "art": "Art",
+      "food": "Food",
+      "architecture": "Architecture"
+    },
+    "prompts": {
+      "portrait": [
+        "professional headshot photo with studio lighting",
+        "artistic portrait with dramatic side lighting",
+        "vintage style portrait with film grain effect"
+      ],
+      "product": [
+        "clean product photography on white background",
+        "lifestyle product shot with natural lighting",
+        "minimalist product display with soft shadows"
+      ],
+      "landscape": [
+        "breathtaking mountain landscape at golden hour",
+        "serene beach sunset with palm trees silhouette",
+        "misty forest morning with sunbeams"
+      ],
+      "art": [
+        "abstract oil painting with vibrant colors",
+        "watercolor illustration in soft pastel tones",
+        "digital art in cyberpunk neon style"
+      ],
+      "food": [
+        "gourmet food photography with elegant plating",
+        "rustic homemade dish on wooden table",
+        "colorful healthy breakfast spread from above"
+      ],
+      "architecture": [
+        "modern minimalist building with clean lines",
+        "cozy interior design with warm ambient lighting",
+        "futuristic architecture concept with glass and steel"
       ]
     }
   },

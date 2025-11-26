@@ -45,6 +45,9 @@ def render_sidebar(t: Translator) -> dict:
         modes = {
             "basic": t("sidebar.modes.basic"),
             "chat": t("sidebar.modes.chat"),
+            "blend": t("sidebar.modes.blend"),
+            "search": t("sidebar.modes.search"),
+            "templates": t("sidebar.modes.templates"),
             "history": t("sidebar.modes.history"),
         }
 

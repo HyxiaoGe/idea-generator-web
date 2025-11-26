@@ -11,6 +11,9 @@
     "modes": {
       "basic": "基础生图",
       "chat": "对话微调",
+      "blend": "风格迁移",
+      "search": "搜索增强",
+      "templates": "模板库",
       "history": "历史记录"
     },
     "params": {
@@ -67,6 +70,102 @@
         "试试：'把背景换成森林'",
         "试试：'给脸部添加更多细节'",
         "试试：'让它看起来更真实'"
+      ]
+    }
+  },
+  "blend": {
+    "title": "风格迁移与图像混合",
+    "description": "在图像之间转换艺术风格，或将多张图像混合在一起。",
+    "tab_style": "风格迁移",
+    "tab_blend": "多图混合",
+    "generate_btn": "生成",
+    "style": {
+      "title": "风格迁移",
+      "description": "将一张图的艺术风格应用到另一张图上。",
+      "content_image": "内容图像",
+      "style_image": "风格图像",
+      "upload_content": "上传内容图像",
+      "upload_style": "上传风格参考",
+      "prompt_label": "迁移指令",
+      "default_prompt": "将第二张图的艺术风格应用到第一张图上"
+    },
+    "multi": {
+      "title": "多图混合",
+      "description": "将多张图像混合成一个连贯的场景。最多支持 14 张图像。",
+      "upload": "上传要混合的图像",
+      "count": "已上传图像",
+      "more": "还有 {count} 张",
+      "prompt_label": "混合指令",
+      "prompt_placeholder": "描述你想如何组合这些图像..."
+    }
+  },
+  "search": {
+    "title": "搜索增强生成",
+    "description": "基于实时搜索数据生成图像。非常适合当前事件、天气和热门话题。",
+    "prompt_label": "输入提示词",
+    "prompt_placeholder": "描述你想用最新信息可视化的内容...",
+    "info": "此模式在生成图像前会使用 Google 搜索收集实时信息。",
+    "sources_label": "搜索来源",
+    "examples": {
+      "title": "示例提示词",
+      "items": [
+        "将纽约未来5天的天气预报可视化为现代信息图",
+        "创建一张展示本周热门电影前3名的图片",
+        "生成今日主要科技新闻的视觉摘要",
+        "将当前股市趋势绘制成创意图表"
+      ]
+    }
+  },
+  "templates": {
+    "title": "提示词模板",
+    "description": "从精选的提示词模板开始，根据需要自定义。",
+    "select_category": "选择类别",
+    "template": "模板",
+    "use_btn": "使用此模板",
+    "customize": "自定义提示词",
+    "prompt_label": "基础提示词",
+    "prompt_placeholder": "选择一个模板或输入自己的...",
+    "subject_label": "主体/对象",
+    "subject_placeholder": "主要主体是什么？（如：'金毛犬'、'复古汽车'）",
+    "preview_label": "最终提示词预览",
+    "categories": {
+      "portrait": "人像",
+      "product": "产品",
+      "landscape": "风景",
+      "art": "艺术",
+      "food": "美食",
+      "architecture": "建筑"
+    },
+    "prompts": {
+      "portrait": [
+        "专业头像照片，工作室灯光",
+        "戏剧性侧光的艺术肖像",
+        "带胶片颗粒效果的复古风格肖像"
+      ],
+      "product": [
+        "白色背景上的简洁产品摄影",
+        "自然光线下的生活方式产品照",
+        "带柔和阴影的极简产品展示"
+      ],
+      "landscape": [
+        "黄金时刻令人惊叹的山景",
+        "棕榈树剪影的宁静海滩日落",
+        "阳光透过的迷雾森林清晨"
+      ],
+      "art": [
+        "色彩鲜艳的抽象油画",
+        "柔和粉彩色调的水彩插画",
+        "霓虹赛博朋克风格的数字艺术"
+      ],
+      "food": [
+        "精致摆盘的美食摄影",
+        "木桌上的乡村自制菜肴",
+        "俯视角度的多彩健康早餐"
+      ],
+      "architecture": [
+        "线条简洁的现代极简建筑",
+        "暖色环境灯光的舒适室内设计",
+        "玻璃与钢铁的未来主义建筑概念"
       ]
     }
   },

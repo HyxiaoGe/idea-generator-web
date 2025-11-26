@@ -4,7 +4,7 @@ Async Image Generator Service using Google GenAI.
 import os
 import time
 import asyncio
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from dataclasses import dataclass
 from PIL import Image
 from io import BytesIO
@@ -22,6 +22,7 @@ class GenerationResult:
     image: Optional[Image.Image] = None
     text: Optional[str] = None
     thinking: Optional[str] = None
+    search_sources: Optional[str] = None
     duration: float = 0.0
     error: Optional[str] = None
 
@@ -130,3 +131,119 @@ class ImageGenerator:
         total = sum(s["duration"] for s in self.stats)
         avg = total / len(self.stats)
         return f"Generations: {len(self.stats)} | Total: {total:.2f}s | Avg: {avg:.2f}s"
+
+    async def blend_images(
+        self,
+        prompt: str,
+        images: List[Image.Image],
+        aspect_ratio: str = "1:1",
+    ) -> GenerationResult:
+        """
+        Blend multiple images based on a prompt.
+
+        Args:
+            prompt: Description of how to combine the images
+            images: List of PIL Image objects to blend (max 14 for Pro model)
+            aspect_ratio: Output aspect ratio
+
+        Returns:
+            GenerationResult with blended image
+        """
+        start_time = time.time()
+        result = GenerationResult()
+
+        if not images:
+            result.error = "No images provided for blending"
+            return result
+
+        try:
+            # Build contents with prompt and images
+            contents = [prompt] + images
+
+            config = types.GenerateContentConfig(
+                response_modalities=["Text", "Image"],
+                image_config=types.ImageConfig(
+                    aspect_ratio=aspect_ratio
+                )
+            )
+
+            # Make async API call
+            response = await self.client.aio.models.generate_content(
+                model=self.MODEL_ID,
+                contents=contents,
+                config=config,
+            )
+
+            # Process response
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'text') and part.text:
+                    result.text = part.text
+                elif hasattr(part, 'inline_data') and part.inline_data:
+                    image_data = part.inline_data.data
+                    result.image = Image.open(BytesIO(image_data))
+
+            result.duration = time.time() - start_time
+            self._record_stats(result.duration)
+
+        except Exception as e:
+            result.error = str(e)
+            result.duration = time.time() - start_time
+
+        return result
+
+    async def generate_with_search(
+        self,
+        prompt: str,
+        aspect_ratio: str = "16:9",
+    ) -> GenerationResult:
+        """
+        Generate an image using real-time search data.
+
+        Args:
+            prompt: Text description that benefits from real-time data
+            aspect_ratio: Image aspect ratio
+
+        Returns:
+            GenerationResult with image and search sources
+        """
+        start_time = time.time()
+        result = GenerationResult()
+
+        try:
+            config = types.GenerateContentConfig(
+                response_modalities=["Text", "Image"],
+                image_config=types.ImageConfig(
+                    aspect_ratio=aspect_ratio
+                ),
+                tools=[{"google_search": {}}]
+            )
+
+            # Make async API call
+            response = await self.client.aio.models.generate_content(
+                model=self.MODEL_ID,
+                contents=prompt,
+                config=config,
+            )
+
+            # Process response
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'text') and part.text:
+                    result.text = part.text
+                elif hasattr(part, 'inline_data') and part.inline_data:
+                    image_data = part.inline_data.data
+                    result.image = Image.open(BytesIO(image_data))
+
+            # Get search sources
+            if response.candidates and response.candidates[0].grounding_metadata:
+                metadata = response.candidates[0].grounding_metadata
+                if hasattr(metadata, 'search_entry_point') and metadata.search_entry_point:
+                    result.search_sources = metadata.search_entry_point.rendered_content
+
+            result.duration = time.time() - start_time
+            self._record_stats(result.duration)
+
+        except Exception as e:
+            result.error = str(e)
+            result.duration = time.time() - start_time
+
+        return result
