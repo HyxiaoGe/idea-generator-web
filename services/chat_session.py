@@ -44,14 +44,27 @@ class ChatSession:
 
     MODEL_ID = "gemini-2.0-flash-preview-image-generation"
 
-    def __init__(self):
-        api_key = os.getenv("GOOGLE_API_KEY")
-        if not api_key:
-            raise ValueError("GOOGLE_API_KEY not found in environment variables")
-        self.client = genai.Client(api_key=api_key)
+    def __init__(self, api_key: Optional[str] = None):
+        """
+        Initialize the chat session.
+
+        Args:
+            api_key: Google API key. If not provided, will try to get from environment.
+        """
+        self._api_key = api_key or os.getenv("GOOGLE_API_KEY")
+        if not self._api_key:
+            raise ValueError("GOOGLE_API_KEY not found")
+        self.client = genai.Client(api_key=self._api_key)
         self.chat = None
         self.messages: List[ChatMessage] = []
         self.aspect_ratio = "16:9"
+
+    def update_api_key(self, api_key: str):
+        """Update the API key and reinitialize the client."""
+        self._api_key = api_key
+        self.client = genai.Client(api_key=api_key)
+        # Clear existing chat session as the client changed
+        self.clear_session()
 
     def start_session(self, aspect_ratio: str = "16:9"):
         """Start a new chat session."""

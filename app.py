@@ -28,7 +28,29 @@ from components import (
     render_templates,
     render_batch_generation,
 )
+from components.sidebar import get_current_api_key
 from services import ImageGenerator, ChatSession
+
+
+def init_services(api_key: str = None):
+    """Initialize or reinitialize services with optional API key."""
+    key = api_key or get_current_api_key()
+
+    if not key:
+        st.session_state.generator = None
+        st.session_state.chat_session = None
+        return False
+
+    try:
+        st.session_state.generator = ImageGenerator(api_key=key)
+        st.session_state.chat_session = ChatSession(api_key=key)
+        st.session_state.api_error = None
+        return True
+    except ValueError as e:
+        st.session_state.generator = None
+        st.session_state.chat_session = None
+        st.session_state.api_error = str(e)
+        return False
 
 
 def init_session_state():
@@ -42,17 +64,20 @@ def init_session_state():
     if "chat_messages" not in st.session_state:
         st.session_state.chat_messages = []
 
+    # Initialize services if not already done
     if "generator" not in st.session_state:
-        try:
-            st.session_state.generator = ImageGenerator()
-        except ValueError as e:
-            st.session_state.generator = None
-            st.session_state.api_error = str(e)
+        init_services()
 
-    if "chat_session" not in st.session_state:
-        try:
-            st.session_state.chat_session = ChatSession()
-        except ValueError as e:
+
+def handle_api_key_change():
+    """Handle API key changes from the sidebar."""
+    if st.session_state.get("api_key_changed"):
+        st.session_state.api_key_changed = False
+        api_key = get_current_api_key()
+        if api_key:
+            init_services(api_key)
+        else:
+            st.session_state.generator = None
             st.session_state.chat_session = None
 
 
@@ -60,6 +85,9 @@ def main():
     """Main application entry point."""
     # Initialize session state
     init_session_state()
+
+    # Handle API key changes from sidebar
+    handle_api_key_change()
 
     # Create translator for current language
     t = Translator(st.session_state.language)
@@ -71,11 +99,10 @@ def main():
     st.title(f"🍌 {t('app.title')}")
     st.caption(t("app.subtitle"))
 
-    # Check for API key error
-    if st.session_state.get("api_error"):
-        st.error(t("errors.api_key_missing"))
-        st.info("Please create a `.env` file with your `GOOGLE_API_KEY`.")
-        st.code("GOOGLE_API_KEY=your_api_key_here", language="bash")
+    # Check if API key is valid
+    if not settings.get("api_key_valid"):
+        st.warning(t("errors.api_key_required"))
+        st.info(t("errors.api_key_help"))
         return
 
     # Get services from session state

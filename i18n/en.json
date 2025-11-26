@@ -6,6 +6,21 @@
   },
   "sidebar": {
     "title": "Settings",
+    "api_key": {
+      "title": "API Key",
+      "env_configured": "Using environment API key",
+      "user_configured": "Using your API key",
+      "configure": "Configure API Key",
+      "help": "Enter your Google API key to use the image generation features.",
+      "input_label": "API Key",
+      "validate_btn": "Validate",
+      "clear_btn": "Clear",
+      "validating": "Validating...",
+      "valid": "API key is valid!",
+      "invalid": "Invalid API key",
+      "empty": "Please enter an API key",
+      "get_key": "Get API Key from Google AI Studio"
+    },
     "language": "Language",
     "mode": "Mode",
     "modes": {
@@ -202,6 +217,8 @@
   },
   "errors": {
     "api_key_missing": "API key not configured. Please set GOOGLE_API_KEY in your .env file.",
+    "api_key_required": "API Key Required",
+    "api_key_help": "Please configure your API key in the sidebar to start generating images.",
     "generation_failed": "Image generation failed: {error}",
     "network_error": "Network error. Please check your connection.",
     "rate_limit": "Rate limit exceeded. Please wait a moment and try again."

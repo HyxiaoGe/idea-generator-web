@@ -6,6 +6,21 @@
   },
   "sidebar": {
     "title": "设置",
+    "api_key": {
+      "title": "API 密钥",
+      "env_configured": "正在使用环境变量中的 API 密钥",
+      "user_configured": "正在使用您输入的 API 密钥",
+      "configure": "配置 API 密钥",
+      "help": "输入您的 Google API 密钥以使用图像生成功能。",
+      "input_label": "API 密钥",
+      "validate_btn": "验证",
+      "clear_btn": "清除",
+      "validating": "验证中...",
+      "valid": "API 密钥有效！",
+      "invalid": "无效的 API 密钥",
+      "empty": "请输入 API 密钥",
+      "get_key": "从 Google AI Studio 获取 API 密钥"
+    },
     "language": "语言",
     "mode": "模式",
     "modes": {
@@ -202,6 +217,8 @@
   },
   "errors": {
     "api_key_missing": "未配置 API 密钥，请在 .env 文件中设置 GOOGLE_API_KEY。",
+    "api_key_required": "需要 API 密钥",
+    "api_key_help": "请在侧边栏配置您的 API 密钥以开始生成图像。",
     "generation_failed": "图像生成失败：{error}",
     "network_error": "网络错误，请检查您的网络连接。",
     "rate_limit": "请求频率超限，请稀后再试。"

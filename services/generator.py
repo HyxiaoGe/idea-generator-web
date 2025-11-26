@@ -35,12 +35,56 @@ class ImageGenerator:
     ASPECT_RATIOS = ["1:1", "16:9", "9:16", "4:3", "3:4"]
     RESOLUTIONS = ["1K", "2K", "4K"]
 
-    def __init__(self):
-        api_key = os.getenv("GOOGLE_API_KEY")
-        if not api_key:
-            raise ValueError("GOOGLE_API_KEY not found in environment variables")
-        self.client = genai.Client(api_key=api_key)
+    def __init__(self, api_key: Optional[str] = None):
+        """
+        Initialize the image generator.
+
+        Args:
+            api_key: Google API key. If not provided, will try to get from environment.
+        """
+        self._api_key = api_key or os.getenv("GOOGLE_API_KEY")
+        if not self._api_key:
+            raise ValueError("GOOGLE_API_KEY not found")
+        self.client = genai.Client(api_key=self._api_key)
         self.stats = []
+
+    def update_api_key(self, api_key: str):
+        """Update the API key and reinitialize the client."""
+        self._api_key = api_key
+        self.client = genai.Client(api_key=api_key)
+
+    @property
+    def api_key(self) -> str:
+        """Get the current API key (masked)."""
+        if self._api_key:
+            return self._api_key[:8] + "..." + self._api_key[-4:]
+        return ""
+
+    @staticmethod
+    def validate_api_key(api_key: str) -> tuple[bool, str]:
+        """
+        Validate an API key by making a simple request.
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if not api_key or len(api_key) < 10:
+            return False, "API key is too short"
+
+        try:
+            client = genai.Client(api_key=api_key)
+            # Try to list models as a simple validation
+            # This is a lightweight call that verifies the key works
+            models = list(client.models.list())
+            return True, "API key is valid"
+        except Exception as e:
+            error_msg = str(e)
+            if "API_KEY_INVALID" in error_msg or "invalid" in error_msg.lower():
+                return False, "Invalid API key"
+            elif "quota" in error_msg.lower():
+                return False, "API key quota exceeded"
+            else:
+                return False, f"Validation failed: {error_msg[:100]}"
 
     async def generate(
         self,
