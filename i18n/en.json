@@ -224,10 +224,15 @@
     "loading": "Loading history...",
     "generated_at": "Generated at",
     "prompt_label": "Prompt",
-    "clear_btn": "Clear History",
+    "clear_btn": "Clear",
     "clear_confirm": "Are you sure you want to clear all history? This will also delete saved images from disk.",
     "download_btn": "Download",
-    "storage_path": "Storage location"
+    "storage_path": "Storage location",
+    "refresh_btn": "Refresh",
+    "count": "{count} images",
+    "yes_btn": "Yes",
+    "no_btn": "No",
+    "cleared": "History cleared"
   },
   "errors": {
     "api_key_missing": "API key not configured. Please set GOOGLE_API_KEY in your .env file.",
@@ -241,5 +246,13 @@
     "image_saved": "Saved: {filename}",
     "batch_saved": "{count} images saved",
     "batch_failed": "{count} images failed"
+  },
+  "generation": {
+    "in_progress": "Generating your image...",
+    "estimated_time": "~{seconds}s estimated",
+    "complete": "Generation complete!",
+    "cancel_btn": "Cancel",
+    "cancelled": "Generation cancelled (API request may still complete)",
+    "throttle_wait": "Please wait {seconds}s before next generation"
   }
 }

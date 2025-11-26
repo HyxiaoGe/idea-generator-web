@@ -224,10 +224,15 @@
     "loading": "加载历史记录中...",
     "generated_at": "生成时间",
     "prompt_label": "提示词",
-    "clear_btn": "清空历史",
+    "clear_btn": "清空",
     "clear_confirm": "确定要清空所有历史记录吗？这也会删除磁盘上保存的图像。",
     "download_btn": "下载",
-    "storage_path": "存储位置"
+    "storage_path": "存储位置",
+    "refresh_btn": "刷新",
+    "count": "{count} 张图片",
+    "yes_btn": "是",
+    "no_btn": "否",
+    "cleared": "历史已清空"
   },
   "errors": {
     "api_key_missing": "未配置 API 密钥，请在 .env 文件中设置 GOOGLE_API_KEY。",
@@ -241,5 +246,13 @@
     "image_saved": "已保存：{filename}",
     "batch_saved": "已保存 {count} 张图片",
     "batch_failed": "{count} 张图片生成失败"
+  },
+  "generation": {
+    "in_progress": "正在生成图片...",
+    "estimated_time": "预计约 {seconds} 秒",
+    "complete": "生成完成！",
+    "cancel_btn": "取消",
+    "cancelled": "已取消生成（API 请求可能仍在后台完成）",
+    "throttle_wait": "请等待 {seconds} 秒后再生成"
   }
 }

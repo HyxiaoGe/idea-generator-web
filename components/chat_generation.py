@@ -5,7 +5,12 @@ import asyncio
 from io import BytesIO
 import streamlit as st
 from i18n import Translator
-from services import ChatSession, get_storage
+from services import (
+    ChatSession,
+    GenerationStateManager,
+    get_throttle_remaining,
+    get_history_sync,
+)
 
 
 def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSession):
@@ -17,6 +22,9 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
         settings: Current settings from sidebar
         chat_session: ChatSession instance
     """
+    # Initialize generation state
+    GenerationStateManager.init_session_state()
+
     st.header(t("chat.title"))
     st.caption(t("chat.description"))
 
@@ -87,8 +95,21 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
                     use_container_width=False
                 )
 
-    # Chat input
-    if prompt := st.chat_input(t("chat.input_placeholder")):
+    # Check generation state
+    is_generating = GenerationStateManager.is_generating()
+    can_generate, block_reason = GenerationStateManager.can_start_generation()
+
+    # Show throttle warning
+    throttle_remaining = get_throttle_remaining()
+    if throttle_remaining > 0 and not is_generating:
+        st.caption(f"⏳ {t('generation.throttle_wait', seconds=f'{throttle_remaining:.1f}')}")
+
+    # Chat input (disabled during generation)
+    if prompt := st.chat_input(t("chat.input_placeholder"), disabled=is_generating):
+        if not can_generate:
+            st.toast(block_reason, icon="⚠️")
+            return
+
         # Add user message
         st.session_state.chat_messages.append({
             "role": "user",
@@ -100,6 +121,13 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
         with st.chat_message("user", avatar="👤"):
             st.write(prompt)
 
+        # Start generation task
+        task = GenerationStateManager.start_generation(
+            prompt=prompt,
+            mode="chat",
+            resolution=settings.get("resolution", "1K")
+        )
+
         # Generate response
         with st.chat_message("assistant", avatar="🤖"):
             with st.spinner(t("basic.generating")):
@@ -107,12 +135,18 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
                 if not chat_session.is_active():
                     chat_session.start_session(aspect_ratio=settings["aspect_ratio"])
 
-                # Send message
-                response = asyncio.run(chat_session.send_message(
-                    message=prompt,
-                    aspect_ratio=settings["aspect_ratio"],
-                    safety_level=settings.get("safety_level", "moderate"),
-                ))
+                try:
+                    # Send message
+                    response = asyncio.run(chat_session.send_message(
+                        message=prompt,
+                        aspect_ratio=settings["aspect_ratio"],
+                        safety_level=settings.get("safety_level", "moderate"),
+                    ))
+                    GenerationStateManager.complete_generation(result=response)
+                except Exception as e:
+                    GenerationStateManager.complete_generation(error=str(e))
+                    st.toast(f"{t('basic.error')}: {str(e)}", icon="❌")
+                    st.rerun()
 
             if response.error:
                 icon = "🛡️" if response.safety_blocked else "❌"
@@ -146,14 +180,10 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
                         use_container_width=False
                     )
 
-                # Store in history
-                if "history" not in st.session_state:
-                    st.session_state.history = []
-
+                # Store in history using sync manager
                 if response.image:
-                    # Save to disk
-                    storage = get_storage()
-                    filename = storage.save_image(
+                    history_sync = get_history_sync()
+                    filename = history_sync.save_to_history(
                         image=response.image,
                         prompt=prompt,
                         settings=settings,
@@ -164,17 +194,8 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
                     )
 
                     # Toast notification for save success
-                    st.toast(t("toast.image_saved", filename=filename), icon="✅")
-
-                    st.session_state.history.insert(0, {
-                        "prompt": prompt,
-                        "image": response.image,
-                        "text": response.text,
-                        "thinking": response.thinking,
-                        "duration": response.duration,
-                        "settings": settings.copy(),
-                        "filename": filename,
-                    })
+                    if filename:
+                        st.toast(t("toast.image_saved", filename=filename), icon="✅")
 
                 # Add to chat messages
                 st.session_state.chat_messages.append({
