@@ -12,6 +12,7 @@ from io import BytesIO
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
+from .generator import build_safety_settings
 
 load_dotenv()
 
@@ -34,6 +35,7 @@ class ChatResponse:
     thinking: Optional[str] = None
     duration: float = 0.0
     error: Optional[str] = None
+    safety_blocked: bool = False
 
 
 class ChatSession:
@@ -80,7 +82,8 @@ class ChatSession:
     async def send_message(
         self,
         message: str,
-        aspect_ratio: Optional[str] = None
+        aspect_ratio: Optional[str] = None,
+        safety_level: str = "moderate",
     ) -> ChatResponse:
         """
         Send a message and get a response with optional image.
@@ -88,6 +91,7 @@ class ChatSession:
         Args:
             message: User's message/prompt
             aspect_ratio: Override aspect ratio for this message
+            safety_level: Content safety level ("strict", "moderate", "relaxed", "none")
 
         Returns:
             ChatResponse with text and/or image
@@ -102,12 +106,13 @@ class ChatSession:
         self.messages.append(ChatMessage(role="user", content=message))
 
         try:
-            # Build config
+            # Build config with safety settings
             config = {
                 "response_modalities": ["TEXT", "IMAGE"],
                 "image_config": {
                     "aspect_ratio": aspect_ratio or self.aspect_ratio
-                }
+                },
+                "safety_settings": build_safety_settings(safety_level),
             }
 
             # Use sync chat.send_message wrapped in executor
@@ -117,6 +122,15 @@ class ChatSession:
                 None,
                 lambda: self.chat.send_message(message, config=config)
             )
+
+            # Check for safety blocks
+            if hasattr(api_response, 'candidates') and api_response.candidates:
+                candidate = api_response.candidates[0]
+                if hasattr(candidate, 'finish_reason') and str(candidate.finish_reason) == "SAFETY":
+                    response.safety_blocked = True
+                    response.error = "Content blocked by safety filter"
+                    response.duration = time.time() - start_time
+                    return response
 
             # Process response
             for part in api_response.parts:
@@ -147,7 +161,12 @@ class ChatSession:
             ))
 
         except Exception as e:
-            response.error = str(e)
+            error_msg = str(e)
+            if "safety" in error_msg.lower() or "blocked" in error_msg.lower():
+                response.safety_blocked = True
+                response.error = "Content blocked by safety filter"
+            else:
+                response.error = error_msg
             response.duration = time.time() - start_time
 
         return response

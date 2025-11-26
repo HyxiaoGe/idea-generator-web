@@ -78,11 +78,13 @@ def render_style_transfer_mode(t: Translator, settings: dict, generator: ImageGe
                 result = asyncio.run(generator.blend_images(
                     prompt=prompt,
                     images=[content_img, style_img],
-                    aspect_ratio=settings["aspect_ratio"]
+                    aspect_ratio=settings["aspect_ratio"],
+                    safety_level=settings.get("safety_level", "moderate"),
                 ))
 
             if result.error:
-                st.toast(f"{t('basic.error')}: {result.error}", icon="❌")
+                icon = "🛡️" if result.safety_blocked else "❌"
+                st.toast(f"{t('basic.error')}: {result.error}", icon=icon)
             elif result.image:
                 st.subheader(t("basic.result"))
                 st.image(result.image, use_container_width=True)
@@ -172,11 +174,13 @@ def render_blend_mode(t: Translator, settings: dict, generator: ImageGenerator):
                 result = asyncio.run(generator.blend_images(
                     prompt=prompt,
                     images=images,
-                    aspect_ratio=settings["aspect_ratio"]
+                    aspect_ratio=settings["aspect_ratio"],
+                    safety_level=settings.get("safety_level", "moderate"),
                 ))
 
             if result.error:
-                st.toast(f"{t('basic.error')}: {result.error}", icon="❌")
+                icon = "🛡️" if result.safety_blocked else "❌"
+                st.toast(f"{t('basic.error')}: {result.error}", icon=icon)
             elif result.image:
                 st.subheader(t("basic.result"))
                 st.image(result.image, use_container_width=True)

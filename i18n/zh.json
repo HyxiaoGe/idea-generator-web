@@ -39,6 +39,18 @@
       "thinking": "显示思考过程",
       "search": "启用搜索增强"
     },
+    "safety": {
+      "title": "内容安全",
+      "level_label": "安全级别",
+      "help": "控制内容过滤的严格程度。级别越高，过滤的敏感内容越多。",
+      "none_warning": "⚠️ 安全过滤器已禁用。生成的内容可能包含不当材料。",
+      "levels": {
+        "strict": "严格 - 过滤大部分敏感内容",
+        "moderate": "适中 - 平衡过滤（推荐）",
+        "relaxed": "宽松 - 允许更多内容",
+        "none": "无过滤 - 无任何过滤（谨慎使用）"
+      }
+    },
     "stats": "统计信息",
     "about": "关于",
     "about_text": "一个用于探索 Google Gemini Pro Image 能力的学习项目。"

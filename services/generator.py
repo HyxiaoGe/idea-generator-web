@@ -16,6 +16,39 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+# Safety level presets
+SAFETY_LEVELS = {
+    "strict": types.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    "moderate": types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    "relaxed": types.HarmBlockThreshold.BLOCK_ONLY_HIGH,
+    "none": types.HarmBlockThreshold.BLOCK_NONE,
+}
+
+HARM_CATEGORIES = [
+    types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+    types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+]
+
+
+def build_safety_settings(level: str = "moderate") -> List[types.SafetySetting]:
+    """
+    Build safety settings based on the specified level.
+
+    Args:
+        level: Safety level ("strict", "moderate", "relaxed", "none")
+
+    Returns:
+        List of SafetySetting objects
+    """
+    threshold = SAFETY_LEVELS.get(level, types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE)
+    return [
+        types.SafetySetting(category=category, threshold=threshold)
+        for category in HARM_CATEGORIES
+    ]
+
+
 @dataclass
 class GenerationResult:
     """Result of an image generation."""
@@ -25,6 +58,8 @@ class GenerationResult:
     search_sources: Optional[str] = None
     duration: float = 0.0
     error: Optional[str] = None
+    safety_blocked: bool = False
+    safety_ratings: Optional[List] = None
 
 
 class ImageGenerator:
@@ -93,6 +128,7 @@ class ImageGenerator:
         resolution: str = "1K",
         enable_thinking: bool = False,
         enable_search: bool = False,
+        safety_level: str = "moderate",
     ) -> GenerationResult:
         """
         Generate an image from a text prompt asynchronously.
@@ -103,6 +139,7 @@ class ImageGenerator:
             resolution: Image resolution (1K, 2K, 4K)
             enable_thinking: Whether to include model's thinking process
             enable_search: Whether to enable search grounding
+            safety_level: Content safety level ("strict", "moderate", "relaxed", "none")
 
         Returns:
             GenerationResult with image, text, and metadata
@@ -116,7 +153,8 @@ class ImageGenerator:
                 "response_modalities": ["Text", "Image"],
                 "image_config": {
                     "aspect_ratio": aspect_ratio,
-                }
+                },
+                "safety_settings": build_safety_settings(safety_level),
             }
 
             # Add resolution for higher quality
@@ -141,22 +179,48 @@ class ImageGenerator:
                 config=config,
             )
 
-            # Process response
-            for part in response.candidates[0].content.parts:
-                if hasattr(part, 'thought') and part.thought:
-                    result.thinking = part.text
-                elif hasattr(part, 'text') and part.text:
-                    result.text = part.text
-                elif hasattr(part, 'inline_data') and part.inline_data:
-                    # Convert to PIL Image
-                    image_data = part.inline_data.data
-                    result.image = Image.open(BytesIO(image_data))
+            # Check for safety blocks
+            if response.candidates:
+                candidate = response.candidates[0]
+
+                # Get safety ratings
+                if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
+                    result.safety_ratings = [
+                        {"category": str(r.category), "probability": str(r.probability)}
+                        for r in candidate.safety_ratings
+                    ]
+
+                # Check if blocked by safety filter
+                if hasattr(candidate, 'finish_reason'):
+                    if str(candidate.finish_reason) == "SAFETY":
+                        result.safety_blocked = True
+                        result.error = "Content blocked by safety filter"
+                        result.duration = time.time() - start_time
+                        return result
+
+                # Process response parts
+                if hasattr(candidate, 'content') and candidate.content:
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'thought') and part.thought:
+                            result.thinking = part.text
+                        elif hasattr(part, 'text') and part.text:
+                            result.text = part.text
+                        elif hasattr(part, 'inline_data') and part.inline_data:
+                            # Convert to PIL Image
+                            image_data = part.inline_data.data
+                            result.image = Image.open(BytesIO(image_data))
 
             result.duration = time.time() - start_time
             self._record_stats(result.duration)
 
         except Exception as e:
-            result.error = str(e)
+            error_msg = str(e)
+            # Check if error is safety related
+            if "safety" in error_msg.lower() or "blocked" in error_msg.lower():
+                result.safety_blocked = True
+                result.error = "Content blocked by safety filter"
+            else:
+                result.error = error_msg
             result.duration = time.time() - start_time
 
         return result
@@ -181,6 +245,7 @@ class ImageGenerator:
         prompt: str,
         images: List[Image.Image],
         aspect_ratio: str = "1:1",
+        safety_level: str = "moderate",
     ) -> GenerationResult:
         """
         Blend multiple images based on a prompt.
@@ -189,6 +254,7 @@ class ImageGenerator:
             prompt: Description of how to combine the images
             images: List of PIL Image objects to blend (max 14 for Pro model)
             aspect_ratio: Output aspect ratio
+            safety_level: Content safety level
 
         Returns:
             GenerationResult with blended image
@@ -208,7 +274,8 @@ class ImageGenerator:
                 response_modalities=["Text", "Image"],
                 image_config=types.ImageConfig(
                     aspect_ratio=aspect_ratio
-                )
+                ),
+                safety_settings=build_safety_settings(safety_level),
             )
 
             # Make async API call
@@ -218,19 +285,40 @@ class ImageGenerator:
                 config=config,
             )
 
-            # Process response
-            for part in response.candidates[0].content.parts:
-                if hasattr(part, 'text') and part.text:
-                    result.text = part.text
-                elif hasattr(part, 'inline_data') and part.inline_data:
-                    image_data = part.inline_data.data
-                    result.image = Image.open(BytesIO(image_data))
+            # Check for safety blocks and process response
+            if response.candidates:
+                candidate = response.candidates[0]
+
+                if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
+                    result.safety_ratings = [
+                        {"category": str(r.category), "probability": str(r.probability)}
+                        for r in candidate.safety_ratings
+                    ]
+
+                if hasattr(candidate, 'finish_reason') and str(candidate.finish_reason) == "SAFETY":
+                    result.safety_blocked = True
+                    result.error = "Content blocked by safety filter"
+                    result.duration = time.time() - start_time
+                    return result
+
+                if hasattr(candidate, 'content') and candidate.content:
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            result.text = part.text
+                        elif hasattr(part, 'inline_data') and part.inline_data:
+                            image_data = part.inline_data.data
+                            result.image = Image.open(BytesIO(image_data))
 
             result.duration = time.time() - start_time
             self._record_stats(result.duration)
 
         except Exception as e:
-            result.error = str(e)
+            error_msg = str(e)
+            if "safety" in error_msg.lower() or "blocked" in error_msg.lower():
+                result.safety_blocked = True
+                result.error = "Content blocked by safety filter"
+            else:
+                result.error = error_msg
             result.duration = time.time() - start_time
 
         return result
@@ -239,6 +327,7 @@ class ImageGenerator:
         self,
         prompt: str,
         aspect_ratio: str = "16:9",
+        safety_level: str = "moderate",
     ) -> GenerationResult:
         """
         Generate an image using real-time search data.
@@ -246,6 +335,7 @@ class ImageGenerator:
         Args:
             prompt: Text description that benefits from real-time data
             aspect_ratio: Image aspect ratio
+            safety_level: Content safety level
 
         Returns:
             GenerationResult with image and search sources
@@ -259,7 +349,8 @@ class ImageGenerator:
                 image_config=types.ImageConfig(
                     aspect_ratio=aspect_ratio
                 ),
-                tools=[{"google_search": {}}]
+                tools=[{"google_search": {}}],
+                safety_settings=build_safety_settings(safety_level),
             )
 
             # Make async API call
@@ -269,25 +360,46 @@ class ImageGenerator:
                 config=config,
             )
 
-            # Process response
-            for part in response.candidates[0].content.parts:
-                if hasattr(part, 'text') and part.text:
-                    result.text = part.text
-                elif hasattr(part, 'inline_data') and part.inline_data:
-                    image_data = part.inline_data.data
-                    result.image = Image.open(BytesIO(image_data))
+            # Check for safety blocks and process response
+            if response.candidates:
+                candidate = response.candidates[0]
 
-            # Get search sources
-            if response.candidates and response.candidates[0].grounding_metadata:
-                metadata = response.candidates[0].grounding_metadata
-                if hasattr(metadata, 'search_entry_point') and metadata.search_entry_point:
-                    result.search_sources = metadata.search_entry_point.rendered_content
+                if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
+                    result.safety_ratings = [
+                        {"category": str(r.category), "probability": str(r.probability)}
+                        for r in candidate.safety_ratings
+                    ]
+
+                if hasattr(candidate, 'finish_reason') and str(candidate.finish_reason) == "SAFETY":
+                    result.safety_blocked = True
+                    result.error = "Content blocked by safety filter"
+                    result.duration = time.time() - start_time
+                    return result
+
+                if hasattr(candidate, 'content') and candidate.content:
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            result.text = part.text
+                        elif hasattr(part, 'inline_data') and part.inline_data:
+                            image_data = part.inline_data.data
+                            result.image = Image.open(BytesIO(image_data))
+
+                # Get search sources
+                if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
+                    metadata = candidate.grounding_metadata
+                    if hasattr(metadata, 'search_entry_point') and metadata.search_entry_point:
+                        result.search_sources = metadata.search_entry_point.rendered_content
 
             result.duration = time.time() - start_time
             self._record_stats(result.duration)
 
         except Exception as e:
-            result.error = str(e)
+            error_msg = str(e)
+            if "safety" in error_msg.lower() or "blocked" in error_msg.lower():
+                result.safety_blocked = True
+                result.error = "Content blocked by safety filter"
+            else:
+                result.error = error_msg
             result.duration = time.time() - start_time
 
         return result

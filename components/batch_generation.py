@@ -18,6 +18,7 @@ async def generate_batch(
     count: int,
     aspect_ratio: str,
     resolution: str,
+    safety_level: str = "moderate",
     progress_callback=None
 ) -> List:
     """Generate multiple images asynchronously."""
@@ -30,6 +31,7 @@ async def generate_batch(
             resolution=resolution,
             enable_thinking=False,
             enable_search=False,
+            safety_level=safety_level,
         )
         results.append(result)
 
@@ -107,6 +109,7 @@ def render_batch_generation(t: Translator, settings: dict, generator: ImageGener
                     count=count,
                     aspect_ratio=settings["aspect_ratio"],
                     resolution=settings["resolution"],
+                    safety_level=settings.get("safety_level", "moderate"),
                     progress_callback=update_progress
                 ))
 

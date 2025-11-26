@@ -109,11 +109,13 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
                 # Send message
                 response = asyncio.run(chat_session.send_message(
                     message=prompt,
-                    aspect_ratio=settings["aspect_ratio"]
+                    aspect_ratio=settings["aspect_ratio"],
+                    safety_level=settings.get("safety_level", "moderate"),
                 ))
 
             if response.error:
-                st.toast(f"{t('basic.error')}: {response.error}", icon="❌")
+                icon = "🛡️" if response.safety_blocked else "❌"
+                st.toast(f"{t('basic.error')}: {response.error}", icon=icon)
                 st.session_state.chat_messages.append({
                     "role": "assistant",
                     "content": f"Error: {response.error}",

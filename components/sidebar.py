@@ -181,6 +181,31 @@ def render_sidebar(t: Translator) -> dict:
 
         st.divider()
 
+        # Safety Settings
+        st.subheader(t("sidebar.safety.title"))
+
+        safety_levels = {
+            "strict": t("sidebar.safety.levels.strict"),
+            "moderate": t("sidebar.safety.levels.moderate"),
+            "relaxed": t("sidebar.safety.levels.relaxed"),
+            "none": t("sidebar.safety.levels.none"),
+        }
+
+        safety_level = st.selectbox(
+            t("sidebar.safety.level_label"),
+            options=list(safety_levels.keys()),
+            format_func=lambda x: safety_levels[x],
+            index=1,  # Default to "moderate"
+            key="safety_level",
+            help=t("sidebar.safety.help"),
+        )
+
+        # Show warning for "none" level
+        if safety_level == "none":
+            st.warning(t("sidebar.safety.none_warning"))
+
+        st.divider()
+
         # About section
         with st.expander(t("sidebar.about")):
             st.write(t("sidebar.about_text"))
@@ -193,5 +218,6 @@ def render_sidebar(t: Translator) -> dict:
         "resolution": resolution,
         "enable_thinking": enable_thinking,
         "enable_search": enable_search,
+        "safety_level": safety_level,
         "api_key_valid": api_key_valid,
     }
