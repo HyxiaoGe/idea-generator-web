@@ -44,7 +44,7 @@ class ChatSession:
     Supports refining images through conversation.
     """
 
-    MODEL_ID = "gemini-2.0-flash-preview-image-generation"
+    MODEL_ID = "gemini-3-pro-image-preview"
 
     def __init__(self, api_key: Optional[str] = None):
         """

@@ -65,7 +65,7 @@ class GenerationResult:
 class ImageGenerator:
     """Async image generator using Google GenAI."""
 
-    MODEL_ID = "gemini-2.0-flash-preview-image-generation"
+    MODEL_ID = "gemini-3-pro-image-preview"
 
     ASPECT_RATIOS = ["1:1", "16:9", "9:16", "4:3", "3:4"]
     RESOLUTIONS = ["1K", "2K", "4K"]
