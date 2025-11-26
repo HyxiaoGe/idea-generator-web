@@ -208,3 +208,6 @@ __marimo__/
 
 # Streamlit secrets
 .streamlit/secrets.toml
+
+# Generated images from Web UI
+outputs/web/

@@ -5,7 +5,7 @@ import asyncio
 from io import BytesIO
 import streamlit as st
 from i18n import Translator
-from services import ImageGenerator
+from services import ImageGenerator, get_storage
 
 
 def render_search_generation(t: Translator, settings: dict, generator: ImageGenerator):
@@ -80,15 +80,27 @@ def render_search_generation(t: Translator, settings: dict, generator: ImageGene
                         mime="image/png"
                     )
 
-                # Add to history
+                # Add to history and save to disk
                 if "history" not in st.session_state:
                     st.session_state.history = []
+
+                storage = get_storage()
+                filename = storage.save_image(
+                    image=result.image,
+                    prompt=prompt,
+                    settings=settings,
+                    duration=result.duration,
+                    mode="search",
+                    text_response=result.text,
+                )
+
                 st.session_state.history.insert(0, {
                     "prompt": prompt,
                     "image": result.image,
                     "text": result.text,
                     "duration": result.duration,
                     "settings": settings.copy(),
+                    "filename": filename,
                 })
             else:
                 st.warning(t("basic.no_image"))

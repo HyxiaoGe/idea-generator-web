@@ -207,13 +207,14 @@
   },
   "history": {
     "title": "生成历史",
-    "description": "查看之前生成的图像。",
+    "description": "查看之前生成的图像。图像会自动保存到磁盘。",
     "empty": "还没有生成任何图像，开始创作吧！",
     "generated_at": "生成时间",
     "prompt_label": "提示词",
     "clear_btn": "清空历史",
-    "clear_confirm": "确定要清空所有历史记录吗？",
-    "download_btn": "下载"
+    "clear_confirm": "确定要清空所有历史记录吗？这也会删除磁盘上保存的图像。",
+    "download_btn": "下载",
+    "storage_path": "存储位置"
   },
   "errors": {
     "api_key_missing": "未配置 API 密钥，请在 .env 文件中设置 GOOGLE_API_KEY。",

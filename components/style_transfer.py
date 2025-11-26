@@ -6,7 +6,7 @@ from io import BytesIO
 import streamlit as st
 from PIL import Image
 from i18n import Translator
-from services import ImageGenerator
+from services import ImageGenerator, get_storage
 
 
 def render_style_transfer(t: Translator, settings: dict, generator: ImageGenerator):
@@ -103,15 +103,27 @@ def render_style_transfer_mode(t: Translator, settings: dict, generator: ImageGe
                         mime="image/png"
                     )
 
-                # Add to history
+                # Add to history and save to disk
                 if "history" not in st.session_state:
                     st.session_state.history = []
+
+                storage = get_storage()
+                filename = storage.save_image(
+                    image=result.image,
+                    prompt=prompt,
+                    settings=settings,
+                    duration=result.duration,
+                    mode="style",
+                    text_response=result.text,
+                )
+
                 st.session_state.history.insert(0, {
                     "prompt": prompt,
                     "image": result.image,
                     "text": result.text,
                     "duration": result.duration,
                     "settings": settings.copy(),
+                    "filename": filename,
                 })
 
 
@@ -182,13 +194,25 @@ def render_blend_mode(t: Translator, settings: dict, generator: ImageGenerator):
                         mime="image/png"
                     )
 
-                # Add to history
+                # Add to history and save to disk
                 if "history" not in st.session_state:
                     st.session_state.history = []
+
+                storage = get_storage()
+                filename = storage.save_image(
+                    image=result.image,
+                    prompt=prompt,
+                    settings=settings,
+                    duration=result.duration,
+                    mode="blend",
+                    text_response=result.text,
+                )
+
                 st.session_state.history.insert(0, {
                     "prompt": prompt,
                     "image": result.image,
                     "text": result.text,
                     "duration": result.duration,
                     "settings": settings.copy(),
+                    "filename": filename,
                 })

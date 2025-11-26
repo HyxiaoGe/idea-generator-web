@@ -5,7 +5,7 @@ import asyncio
 from io import BytesIO
 import streamlit as st
 from i18n import Translator
-from services import ChatSession
+from services import ChatSession, get_storage
 
 
 def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSession):
@@ -147,6 +147,18 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
                     st.session_state.history = []
 
                 if response.image:
+                    # Save to disk
+                    storage = get_storage()
+                    filename = storage.save_image(
+                        image=response.image,
+                        prompt=prompt,
+                        settings=settings,
+                        duration=response.duration,
+                        mode="chat",
+                        text_response=response.text,
+                        thinking=response.thinking,
+                    )
+
                     st.session_state.history.insert(0, {
                         "prompt": prompt,
                         "image": response.image,
@@ -154,6 +166,7 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
                         "thinking": response.thinking,
                         "duration": response.duration,
                         "settings": settings.copy(),
+                        "filename": filename,
                     })
 
                 # Add to chat messages
