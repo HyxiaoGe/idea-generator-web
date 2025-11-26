@@ -191,11 +191,19 @@ gcloud run deploy nano-banana-lab \
 
 ## 3. Environment Variables | 环境变量
 
-All deployment methods require these environment variables:
+All deployment methods support these environment variables:
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `GOOGLE_API_KEY` | Google AI API Key | Yes |
+| `GOOGLE_API_KEY` | Google AI API Key | No* |
+
+*\*Note: The API key is optional if users will input their own key via the Web UI. The app includes a built-in API key management feature that allows users to enter and validate their own API keys directly in the sidebar.*
+
+**API Key Management Feature | API Key 管理功能:**
+- Users can input their own API key in the sidebar
+- Keys are validated before use
+- Supports both environment variable and user-provided keys
+- User keys are stored in session state (not persisted)
 
 ---
 
