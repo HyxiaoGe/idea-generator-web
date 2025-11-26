@@ -8,7 +8,7 @@ from typing import List
 import streamlit as st
 from PIL import Image
 from i18n import Translator
-from services import ImageGenerator
+from services import ImageGenerator, get_storage
 from services.cost_estimator import estimate_cost, format_cost
 
 
@@ -152,17 +152,29 @@ def render_batch_generation(t: Translator, settings: dict, generator: ImageGener
                             use_container_width=True
                         )
 
-                # Add to history
+                # Add to history and save to disk
                 if "history" not in st.session_state:
                     st.session_state.history = []
 
+                storage = get_storage()
                 for idx, result in enumerate(successful):
+                    # Save to disk
+                    filename = storage.save_image(
+                        image=result.image,
+                        prompt=f"[Batch {idx + 1}/{len(successful)}] {prompt}",
+                        settings=settings,
+                        duration=result.duration,
+                        mode="batch",
+                        text_response=result.text,
+                    )
+
                     st.session_state.history.insert(0, {
                         "prompt": f"[Batch {idx + 1}/{len(successful)}] {prompt}",
                         "image": result.image,
                         "text": result.text,
                         "duration": result.duration,
                         "settings": settings.copy(),
+                        "filename": filename,
                     })
 
             # Show errors if any

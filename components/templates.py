@@ -5,7 +5,7 @@ import asyncio
 from io import BytesIO
 import streamlit as st
 from i18n import Translator
-from services import ImageGenerator
+from services import ImageGenerator, get_storage
 
 
 # Template categories with example prompts
@@ -178,9 +178,21 @@ def render_templates(t: Translator, settings: dict, generator: ImageGenerator):
                         mime="image/png"
                     )
 
-                # Add to history
+                # Add to history and save to disk
                 if "history" not in st.session_state:
                     st.session_state.history = []
+
+                storage = get_storage()
+                filename = storage.save_image(
+                    image=result.image,
+                    prompt=final_prompt,
+                    settings=settings,
+                    duration=result.duration,
+                    mode="template",
+                    text_response=result.text,
+                    thinking=result.thinking,
+                )
+
                 st.session_state.history.insert(0, {
                     "prompt": final_prompt,
                     "image": result.image,
@@ -188,6 +200,7 @@ def render_templates(t: Translator, settings: dict, generator: ImageGenerator):
                     "thinking": result.thinking,
                     "duration": result.duration,
                     "settings": settings.copy(),
+                    "filename": filename,
                 })
             else:
                 st.warning(t("basic.no_image"))

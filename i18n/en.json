@@ -207,13 +207,14 @@
   },
   "history": {
     "title": "Generation History",
-    "description": "View your previously generated images.",
+    "description": "View your previously generated images. Images are automatically saved to disk.",
     "empty": "No images generated yet. Start creating!",
     "generated_at": "Generated at",
     "prompt_label": "Prompt",
     "clear_btn": "Clear History",
-    "clear_confirm": "Are you sure you want to clear all history?",
-    "download_btn": "Download"
+    "clear_confirm": "Are you sure you want to clear all history? This will also delete saved images from disk.",
+    "download_btn": "Download",
+    "storage_path": "Storage location"
   },
   "errors": {
     "api_key_missing": "API key not configured. Please set GOOGLE_API_KEY in your .env file.",

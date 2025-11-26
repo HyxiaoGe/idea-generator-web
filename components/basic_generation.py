@@ -5,7 +5,7 @@ import asyncio
 from io import BytesIO
 import streamlit as st
 from i18n import Translator
-from services import ImageGenerator
+from services import ImageGenerator, get_storage
 
 
 def render_basic_generation(t: Translator, settings: dict, generator: ImageGenerator):
@@ -62,6 +62,18 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
         if result.error:
             st.error(f"{t('basic.error')}: {result.error}")
         elif result.image:
+            # Save to disk
+            storage = get_storage()
+            filename = storage.save_image(
+                image=result.image,
+                prompt=prompt,
+                settings=settings,
+                duration=result.duration,
+                mode="basic",
+                text_response=result.text,
+                thinking=result.thinking,
+            )
+
             # Store in session for history
             if "history" not in st.session_state:
                 st.session_state.history = []
@@ -73,6 +85,7 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
                 "thinking": result.thinking,
                 "duration": result.duration,
                 "settings": settings.copy(),
+                "filename": filename,
             })
 
             # Display result
