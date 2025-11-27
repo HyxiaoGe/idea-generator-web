@@ -75,6 +75,13 @@
     "download_btn": "下载图像",
     "error": "错误",
     "no_image": "未能生成图像，请尝试其他提示词。",
+    "empty_hint": "输入详细的图像描述来开始创作。",
+    "tip_title": "提升效果的技巧",
+    "tips": [
+      "明确风格：'水彩画'、'写实摄影'、'油画风格'",
+      "描述光线：'黄金时刻'、'戏剧性阴影'、'柔和环境光'",
+      "构图细节：'特写镜头'、'广角'、'鸟瞰视角'"
+    ],
     "examples": {
       "title": "示例提示词",
       "items": [
@@ -90,6 +97,9 @@
     "description": "通过对话逐步优化你的图像。从一个基本想法开始，一步步完善它。",
     "start_btn": "开始新对话",
     "clear_btn": "清空对话",
+    "clear_confirm": "确定清空对话吗？所有消息和图片将会丢失。",
+    "export_btn": "导出对话",
+    "export_success": "对话导出成功",
     "input_placeholder": "描述修改或新指令...",
     "send_btn": "发送",
     "welcome": "欢迎！描述你想创建的图像，我会帮你逐步完善它。",
@@ -97,6 +107,9 @@
     "assistant_label": "助手",
     "user_label": "你",
     "new_session_tip": "开始新对话以生成图像。",
+    "empty_title": "准备创作",
+    "empty_description": "开始对话来迭代生成和优化图像。",
+    "empty_cta": "点击上方「开始新对话」按钮开始",
     "refine_tips": {
       "title": "优化技巧",
       "items": [
@@ -105,7 +118,8 @@
         "试试：'给脸部添加更多细节'",
         "试试：'让它看起来更真实'"
       ]
-    }
+    },
+    "messages_count": "{count} 条消息"
   },
   "batch": {
     "title": "批量生成",
@@ -227,6 +241,7 @@
     "title": "生成历史",
     "description": "查看之前生成的图像。图像会自动保存到磁盘。",
     "empty": "还没有生成任何图像，开始创作吧！",
+    "empty_hint": "前往「基础生图」或其他模式创建第一张图片。",
     "loading": "加载历史记录中...",
     "generated_at": "生成时间",
     "prompt_label": "提示词",
@@ -246,7 +261,10 @@
     "per_page": "每页显示",
     "no_results": "没有找到匹配的图片。",
     "prev_btn": "上一页",
-    "next_btn": "下一页"
+    "next_btn": "下一页",
+    "preview_btn": "预览",
+    "close_btn": "关闭",
+    "fullscreen_title": "图片预览"
   },
   "errors": {
     "api_key_missing": "未配置 API 密钥，请在 .env 文件中设置 GOOGLE_API_KEY。",

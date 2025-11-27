@@ -75,6 +75,13 @@
     "download_btn": "Download Image",
     "error": "Error",
     "no_image": "No image was generated. Please try a different prompt.",
+    "empty_hint": "Enter a detailed description of the image you want to create.",
+    "tip_title": "Tips for better results",
+    "tips": [
+      "Be specific about style: 'watercolor', 'photorealistic', 'oil painting'",
+      "Describe lighting: 'golden hour', 'dramatic shadows', 'soft ambient'",
+      "Include composition details: 'close-up', 'wide angle', 'bird's eye view'"
+    ],
     "examples": {
       "title": "Example Prompts",
       "items": [
@@ -90,6 +97,9 @@
     "description": "Have a conversation to iteratively refine your image. Start with a basic idea and improve it step by step.",
     "start_btn": "Start New Chat",
     "clear_btn": "Clear Chat",
+    "clear_confirm": "Clear this conversation? All messages and images will be lost.",
+    "export_btn": "Export Chat",
+    "export_success": "Chat exported successfully",
     "input_placeholder": "Describe changes or new instructions...",
     "send_btn": "Send",
     "welcome": "Welcome! Describe the image you'd like to create, and I'll help you refine it.",
@@ -97,6 +107,9 @@
     "assistant_label": "Assistant",
     "user_label": "You",
     "new_session_tip": "Start a new chat to begin generating images.",
+    "empty_title": "Ready to Create",
+    "empty_description": "Start a conversation to generate and refine images iteratively.",
+    "empty_cta": "Click 'Start New Chat' above to begin",
     "refine_tips": {
       "title": "Refinement Tips",
       "items": [
@@ -105,7 +118,8 @@
         "Try: 'Add more details to the face'",
         "Try: 'Make it look more realistic'"
       ]
-    }
+    },
+    "messages_count": "{count} messages"
   },
   "batch": {
     "title": "Batch Generation",
@@ -227,6 +241,7 @@
     "title": "Generation History",
     "description": "View your previously generated images. Images are automatically saved to disk.",
     "empty": "No images generated yet. Start creating!",
+    "empty_hint": "Go to Basic Generation or other modes to create your first image.",
     "loading": "Loading history...",
     "generated_at": "Generated at",
     "prompt_label": "Prompt",
@@ -246,7 +261,10 @@
     "per_page": "Per page",
     "no_results": "No images match your search criteria.",
     "prev_btn": "Previous",
-    "next_btn": "Next"
+    "next_btn": "Next",
+    "preview_btn": "Preview",
+    "close_btn": "Close",
+    "fullscreen_title": "Image Preview"
   },
   "errors": {
     "api_key_missing": "API key not configured. Please set GOOGLE_API_KEY in your .env file.",
