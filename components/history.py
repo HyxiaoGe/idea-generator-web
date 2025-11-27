@@ -7,7 +7,7 @@ from datetime import datetime, date, timedelta
 import streamlit as st
 import requests
 from i18n import Translator
-from services import get_storage, get_history_sync
+from services import get_current_user_storage, get_current_user_history_sync
 
 
 # Pagination settings
@@ -236,7 +236,8 @@ def render_history(t: Translator):
     st.header(t("history.title"))
     st.caption(t("history.description"))
 
-    history_sync = get_history_sync()
+    # Get history sync manager
+    history_sync = get_current_user_history_sync()
 
     # Only sync from disk when entering history page for the first time
     # or when explicitly refreshed (not on every rerun)
@@ -347,7 +348,7 @@ def render_history(t: Translator):
             label_visibility="collapsed"
         )
 
-    # col_spacer is empty
+    # col_spacer is empty - storage path shown elsewhere if needed
 
     # Filter history - use widget keys directly from session_state
     filtered_history = _filter_history(

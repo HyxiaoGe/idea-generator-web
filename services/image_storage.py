@@ -1,6 +1,7 @@
 """
 Image storage service for persisting generated images.
 Supports both local storage and Cloudflare R2 cloud storage.
+Supports user-isolated storage when authentication is enabled.
 """
 import os
 import json
@@ -15,20 +16,28 @@ from .r2_storage import get_r2_storage
 class ImageStorage:
     """Service for storing and retrieving generated images."""
 
-    def __init__(self, output_dir: str = "outputs/web"):
+    def __init__(self, output_dir: str = "outputs/web", user_id: Optional[str] = None):
         """
         Initialize the image storage service.
 
         Args:
             output_dir: Base directory for local storage
+            user_id: Optional user ID for data isolation (e.g., "abc123def456")
         """
-        self.base_output_dir = Path(output_dir)
+        self.user_id = user_id
+
+        # If user_id is provided, create user-specific directory
+        if user_id:
+            self.base_output_dir = Path(output_dir) / "users" / user_id
+        else:
+            self.base_output_dir = Path(output_dir) / "shared"
+
         self.base_output_dir.mkdir(parents=True, exist_ok=True)
         self.metadata_file = self.base_output_dir / "history.json"
         self._load_metadata()
 
-        # Initialize R2 storage
-        self._r2 = get_r2_storage()
+        # Initialize R2 storage with user_id for isolation
+        self._r2 = get_r2_storage(user_id=user_id)
 
     @property
     def output_dir(self) -> Path:
@@ -260,13 +269,35 @@ class ImageStorage:
         return stored_filename if stored_filename else "generated_image.png"
 
 
-# Global instance for easy access
-_storage_instance: Optional[ImageStorage] = None
+# Cache for user-specific storage instances
+_storage_instances: Dict[Optional[str], ImageStorage] = {}
 
 
-def get_storage() -> ImageStorage:
-    """Get or create the global storage instance."""
-    global _storage_instance
-    if _storage_instance is None:
-        _storage_instance = ImageStorage()
-    return _storage_instance
+def get_storage(user_id: Optional[str] = None) -> ImageStorage:
+    """
+    Get or create a storage instance for the given user.
+
+    Args:
+        user_id: Optional user ID for data isolation.
+                 If None, returns shared storage instance.
+
+    Returns:
+        ImageStorage instance for the user (or shared if no user_id)
+    """
+    global _storage_instances
+
+    # Use the user_id as key (None for shared storage)
+    if user_id not in _storage_instances:
+        _storage_instances[user_id] = ImageStorage(user_id=user_id)
+
+    return _storage_instances[user_id]
+
+
+def get_current_user_storage() -> ImageStorage:
+    """
+    Get storage instance for the currently authenticated user.
+    Falls back to shared storage if no user is authenticated.
+    """
+    from .auth import get_user_id
+    user_id = get_user_id()
+    return get_storage(user_id=user_id)

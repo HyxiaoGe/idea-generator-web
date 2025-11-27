@@ -9,7 +9,7 @@ from i18n import Translator
 from services import (
     ChatSession,
     GenerationStateManager,
-    get_history_sync,
+    get_current_user_history_sync,
     get_friendly_error_message,
 )
 
@@ -208,7 +208,7 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
 
                 # Store in history using sync manager
                 if response.image:
-                    history_sync = get_history_sync()
+                    history_sync = get_current_user_history_sync()
                     filename = history_sync.save_to_history(
                         image=response.image,
                         prompt=prompt,

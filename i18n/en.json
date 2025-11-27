@@ -6,6 +6,17 @@
   },
   "sidebar": {
     "title": "Settings",
+    "auth": {
+      "title": "Account",
+      "login_btn": "Login with GitHub",
+      "logout_btn": "Logout",
+      "logged_in_as": "Logged in as",
+      "login_required": "Login Required",
+      "login_help": "Please login with your GitHub account to use this application.",
+      "login_benefits": "Your generated images will be saved privately to your account.",
+      "guest_mode": "Continue as Guest",
+      "guest_warning": "Guest mode: Your data may be shared with others."
+    },
     "api_key": {
       "title": "API Key",
       "env_configured": "Using environment API key",

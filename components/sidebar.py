@@ -5,7 +5,58 @@ import os
 import time
 import streamlit as st
 from i18n import LANGUAGES, Translator
-from services import get_persistence, HealthCheckService
+from services import get_persistence, HealthCheckService, get_auth_service
+
+
+def render_auth_section(t: Translator) -> bool:
+    """
+    Render the authentication section in the sidebar.
+
+    Returns:
+        True if user is authenticated, False otherwise
+    """
+    auth = get_auth_service()
+
+    # If auth is not enabled, skip this section
+    if not auth.is_auth_required:
+        return True
+
+    # If auth is required but not available (missing config)
+    if not auth.is_available:
+        st.warning(t("sidebar.auth.login_required"))
+        st.info("GitHub OAuth is not configured. Please set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.")
+        return False
+
+    st.subheader(t("sidebar.auth.title"))
+
+    if auth.is_authenticated():
+        # Show logged in user info
+        user = auth.get_current_user()
+        if user:
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                if user.avatar_url:
+                    st.image(user.avatar_url, width=40)
+                else:
+                    st.markdown("👤")
+            with col2:
+                st.markdown(f"**{user.display_name}**")
+                st.caption(f"@{user.login}")
+
+        # Logout button
+        if st.button(t("sidebar.auth.logout_btn"), key="sidebar_logout", use_container_width=True):
+            auth.logout()
+            st.rerun()
+
+        return True
+    else:
+        # Show login button
+        st.info(t("sidebar.auth.login_benefits"))
+
+        if auth.render_login_button(t("sidebar.auth.login_btn")):
+            st.rerun()
+
+        return False
 
 
 def render_api_key_section(t: Translator) -> bool:
@@ -151,6 +202,13 @@ def render_sidebar(t: Translator) -> dict:
     """
     with st.sidebar:
         st.title(t("sidebar.title"))
+
+        # Authentication section (if enabled)
+        auth_service = get_auth_service()
+        is_authenticated = True
+        if auth_service.is_auth_required:
+            is_authenticated = render_auth_section(t)
+            st.divider()
 
         # API Key section
         api_key_valid = render_api_key_section(t)
@@ -335,4 +393,5 @@ def render_sidebar(t: Translator) -> dict:
         "enable_search": enable_search,
         "safety_level": safety_level,
         "api_key_valid": api_key_valid,
+        "is_authenticated": is_authenticated,
     }

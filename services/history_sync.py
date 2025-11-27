@@ -1,6 +1,7 @@
 """
 History synchronization service.
 Handles concurrent writes and cross-tab synchronization.
+Supports user-isolated storage when authentication is enabled.
 """
 import json
 import time
@@ -25,9 +26,15 @@ class HistorySyncManager:
     SYNC_INTERVAL = 5.0  # seconds between syncs
     PRELOAD_COUNT = 4  # Number of images to preload ahead
 
-    def __init__(self):
-        """Initialize the sync manager."""
-        self._storage = get_storage()
+    def __init__(self, user_id: Optional[str] = None):
+        """
+        Initialize the sync manager.
+
+        Args:
+            user_id: Optional user ID for data isolation.
+        """
+        self.user_id = user_id
+        self._storage = get_storage(user_id=user_id)
         self._lock_file = self._storage.base_output_dir / ".history.lock"
         self._local_lock = threading.Lock()
         self._image_cache: Dict[str, Image.Image] = {}  # In-memory image cache
@@ -369,13 +376,35 @@ class HistorySyncManager:
         return ""
 
 
-# Global instance
-_sync_manager: Optional[HistorySyncManager] = None
+# Cache for user-specific sync managers
+_sync_managers: Dict[Optional[str], HistorySyncManager] = {}
 
 
-def get_history_sync() -> HistorySyncManager:
-    """Get or create the global history sync manager."""
-    global _sync_manager
-    if _sync_manager is None:
-        _sync_manager = HistorySyncManager()
-    return _sync_manager
+def get_history_sync(user_id: Optional[str] = None) -> HistorySyncManager:
+    """
+    Get or create a history sync manager for the given user.
+
+    Args:
+        user_id: Optional user ID for data isolation.
+                 If None, returns shared sync manager.
+
+    Returns:
+        HistorySyncManager instance for the user (or shared if no user_id)
+    """
+    global _sync_managers
+
+    # Use the user_id as key (None for shared)
+    if user_id not in _sync_managers:
+        _sync_managers[user_id] = HistorySyncManager(user_id=user_id)
+
+    return _sync_managers[user_id]
+
+
+def get_current_user_history_sync() -> HistorySyncManager:
+    """
+    Get history sync manager for the currently authenticated user.
+    Falls back to shared manager if no user is authenticated.
+    """
+    from .auth import get_user_id
+    user_id = get_user_id()
+    return get_history_sync(user_id=user_id)

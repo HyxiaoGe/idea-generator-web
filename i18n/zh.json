@@ -6,6 +6,17 @@
   },
   "sidebar": {
     "title": "设置",
+    "auth": {
+      "title": "账户",
+      "login_btn": "使用 GitHub 登录",
+      "logout_btn": "退出登录",
+      "logged_in_as": "已登录",
+      "login_required": "需要登录",
+      "login_help": "请使用 GitHub 账户登录以使用本应用。",
+      "login_benefits": "您生成的图片将私密保存到您的账户。",
+      "guest_mode": "以访客身份继续",
+      "guest_warning": "访客模式：您的数据可能会被他人看到。"
+    },
     "api_key": {
       "title": "API 密钥",
       "env_configured": "正在使用环境变量中的 API 密钥",
