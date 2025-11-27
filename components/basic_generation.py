@@ -8,7 +8,7 @@ from i18n import Translator
 from services import (
     ImageGenerator,
     GenerationStateManager,
-    get_history_sync,
+    get_current_user_history_sync,
     get_friendly_error_message,
 )
 
@@ -146,8 +146,8 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
                 icon = "🛡️" if result.safety_blocked else "❌"
                 st.error(f"{icon} {t('basic.error')}: {get_friendly_error_message(result.error, t)}")
             elif result.image:
-                # Save using history sync manager
-                history_sync = get_history_sync()
+                # Save using history sync manager (user-specific)
+                history_sync = get_current_user_history_sync()
                 filename = history_sync.save_to_history(
                     image=result.image,
                     prompt=prompt,

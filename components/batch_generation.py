@@ -13,7 +13,7 @@ from i18n import Translator
 from services import (
     ImageGenerator,
     GenerationStateManager,
-    get_history_sync,
+    get_current_user_history_sync,
     get_friendly_error_message,
 )
 from services.cost_estimator import estimate_cost
@@ -209,7 +209,7 @@ def render_batch_generation(t: Translator, settings: dict, generator: ImageGener
                         )
 
                 # Save to history using sync manager
-                history_sync = get_history_sync()
+                history_sync = get_current_user_history_sync()
                 for idx, result in enumerate(successful):
                     history_sync.save_to_history(
                         image=result.image,

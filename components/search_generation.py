@@ -7,7 +7,7 @@ from i18n import Translator
 from services import (
     ImageGenerator,
     GenerationStateManager,
-    get_history_sync,
+    get_current_user_history_sync,
     get_friendly_error_message,
 )
 
@@ -109,7 +109,7 @@ def render_search_generation(t: Translator, settings: dict, generator: ImageGene
                     )
 
                 # Save to history using sync manager
-                history_sync = get_history_sync()
+                history_sync = get_current_user_history_sync()
                 filename = history_sync.save_to_history(
                     image=result.image,
                     prompt=prompt,

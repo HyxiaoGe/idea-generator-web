@@ -46,8 +46,16 @@ def get_config_value(key: str, default: str = "") -> str:
 class R2Storage:
     """Service for storing and retrieving images from Cloudflare R2."""
 
-    def __init__(self):
-        """Initialize the R2 storage service."""
+    def __init__(self, user_id: Optional[str] = None):
+        """
+        Initialize the R2 storage service.
+
+        Args:
+            user_id: Optional user ID for data isolation.
+                     If provided, all data will be stored under users/{user_id}/ prefix.
+        """
+        self.user_id = user_id
+
         # Hardcode R2_ENABLED=true for debugging
         # Note: Set to True directly to bypass config issues
         self.enabled = True  # Hardcoded for debugging
@@ -101,10 +109,22 @@ class R2Storage:
         """Check if R2 storage is available and configured."""
         return self.enabled and self._client is not None
 
+    def _get_user_prefix(self) -> str:
+        """Get user-specific prefix for data isolation."""
+        if self.user_id:
+            return f"users/{self.user_id}"
+        return "shared"
+
     def _get_date_prefix(self) -> str:
-        """Get date-based folder prefix (YYYY/MM/DD)."""
+        """Get date-based folder prefix (YYYY/MM/DD) with user prefix."""
         now = datetime.now()
-        return f"{now.year}/{now.month:02d}/{now.day:02d}"
+        user_prefix = self._get_user_prefix()
+        return f"{user_prefix}/{now.year}/{now.month:02d}/{now.day:02d}"
+
+    def _get_history_key(self) -> str:
+        """Get the history.json key for the current user."""
+        user_prefix = self._get_user_prefix()
+        return f"{user_prefix}/history.json"
 
     def _generate_filename(self, mode: str, prompt: str) -> str:
         """
@@ -233,9 +253,10 @@ class R2Storage:
             history = history[:100]
 
             # Save updated history
+            history_key = self._get_history_key()
             self._client.put_object(
                 Bucket=self.bucket_name,
-                Key="history.json",
+                Key=history_key,
                 Body=json.dumps(history, ensure_ascii=False, indent=2),
                 ContentType="application/json"
             )
@@ -251,9 +272,10 @@ class R2Storage:
             return self._metadata_cache
 
         try:
+            history_key = self._get_history_key()
             response = self._client.get_object(
                 Bucket=self.bucket_name,
-                Key="history.json"
+                Key=history_key
             )
             content = response["Body"].read().decode("utf-8")
             self._metadata_cache = json.loads(content)
@@ -334,14 +356,17 @@ class R2Storage:
             return False
 
     def clear_history(self):
-        """Clear all images and history from R2."""
+        """Clear all images and history from R2 for the current user."""
         if not self.is_available:
             return
 
         try:
-            # List and delete all objects
+            # Only delete objects under the current user's prefix
+            user_prefix = self._get_user_prefix()
+
+            # List and delete all objects under user prefix
             paginator = self._client.get_paginator("list_objects_v2")
-            for page in paginator.paginate(Bucket=self.bucket_name):
+            for page in paginator.paginate(Bucket=self.bucket_name, Prefix=user_prefix):
                 if "Contents" in page:
                     objects = [{"Key": obj["Key"]} for obj in page["Contents"]]
                     if objects:
@@ -355,13 +380,25 @@ class R2Storage:
             print(f"Failed to clear R2 history: {e}")
 
 
-# Global instance
-_r2_storage_instance: Optional[R2Storage] = None
+# Cache for user-specific R2 storage instances
+_r2_storage_instances: Dict[Optional[str], R2Storage] = {}
 
 
-def get_r2_storage() -> R2Storage:
-    """Get or create the global R2 storage instance."""
-    global _r2_storage_instance
-    if _r2_storage_instance is None:
-        _r2_storage_instance = R2Storage()
-    return _r2_storage_instance
+def get_r2_storage(user_id: Optional[str] = None) -> R2Storage:
+    """
+    Get or create an R2 storage instance for the given user.
+
+    Args:
+        user_id: Optional user ID for data isolation.
+                 If None, returns shared storage instance.
+
+    Returns:
+        R2Storage instance for the user (or shared if no user_id)
+    """
+    global _r2_storage_instances
+
+    # Use the user_id as key (None for shared storage)
+    if user_id not in _r2_storage_instances:
+        _r2_storage_instances[user_id] = R2Storage(user_id=user_id)
+
+    return _r2_storage_instances[user_id]

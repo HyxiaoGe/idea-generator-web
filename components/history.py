@@ -6,7 +6,7 @@ from io import BytesIO
 from datetime import datetime
 import streamlit as st
 from i18n import Translator
-from services import get_storage, get_history_sync
+from services import get_current_user_storage, get_current_user_history_sync
 
 
 # Pagination settings
@@ -99,7 +99,7 @@ def render_history(t: Translator):
     st.caption(t("history.description"))
 
     # Get history sync manager
-    history_sync = get_history_sync()
+    history_sync = get_current_user_history_sync()
 
     # Sync from disk on load or refresh
     if "history" not in st.session_state or not st.session_state.history:
@@ -180,7 +180,7 @@ def render_history(t: Translator):
             st.session_state.show_clear_confirm = True
 
     with col3:
-        storage = get_storage()
+        storage = get_current_user_storage()
         status_icon = "☁️" if storage.r2_enabled else "💾"
         st.caption(f"{status_icon} `{storage.base_output_dir}`")
 
@@ -213,7 +213,7 @@ def render_history(t: Translator):
             col1, col2, col3 = st.columns([1, 1, 3])
             with col1:
                 if st.button(t("history.yes_btn"), type="primary"):
-                    storage = get_storage()
+                    storage = get_current_user_storage()
                     storage.clear_history()
                     st.session_state.history = []
                     st.session_state.show_clear_confirm = False

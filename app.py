@@ -29,7 +29,7 @@ from components import (
     render_batch_generation,
 )
 from components.sidebar import get_current_api_key
-from services import ImageGenerator, ChatSession, init_from_persistence
+from services import ImageGenerator, ChatSession, init_from_persistence, init_auth, get_auth_service
 
 
 def init_services(api_key: str = None):
@@ -55,6 +55,9 @@ def init_services(api_key: str = None):
 
 def init_session_state():
     """Initialize session state variables."""
+    # Initialize authentication
+    init_auth()
+
     # Load persisted values first (API key, language, settings)
     init_from_persistence()
 
@@ -101,6 +104,13 @@ def main():
     # Header
     st.title(f"🍌 {t('app.title')}")
     st.caption(t("app.subtitle"))
+
+    # Check authentication if required
+    auth_service = get_auth_service()
+    if auth_service.is_auth_required and not settings.get("is_authenticated"):
+        st.warning(t("sidebar.auth.login_required"))
+        st.info(t("sidebar.auth.login_help"))
+        return
 
     # Check if API key is valid
     if not settings.get("api_key_valid"):

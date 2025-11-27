@@ -8,7 +8,7 @@ from i18n import Translator
 from services import (
     ImageGenerator,
     GenerationStateManager,
-    get_history_sync,
+    get_current_user_history_sync,
     get_friendly_error_message,
 )
 
@@ -131,7 +131,7 @@ def render_style_transfer_mode(t: Translator, settings: dict, generator: ImageGe
                     )
 
                 # Save to history using sync manager
-                history_sync = get_history_sync()
+                history_sync = get_current_user_history_sync()
                 filename = history_sync.save_to_history(
                     image=result.image,
                     prompt=prompt,
@@ -234,7 +234,7 @@ def render_blend_mode(t: Translator, settings: dict, generator: ImageGenerator):
                     )
 
                 # Save to history using sync manager
-                history_sync = get_history_sync()
+                history_sync = get_current_user_history_sync()
                 filename = history_sync.save_to_history(
                     image=result.image,
                     prompt=prompt,
