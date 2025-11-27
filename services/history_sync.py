@@ -120,6 +120,7 @@ class HistorySyncManager:
                     prompt=prompt,
                     settings=settings,
                     duration=duration,
+                    mode=mode,
                     text_response=text_response,
                     thinking=thinking,
                 )
@@ -138,6 +139,7 @@ class HistorySyncManager:
         prompt: str,
         settings: Dict[str, Any],
         duration: float,
+        mode: str,
         text_response: Optional[str],
         thinking: Optional[str],
     ):
@@ -152,6 +154,7 @@ class HistorySyncManager:
             "thinking": thinking,
             "duration": duration,
             "settings": settings.copy(),
+            "mode": mode,
             "filename": filename,
             "created_at": datetime.now().isoformat(),
         }
@@ -192,9 +195,13 @@ class HistorySyncManager:
 
                 # Load missing items from disk
                 for record in disk_history:
-                    if record.get("filename") not in session_filenames:
-                        # Load the image
-                        image = self._storage.load_image(record["filename"])
+                    # Use 'key' for R2 storage, 'filename' for local storage
+                    file_key = record.get("key") or record.get("filename")
+                    filename = record.get("filename", file_key)
+
+                    if filename not in session_filenames:
+                        # Load the image using the full key/path
+                        image = self._storage.load_image(file_key)
                         if image:
                             if "history" not in st.session_state:
                                 st.session_state.history = []
@@ -206,7 +213,8 @@ class HistorySyncManager:
                                 "thinking": record.get("thinking"),
                                 "duration": record.get("duration", 0),
                                 "settings": record.get("settings", {}),
-                                "filename": record["filename"],
+                                "mode": record.get("mode", "basic"),
+                                "filename": filename,
                                 "created_at": record.get("created_at"),
                             })
 
