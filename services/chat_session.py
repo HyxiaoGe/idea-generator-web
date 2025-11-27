@@ -135,11 +135,12 @@ class ChatSession:
                 elif hasattr(part, 'inline_data') and part.inline_data:
                     image_data = part.inline_data.data
                     response.image = Image.open(BytesIO(image_data))
-                # Handle as_image() method if available
-                if hasattr(part, 'as_image'):
+                # Handle as_image() method if available (only if no image yet)
+                if response.image is None and hasattr(part, 'as_image'):
                     try:
                         img = part.as_image()
-                        if img:
+                        # Only use if it's a valid PIL Image
+                        if img and isinstance(img, Image.Image):
                             response.image = img
                     except:
                         pass
