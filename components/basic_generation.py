@@ -45,6 +45,15 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
         value=st.session_state.get("prompt_input", "")
     )
 
+    # Show tips when prompt is empty
+    if not prompt.strip():
+        st.caption(f"💡 {t('basic.empty_hint')}")
+        with st.expander(t("basic.tip_title"), expanded=False):
+            tips = t("basic.tips")
+            if isinstance(tips, list):
+                for tip in tips:
+                    st.markdown(f"- {tip}")
+
     # Check generation state
     is_generating = GenerationStateManager.is_generating()
     can_generate, block_reason = GenerationStateManager.can_start_generation()

@@ -202,7 +202,8 @@ def render_history(t: Translator):
         if full_history:
             st.info(t("history.no_results"))
         else:
-            st.info(t("history.empty"))
+            # Enhanced empty state
+            _render_empty_state(t)
         return
 
     # Confirmation dialog for clear
@@ -223,6 +224,9 @@ def render_history(t: Translator):
                 if st.button(t("history.no_btn")):
                     st.session_state.show_clear_confirm = False
                     st.rerun()
+
+    # Render preview dialog if active
+    _render_preview_dialog(t)
 
     st.divider()
 
@@ -289,11 +293,40 @@ def _render_pagination_controls(t: Translator, total_pages: int, key_suffix: str
             st.rerun()
 
 
+def _render_empty_state(t: Translator):
+    """Render enhanced empty state for history."""
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown(
+            f"""
+            <div style="text-align: center; padding: 40px 20px;">
+                <div style="font-size: 64px; margin-bottom: 16px;">🎨</div>
+                <h3 style="margin-bottom: 8px;">{t("history.empty")}</h3>
+                <p style="color: #888; margin-bottom: 24px;">{t("history.empty_hint")}</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
 def _render_history_item(t: Translator, item: dict, idx: int):
-    """Render a single history item."""
+    """Render a single history item with preview capability."""
     with st.container(border=True):
-        # Image
+        # Image with click hint
         if item.get("image"):
+            # Store item for preview dialog
+            preview_key = f"preview_{idx}_{st.session_state.history_page}"
+            if st.button(
+                "🔍",
+                key=preview_key,
+                help=t("history.preview_btn"),
+                use_container_width=False,
+            ):
+                st.session_state.preview_item = item
+                st.session_state.show_preview = True
+                st.rerun()
+
             st.image(item["image"], use_container_width=True)
 
         # Prompt
@@ -340,3 +373,58 @@ def _render_history_item(t: Translator, item: dict, idx: int):
                 key=f"download_history_{idx}_{st.session_state.history_page}",
                 use_container_width=True
             )
+
+
+def _render_preview_dialog(t: Translator):
+    """Render image preview dialog/modal."""
+    if not st.session_state.get("show_preview") or not st.session_state.get("preview_item"):
+        return
+
+    item = st.session_state.preview_item
+
+    # Use expander as a pseudo-modal since st.dialog may not be available in all versions
+    with st.container():
+        st.markdown("---")
+        st.subheader(f"🖼️ {t('history.fullscreen_title')}")
+
+        # Close button
+        if st.button(f"✕ {t('history.close_btn')}", key="close_preview"):
+            st.session_state.show_preview = False
+            st.session_state.preview_item = None
+            st.rerun()
+
+        # Full-size image
+        if item.get("image"):
+            st.image(item["image"], use_container_width=True)
+
+        # Full prompt
+        st.markdown(f"**{t('history.prompt_label')}:**")
+        st.text(item.get("prompt", "N/A"))
+
+        # Settings details
+        settings = item.get("settings", {})
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Aspect Ratio", settings.get("aspect_ratio", "N/A"))
+        with col2:
+            st.metric("Resolution", settings.get("resolution", "N/A"))
+        with col3:
+            st.metric("Mode", item.get("mode", "basic"))
+
+        # Download in preview
+        if item.get("image"):
+            buf = BytesIO()
+            item["image"].save(buf, format="PNG")
+            filename = item.get("filename", "preview.png")
+            if "/" in filename:
+                filename = filename.split("/")[-1]
+            st.download_button(
+                f"⬇️ {t('history.download_btn')}",
+                data=buf.getvalue(),
+                file_name=filename,
+                mime="image/png",
+                key="download_preview",
+                use_container_width=True
+            )
+
+        st.markdown("---")

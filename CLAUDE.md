@@ -302,7 +302,7 @@ The codebase has comprehensive error handling for API calls:
 - Safety content blocked
 - Invalid request parameters
 
-**Friendly error messages** are displayed for common errors - see `_get_friendly_error_message()` in `services/generator.py`.
+**Friendly error messages** are displayed via i18n system - see `get_friendly_error_message()` in `services/generator.py`. Error types are classified and mapped to `errors.api.*` keys in i18n files.
 
 ## Security Notes
 
@@ -319,3 +319,23 @@ The codebase has comprehensive error handling for API calls:
 - boto3 connection pooling for R2 storage
 - Date-based folder organization for efficient file lookup
 - Lazy loading of translations
+
+## UI/UX Features
+
+### History Management
+- **Pagination**: Configurable items per page (4/8/12/16)
+- **Search**: Filter by prompt text
+- **Mode Filter**: Filter by generation mode (basic, chat, batch, etc.)
+- **Image Preview**: Click 🔍 to open full-size preview with details
+
+### Chat Mode
+- **Clear Confirmation**: Prevents accidental chat deletion
+- **Export Chat**: Download conversation as JSON
+- **Message Count**: Shows current conversation length
+- **Empty State**: Helpful guidance for new users
+
+### Empty States
+All modes show helpful guidance when no content exists:
+- Tips for better prompts in Basic Generation
+- Quick start instructions in Chat mode
+- Navigation hints in History

@@ -1,7 +1,9 @@
 """
 Chat-based image generation component for iterative refinement.
 """
+import json
 from io import BytesIO
+from datetime import datetime
 import streamlit as st
 from i18n import Translator
 from services import (
@@ -32,7 +34,7 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
         st.session_state.chat_messages = []
 
     # Control buttons
-    col1, col2, col3 = st.columns([1, 1, 3])
+    col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
     with col1:
         if st.button(t("chat.start_btn"), use_container_width=True):
             chat_session.clear_session()
@@ -42,25 +44,54 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
                 "content": t("chat.welcome"),
                 "image": None
             }]
+            st.session_state.show_chat_clear_confirm = False
             st.rerun()
 
     with col2:
-        if st.button(t("chat.clear_btn"), use_container_width=True):
-            chat_session.clear_session()
-            st.session_state.chat_messages = []
-            st.rerun()
+        # Clear button with confirmation
+        has_messages = bool(st.session_state.chat_messages)
+        if st.button(t("chat.clear_btn"), use_container_width=True, disabled=not has_messages):
+            st.session_state.show_chat_clear_confirm = True
+
+    with col3:
+        # Export chat functionality
+        if has_messages:
+            export_data = _export_chat_data(st.session_state.chat_messages)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            st.download_button(
+                f"📤 {t('chat.export_btn')}",
+                data=export_data,
+                file_name=f"chat_export_{timestamp}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+
+    # Show message count
+    if has_messages:
+        msg_count = len(st.session_state.chat_messages)
+        st.caption(f"💬 {t('chat.messages_count', count=msg_count)}")
+
+    # Clear confirmation dialog
+    if st.session_state.get("show_chat_clear_confirm"):
+        with st.container():
+            st.warning(t("chat.clear_confirm"))
+            confirm_col1, confirm_col2, confirm_col3 = st.columns([1, 1, 3])
+            with confirm_col1:
+                if st.button(t("history.yes_btn"), type="primary", key="chat_clear_yes"):
+                    chat_session.clear_session()
+                    st.session_state.chat_messages = []
+                    st.session_state.show_chat_clear_confirm = False
+                    st.rerun()
+            with confirm_col2:
+                if st.button(t("history.no_btn"), key="chat_clear_no"):
+                    st.session_state.show_chat_clear_confirm = False
+                    st.rerun()
 
     st.divider()
 
-    # Show refinement tips if no messages yet
+    # Show enhanced empty state if no messages yet
     if not st.session_state.chat_messages:
-        st.info(t("chat.new_session_tip"))
-
-        with st.expander(t("chat.refine_tips.title"), expanded=True):
-            tips = t("chat.refine_tips.items")
-            if isinstance(tips, list):
-                for tip in tips:
-                    st.write(f"- {tip}")
+        _render_chat_empty_state(t)
         return
 
     # Display chat messages
@@ -201,3 +232,56 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
                 })
 
         st.rerun()
+
+
+def _export_chat_data(messages: list) -> str:
+    """
+    Export chat messages to JSON format.
+
+    Args:
+        messages: List of chat messages
+
+    Returns:
+        JSON string of exportable chat data
+    """
+    export_messages = []
+    for msg in messages:
+        export_msg = {
+            "role": msg.get("role", "unknown"),
+            "content": msg.get("content", ""),
+            "has_image": msg.get("image") is not None,
+            "thinking": msg.get("thinking", ""),
+        }
+        export_messages.append(export_msg)
+
+    export_data = {
+        "exported_at": datetime.now().isoformat(),
+        "message_count": len(export_messages),
+        "messages": export_messages
+    }
+
+    return json.dumps(export_data, indent=2, ensure_ascii=False)
+
+
+def _render_chat_empty_state(t: Translator):
+    """Render enhanced empty state for chat mode."""
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown(
+            f"""
+            <div style="text-align: center; padding: 40px 20px;">
+                <div style="font-size: 64px; margin-bottom: 16px;">💬</div>
+                <h3 style="margin-bottom: 8px;">{t("chat.empty_title")}</h3>
+                <p style="color: #888; margin-bottom: 16px;">{t("chat.empty_description")}</p>
+                <p style="color: #666; font-size: 14px;">{t("chat.empty_cta")}</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    # Show refinement tips
+    with st.expander(t("chat.refine_tips.title"), expanded=True):
+        tips = t("chat.refine_tips.items")
+        if isinstance(tips, list):
+            for tip in tips:
+                st.write(f"- {tip}")
