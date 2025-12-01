@@ -27,7 +27,8 @@
       "basic": "基础生图",
       "chat": "对话微调",
       "batch": "批量生成",
-      "blend": "风格迁移",
+      "blend": "图像混合",
+      "style": "风格迁移",
       "search": "搜索增强",
       "templates": "模板库",
       "history": "历史记录"
@@ -268,7 +269,18 @@
     "preview_btn": "点击预览",
     "close_btn": "关闭",
     "fullscreen_title": "图片预览",
-    "total_count": "共 {count} 张"
+    "total_count": "共 {count} 张",
+    "sort_label": "排序",
+    "sort_newest": "🕐 最新优先",
+    "sort_oldest": "🕐 最早优先",
+    "sort_fastest": "⚡ 最快优先",
+    "sort_slowest": "🐢 最慢优先",
+    "date_label": "日期",
+    "date_all": "📅 全部时间",
+    "date_today": "📅 今天",
+    "date_week": "📅 最近7天",
+    "date_month": "📅 最近30天",
+    "grid_cols": "列数"
   },
   "errors": {
     "api_key_missing": "未配置 API 密钥，请在 .env 文件中设置 GOOGLE_API_KEY。",

@@ -27,7 +27,8 @@
       "basic": "Basic Generation",
       "chat": "Chat & Refine",
       "batch": "Batch Generation",
-      "blend": "Style Transfer",
+      "blend": "Image Blend",
+      "style": "Style Transfer",
       "search": "Search Grounding",
       "templates": "Templates",
       "history": "History"
@@ -268,7 +269,18 @@
     "preview_btn": "Click to preview",
     "close_btn": "Close",
     "fullscreen_title": "Image Preview",
-    "total_count": "{count} total"
+    "total_count": "{count} total",
+    "sort_label": "Sort",
+    "sort_newest": "🕐 Newest First",
+    "sort_oldest": "🕐 Oldest First",
+    "sort_fastest": "⚡ Fastest First",
+    "sort_slowest": "🐢 Slowest First",
+    "date_label": "Date",
+    "date_all": "📅 All Time",
+    "date_today": "📅 Today",
+    "date_week": "📅 Last 7 Days",
+    "date_month": "📅 Last 30 Days",
+    "grid_cols": "Columns"
   },
   "errors": {
     "api_key_missing": "API key not configured. Please set GOOGLE_API_KEY in your .env file.",
