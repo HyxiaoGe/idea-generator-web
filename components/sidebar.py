@@ -131,7 +131,7 @@ def render_health_check_section(t: Translator, api_key: str):
             time_ago = f"{int(elapsed)}s"
         else:
             time_ago = f"{int(elapsed / 60)}m"
-        st.caption(f"_{t('sidebar.health.last_check')}: {time_ago} ago_")
+        st.caption(f"_{t('sidebar.health.last_check')}: {time_ago} {t('sidebar.health.ago')}_")
 
 
 def get_current_api_key() -> str:

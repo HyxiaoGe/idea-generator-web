@@ -55,7 +55,8 @@
       "title": "API Status",
       "check_btn": "Check API Status",
       "checking": "Checking API...",
-      "last_check": "Last checked"
+      "last_check": "Last checked",
+      "ago": "ago"
     },
     "stats": "Statistics",
     "about": "About",
@@ -139,6 +140,7 @@
     "failed": "Failed",
     "total_time": "Total Time",
     "errors": "Errors",
+    "error_item": "Image {num}",
     "download_all": "Download All",
     "download_zip": "Download as ZIP"
   },
@@ -263,9 +265,10 @@
     "no_results": "No images match your search criteria.",
     "prev_btn": "Previous",
     "next_btn": "Next",
-    "preview_btn": "Preview",
+    "preview_btn": "Click to preview",
     "close_btn": "Close",
-    "fullscreen_title": "Image Preview"
+    "fullscreen_title": "Image Preview",
+    "total_count": "{count} total"
   },
   "errors": {
     "api_key_missing": "API key not configured. Please set GOOGLE_API_KEY in your .env file.",

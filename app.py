@@ -16,6 +16,18 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Hide Streamlit's default image toolbar (fullscreen button on hover)
+st.markdown(
+    """
+    <style>
+    button[title="View fullscreen"] {
+        display: none !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Import components and services
 from i18n import Translator, LANGUAGES
 from components import (

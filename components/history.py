@@ -5,6 +5,7 @@ import math
 from io import BytesIO
 from datetime import datetime
 import streamlit as st
+import requests
 from i18n import Translator
 from services import get_storage, get_history_sync
 
@@ -30,20 +31,9 @@ def _init_history_state():
 
 
 def _filter_history(history: list, search_query: str, mode_filter: str) -> list:
-    """
-    Filter history items based on search query and mode.
-
-    Args:
-        history: List of history items
-        search_query: Search string to filter by prompt
-        mode_filter: Generation mode to filter by ("all" for no filter)
-
-    Returns:
-        Filtered list of history items
-    """
+    """Filter history items based on search query and mode."""
     filtered = history
 
-    # Filter by search query
     if search_query.strip():
         query_lower = search_query.lower()
         filtered = [
@@ -51,7 +41,6 @@ def _filter_history(history: list, search_query: str, mode_filter: str) -> list:
             if query_lower in item.get("prompt", "").lower()
         ]
 
-    # Filter by mode
     if mode_filter != "all":
         filtered = [
             item for item in filtered
@@ -62,21 +51,9 @@ def _filter_history(history: list, search_query: str, mode_filter: str) -> list:
 
 
 def _get_paginated_items(items: list, page: int, per_page: int) -> tuple:
-    """
-    Get paginated subset of items.
-
-    Args:
-        items: Full list of items
-        page: Current page number (1-indexed)
-        per_page: Items per page
-
-    Returns:
-        Tuple of (paginated_items, total_pages)
-    """
+    """Get paginated subset of items."""
     total_items = len(items)
     total_pages = max(1, math.ceil(total_items / per_page))
-
-    # Ensure page is within bounds
     page = max(1, min(page, total_pages))
 
     start_idx = (page - 1) * per_page
@@ -86,57 +63,121 @@ def _get_paginated_items(items: list, page: int, per_page: int) -> tuple:
 
 
 def _preload_next_page(items: list, current_page: int, per_page: int):
-    """
-    Preload images for the next page to improve perceived performance.
-
-    Args:
-        items: Full list of items
-        current_page: Current page number
-        per_page: Items per page
-    """
+    """Preload images for the next page."""
     history_sync = get_history_sync()
-
-    # Calculate next page range
     next_start = current_page * per_page
     next_end = next_start + per_page
-
-    # Get items for next page
     next_items = items[next_start:next_end]
 
-    # Collect file keys to preload
     keys_to_preload = []
     for item in next_items:
         file_key = item.get("key") or item.get("filename")
         if file_key:
             keys_to_preload.append(file_key)
 
-    # Trigger preload
     if keys_to_preload:
         history_sync.preload_images(keys_to_preload)
 
 
-def render_history(t: Translator):
-    """
-    Render the image generation history with pagination and search.
+def _get_image_source(item: dict):
+    """Get the best image source (CDN URL or PIL Image)."""
+    if item.get("r2_url"):
+        return item["r2_url"]
+    return item.get("image")
 
-    Args:
-        t: Translator instance
+
+def _get_download_data(item: dict) -> tuple:
     """
-    # Initialize state
+    Get download data for an image.
+    Returns (bytes_data, filename, mime_type)
+    """
+    filename = item.get("filename", "image.png")
+    if "/" in filename:
+        filename = filename.split("/")[-1]
+
+    # If we have R2 URL, fetch the image
+    if item.get("r2_url"):
+        try:
+            response = requests.get(item["r2_url"], timeout=10)
+            if response.status_code == 200:
+                return response.content, filename, "image/png"
+        except Exception:
+            pass
+
+    # Fall back to PIL Image
+    if item.get("image"):
+        buf = BytesIO()
+        item["image"].save(buf, format="PNG")
+        return buf.getvalue(), filename, "image/png"
+
+    return None, filename, "image/png"
+
+
+@st.dialog("🖼️", width="large")
+def _open_preview_dialog(item: dict, t: Translator):
+    """Modal dialog for image preview."""
+    # Title
+    st.subheader(t("history.fullscreen_title"))
+
+    # Full-size image
+    image_source = _get_image_source(item)
+    if image_source:
+        st.image(image_source, width="stretch")
+
+    # Prompt
+    st.markdown(f"**{t('history.prompt_label')}:**")
+    st.text(item.get("prompt", "N/A"))
+
+    # Settings
+    settings = item.get("settings", {})
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric(t("sidebar.params.aspect_ratio"), settings.get("aspect_ratio", "N/A"))
+    with col2:
+        st.metric(t("sidebar.params.resolution"), settings.get("resolution", "N/A"))
+    with col3:
+        st.metric(t("sidebar.mode"), item.get("mode", "basic"))
+
+    # Duration and time
+    duration = item.get("duration", 0)
+    created_at = item.get("created_at", "")
+    if created_at:
+        try:
+            dt = datetime.fromisoformat(created_at)
+            time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+        except (ValueError, TypeError):
+            time_str = "N/A"
+    else:
+        time_str = "N/A"
+
+    st.caption(f"⏱️ {duration:.2f} {t('basic.seconds')} | 📅 {time_str}")
+
+    # Download button
+    data, filename, mime = _get_download_data(item)
+    if data:
+        st.download_button(
+            f"⬇️ {t('history.download_btn')}",
+            data=data,
+            file_name=filename,
+            mime=mime,
+            width="stretch",
+        )
+
+
+def render_history(t: Translator):
+    """Render the image generation history with pagination and search."""
     _init_history_state()
 
     st.header(t("history.title"))
     st.caption(t("history.description"))
 
-    # Get history sync manager
     history_sync = get_history_sync()
 
-    # Sync from disk on load or refresh
+    # Sync from disk on load
     if "history" not in st.session_state or not st.session_state.history:
         with st.spinner(t("history.loading")):
             history_sync.sync_from_disk(force=True)
 
-    # Get full history
     full_history = st.session_state.get("history", [])
 
     # Search and filter controls
@@ -152,7 +193,7 @@ def render_history(t: Translator):
         )
         if search_query != st.session_state.history_search:
             st.session_state.history_search = search_query
-            st.session_state.history_page = 1  # Reset to page 1 on search
+            st.session_state.history_page = 1
             st.rerun()
 
     with col_filter:
@@ -163,7 +204,7 @@ def render_history(t: Translator):
             "chat": t("sidebar.modes.chat"),
             "batch": t("sidebar.modes.batch"),
             "blend": t("sidebar.modes.blend"),
-            "style": t("sidebar.modes.blend"),  # Style is part of blend
+            "style": t("sidebar.modes.blend"),
             "search": t("sidebar.modes.search"),
             "template": t("sidebar.modes.templates"),
         }
@@ -195,24 +236,14 @@ def render_history(t: Translator):
             st.session_state.history_page = 1
             st.rerun()
 
-    # Action buttons row
-    col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
-
+    # Refresh button
+    col1, col2 = st.columns([1, 4])
     with col1:
         if st.button(f"🔄 {t('history.refresh_btn')}", width="stretch"):
             with st.spinner(t("history.loading")):
                 history_sync.sync_from_disk(force=True)
             st.session_state.history_page = 1
             st.rerun()
-
-    with col2:
-        if st.button(t("history.clear_btn"), type="secondary", width="stretch"):
-            st.session_state.show_clear_confirm = True
-
-    with col3:
-        storage = get_storage()
-        status_icon = "☁️" if storage.r2_enabled else "💾"
-        st.caption(f"{status_icon} `{storage.base_output_dir}`")
 
     # Filter history
     filtered_history = _filter_history(
@@ -223,40 +254,17 @@ def render_history(t: Translator):
 
     # Show count
     if len(filtered_history) != len(full_history):
-        st.caption(f"📊 {t('history.count', count=len(filtered_history))} / {len(full_history)} total")
+        st.caption(f"📊 {t('history.count', count=len(filtered_history))} / {t('history.total_count', count=len(full_history))}")
     elif len(full_history) > 0:
         st.caption(f"📊 {t('history.count', count=len(full_history))}")
 
-    # Check if history exists after filtering
+    # Empty state
     if not filtered_history:
         if full_history:
             st.info(t("history.no_results"))
         else:
-            # Enhanced empty state
             _render_empty_state(t)
         return
-
-    # Confirmation dialog for clear
-    if st.session_state.get("show_clear_confirm"):
-        with st.container():
-            st.warning(t("history.clear_confirm"))
-            col1, col2, col3 = st.columns([1, 1, 3])
-            with col1:
-                if st.button(t("history.yes_btn"), type="primary"):
-                    storage = get_storage()
-                    storage.clear_history()
-                    st.session_state.history = []
-                    st.session_state.show_clear_confirm = False
-                    st.session_state.history_page = 1
-                    st.toast(t("history.cleared"), icon="🗑️")
-                    st.rerun()
-            with col2:
-                if st.button(t("history.no_btn")):
-                    st.session_state.show_clear_confirm = False
-                    st.rerun()
-
-    # Render preview dialog if active
-    _render_preview_dialog(t)
 
     st.divider()
 
@@ -267,7 +275,7 @@ def render_history(t: Translator):
         st.session_state.history_per_page
     )
 
-    # Preload next page images for better UX
+    # Preload next page
     if st.session_state.history_page < total_pages:
         _preload_next_page(
             filtered_history,
@@ -290,7 +298,6 @@ def render_history(t: Translator):
                 break
 
             item = paginated_items[item_idx]
-
             with col:
                 _render_history_item(t, item, item_idx)
 
@@ -298,6 +305,7 @@ def render_history(t: Translator):
     if total_pages > 1:
         st.divider()
         _render_pagination_controls(t, total_pages, key_suffix="_bottom")
+
 
 
 def _render_pagination_controls(t: Translator, total_pages: int, key_suffix: str = ""):
@@ -316,7 +324,9 @@ def _render_pagination_controls(t: Translator, total_pages: int, key_suffix: str
 
     with col2:
         st.markdown(
-            f"<div style='text-align: center; padding: 8px;'>{t('history.page_info', current=st.session_state.history_page, total=total_pages)}</div>",
+            f"<div style='text-align: center; padding: 8px;'>"
+            f"{t('history.page_info', current=st.session_state.history_page, total=total_pages)}"
+            f"</div>",
             unsafe_allow_html=True
         )
 
@@ -348,56 +358,35 @@ def _render_empty_state(t: Translator):
         )
 
 
-def _get_image_source(item: dict):
-    """
-    Get the best image source for display.
-    Prefers CDN URL over PIL Image for faster loading.
-
-    Returns:
-        URL string or PIL Image object
-    """
-    # Prefer CDN URL if available (much faster)
-    if item.get("r2_url"):
-        return item["r2_url"]
-
-    # Fall back to PIL Image
-    return item.get("image")
-
-
 def _render_history_item(t: Translator, item: dict, idx: int):
-    """Render a single history item with preview capability."""
+    """Render a single history item with click-to-preview."""
     with st.container(border=True):
-        # Get image source (URL or PIL Image)
         image_source = _get_image_source(item)
 
         if image_source:
-            # Store item for preview dialog
-            preview_key = f"preview_{idx}_{st.session_state.history_page}"
+            # Click image to preview - button overlays the image area
             if st.button(
-                "🔍",
-                key=preview_key,
-                help=t("history.preview_btn"),
-                width="content",
+                f"🔍 {t('history.preview_btn')}",
+                key=f"preview_{idx}_{st.session_state.history_page}",
+                width="stretch",
+                type="secondary",
             ):
-                st.session_state.preview_item = item
-                st.session_state.show_preview = True
-                st.rerun()
+                _open_preview_dialog(item, t)
 
             st.image(image_source, width="stretch")
 
-        # Prompt
+        # Prompt (truncated)
         prompt_text = item.get('prompt', 'N/A')
-        if len(prompt_text) > 100:
-            prompt_text = prompt_text[:100] + "..."
+        if len(prompt_text) > 80:
+            prompt_text = prompt_text[:80] + "..."
         st.caption(f"**{t('history.prompt_label')}:** {prompt_text}")
 
         # Settings info
         settings = item.get("settings", {})
         mode = item.get("mode", "basic")
-        settings_str = f"{settings.get('aspect_ratio', 'N/A')} | {settings.get('resolution', 'N/A')} | {mode}"
-        st.caption(settings_str)
+        st.caption(f"{settings.get('aspect_ratio', 'N/A')} | {settings.get('resolution', 'N/A')} | {mode}")
 
-        # Duration and time
+        # Time info
         duration = item.get("duration", 0)
         created_at = item.get("created_at", "")
         if created_at:
@@ -415,89 +404,13 @@ def _render_history_item(t: Translator, item: dict, idx: int):
         st.caption(" | ".join(info_parts))
 
         # Download button
-        if item.get("r2_url"):
-            # Use CDN URL for download link
-            filename = item.get("filename", f"history_{idx}.png")
-            if "/" in filename:
-                filename = filename.split("/")[-1]
-            st.link_button(
-                f"⬇️ {t('history.download_btn')}",
-                url=item["r2_url"],
-                use_container_width=True,
-            )
-        elif item.get("image"):
-            buf = BytesIO()
-            item["image"].save(buf, format="PNG")
-            filename = item.get("filename", f"history_{idx}.png")
-            if "/" in filename:
-                filename = filename.split("/")[-1]
+        data, filename, mime = _get_download_data(item)
+        if data:
             st.download_button(
                 f"⬇️ {t('history.download_btn')}",
-                data=buf.getvalue(),
+                data=data,
                 file_name=filename,
-                mime="image/png",
-                key=f"download_history_{idx}_{st.session_state.history_page}",
-                width="stretch"
+                mime=mime,
+                key=f"download_{idx}_{st.session_state.history_page}",
+                width="stretch",
             )
-
-
-def _render_preview_dialog(t: Translator):
-    """Render image preview dialog/modal."""
-    if not st.session_state.get("show_preview") or not st.session_state.get("preview_item"):
-        return
-
-    item = st.session_state.preview_item
-
-    # Use expander as a pseudo-modal since st.dialog may not be available in all versions
-    with st.container():
-        st.markdown("---")
-        st.subheader(f"🖼️ {t('history.fullscreen_title')}")
-
-        # Close button
-        if st.button(f"✕ {t('history.close_btn')}", key="close_preview"):
-            st.session_state.show_preview = False
-            st.session_state.preview_item = None
-            st.rerun()
-
-        # Full-size image - prefer CDN URL
-        image_source = _get_image_source(item)
-        if image_source:
-            st.image(image_source, width="stretch")
-
-        # Full prompt
-        st.markdown(f"**{t('history.prompt_label')}:**")
-        st.text(item.get("prompt", "N/A"))
-
-        # Settings details
-        settings = item.get("settings", {})
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Aspect Ratio", settings.get("aspect_ratio", "N/A"))
-        with col2:
-            st.metric("Resolution", settings.get("resolution", "N/A"))
-        with col3:
-            st.metric("Mode", item.get("mode", "basic"))
-
-        # Download in preview
-        if item.get("r2_url"):
-            st.link_button(
-                f"⬇️ {t('history.download_btn')}",
-                url=item["r2_url"],
-                use_container_width=True,
-            )
-        elif item.get("image"):
-            buf = BytesIO()
-            item["image"].save(buf, format="PNG")
-            filename = item.get("filename", "preview.png")
-            if "/" in filename:
-                filename = filename.split("/")[-1]
-            st.download_button(
-                f"⬇️ {t('history.download_btn')}",
-                data=buf.getvalue(),
-                file_name=filename,
-                mime="image/png",
-                key="download_preview",
-                width="stretch"
-            )
-
-        st.markdown("---")

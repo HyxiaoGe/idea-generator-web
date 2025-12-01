@@ -110,7 +110,7 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
                 try:
                     # Check for cancellation
                     if GenerationStateManager.is_cancelled():
-                        GenerationStateManager.complete_generation(error="Cancelled by user")
+                        GenerationStateManager.complete_generation(error=t("generation.cancelled"))
                         st.rerun()
 
                     # Run sync generation

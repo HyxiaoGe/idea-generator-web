@@ -55,7 +55,8 @@
       "title": "API 状态",
       "check_btn": "检查 API 状态",
       "checking": "检查中...",
-      "last_check": "上次检查"
+      "last_check": "上次检查",
+      "ago": "前"
     },
     "stats": "统计信息",
     "about": "关于",
@@ -139,6 +140,7 @@
     "failed": "失败",
     "total_time": "总耗时",
     "errors": "错误详情",
+    "error_item": "图片 {num}",
     "download_all": "下载全部",
     "download_zip": "下载为 ZIP"
   },
@@ -263,9 +265,10 @@
     "no_results": "没有找到匹配的图片。",
     "prev_btn": "上一页",
     "next_btn": "下一页",
-    "preview_btn": "预览",
+    "preview_btn": "点击预览",
     "close_btn": "关闭",
-    "fullscreen_title": "图片预览"
+    "fullscreen_title": "图片预览",
+    "total_count": "共 {count} 张"
   },
   "errors": {
     "api_key_missing": "未配置 API 密钥，请在 .env 文件中设置 GOOGLE_API_KEY。",

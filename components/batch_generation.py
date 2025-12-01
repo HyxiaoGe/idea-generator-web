@@ -250,7 +250,7 @@ def _display_batch_results(t: Translator, data: dict):
     if failed_errors:
         with st.expander(t("batch.errors"), expanded=False):
             for idx, error in enumerate(failed_errors):
-                st.write(f"Image {idx + 1}: {error}")
+                st.write(f"{t('batch.error_item', num=idx + 1)}: {error}")
 
     # Download all as ZIP
     if len(images) > 1:
