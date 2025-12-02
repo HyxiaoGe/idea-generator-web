@@ -58,124 +58,120 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
     is_generating = GenerationStateManager.is_generating()
     can_generate, block_reason = GenerationStateManager.can_start_generation()
 
-    # Generate button row
-    col1, col2, col3 = st.columns([1, 1, 3])
+    # Generate button
+    button_disabled = not prompt.strip() or not can_generate
 
-    with col1:
-        # Disable button if generating or throttled
-        button_disabled = not prompt.strip() or not can_generate
+    generate_clicked = st.button(
+        t("basic.generate_btn") if not is_generating else t("basic.generating"),
+        type="primary",
+        disabled=button_disabled
+    )
 
-        generate_clicked = st.button(
-            t("basic.generate_btn") if not is_generating else t("basic.generating"),
-            type="primary",
-            width="stretch",
-            disabled=button_disabled
-        )
-
-    with col2:
-        # Show cancel button when generating
-        if is_generating:
-            if st.button(t("generation.cancel_btn"), width="stretch"):
-                GenerationStateManager.cancel_generation()
-                st.toast(t("generation.cancelled"), icon="⚠️")
-                st.rerun()
-
-    # Handle generation
+    # Handle generation button click - start task and rerun to update UI
     if generate_clicked and prompt.strip() and can_generate:
-        # Start generation task
-        task = GenerationStateManager.start_generation(
+        # Save generation params to session state for use after rerun
+        st.session_state._pending_generation = {
+            "prompt": prompt,
+            "settings": settings.copy(),
+        }
+        # Start generation task (sets is_generating = True)
+        GenerationStateManager.start_generation(
             prompt=prompt,
             mode="basic",
             resolution=settings["resolution"]
         )
+        # Rerun immediately to update button state (disable it)
+        st.rerun()
 
-        if task:
-            # Create a placeholder for progress
-            progress_container = st.empty()
-            status_container = st.empty()
+    # Execute generation when is_generating is True
+    if is_generating and "_pending_generation" in st.session_state:
+        pending = st.session_state._pending_generation
+        gen_prompt = pending["prompt"]
+        gen_settings = pending["settings"]
 
-            with status_container.container():
-                # Show progress indicator
-                estimated_time = GenerationStateManager.ESTIMATED_TIMES.get(
-                    settings["resolution"], 10.0
-                )
-                st.info(f"🎨 {t('generation.in_progress')} ({t('generation.estimated_time', seconds=f'{estimated_time:.0f}')})")
+        # Create a placeholder for progress
+        progress_container = st.empty()
+        status_container = st.empty()
 
-                # Progress bar
-                progress_bar = st.progress(0, text=t("basic.generating"))
+        result = None
+        with status_container.container():
+            # Show progress indicator
+            estimated_time = GenerationStateManager.ESTIMATED_TIMES.get(
+                gen_settings["resolution"], 10.0
+            )
+            st.info(f"🎨 {t('generation.in_progress')} ({t('generation.estimated_time', seconds=f'{estimated_time:.0f}')})")
 
-                # Simulate progress while waiting for API
-                start_time = time.time()
+            # Progress bar
+            progress_bar = st.progress(0, text=t("basic.generating"))
 
-                try:
-                    # Check for cancellation
-                    if GenerationStateManager.is_cancelled():
-                        GenerationStateManager.complete_generation(error=t("generation.cancelled"))
-                        st.rerun()
-
-                    # Run sync generation
-                    result = generator.generate(
-                        prompt=prompt,
-                        aspect_ratio=settings["aspect_ratio"],
-                        resolution=settings["resolution"],
-                        enable_thinking=settings["enable_thinking"],
-                        enable_search=settings["enable_search"],
-                        safety_level=settings.get("safety_level", "moderate"),
-                    )
-
-                    # Update progress to 100%
-                    progress_bar.progress(1.0, text=t("generation.complete"))
-
-                    # Complete the generation task
-                    GenerationStateManager.complete_generation(
-                        result=result,
-                        error=result.error if result.error else None
-                    )
-
-                except Exception as e:
-                    GenerationStateManager.complete_generation(error=str(e))
-                    st.error(f"❌ {t('basic.error')}: {get_friendly_error_message(str(e), t)}")
-                    return
-
-            # Clear progress containers
-            progress_container.empty()
-            status_container.empty()
-
-            # Handle result
-            if result.error:
-                icon = "🛡️" if result.safety_blocked else "❌"
-                st.error(f"{icon} {t('basic.error')}: {get_friendly_error_message(result.error, t)}")
-            elif result.image:
-                # Save using history sync manager (user-specific)
-                history_sync = get_current_user_history_sync()
-                filename = history_sync.save_to_history(
-                    image=result.image,
-                    prompt=prompt,
-                    settings=settings,
-                    duration=result.duration,
-                    mode="basic",
-                    text_response=result.text,
-                    thinking=result.thinking,
+            try:
+                # Run sync generation
+                result = generator.generate(
+                    prompt=gen_prompt,
+                    aspect_ratio=gen_settings["aspect_ratio"],
+                    resolution=gen_settings["resolution"],
+                    enable_thinking=gen_settings["enable_thinking"],
+                    enable_search=gen_settings["enable_search"],
+                    safety_level=gen_settings.get("safety_level", "moderate"),
                 )
 
-                # Toast notification for save success
-                if filename:
-                    st.toast(t("toast.image_saved", filename=filename), icon="✅")
+                # Update progress to 100%
+                progress_bar.progress(1.0, text=t("generation.complete"))
 
-                # Store as last result for this mode
-                st.session_state.basic_last_result = {
-                    "image": result.image,
-                    "text": result.text,
-                    "thinking": result.thinking,
-                    "duration": result.duration,
-                    "filename": filename,
-                }
+                # Complete the generation task
+                GenerationStateManager.complete_generation(
+                    result=result,
+                    error=result.error if result.error else None
+                )
 
-                # Display result
-                _display_result(t, result.image, result.text, result.thinking,
-                               result.duration, filename)
-            else:
-                st.warning(f"⚠️ {t('basic.no_image')}")
+            except Exception as e:
+                GenerationStateManager.complete_generation(error=str(e))
+                del st.session_state._pending_generation
+                st.error(f"❌ {t('basic.error')}: {get_friendly_error_message(str(e), t)}")
+                return
+
+        # Clean up pending generation
+        del st.session_state._pending_generation
+
+        # Clear progress containers
+        progress_container.empty()
+        status_container.empty()
+
+        # Handle result
+        if result.error:
+            icon = "🛡️" if result.safety_blocked else "❌"
+            st.error(f"{icon} {t('basic.error')}: {get_friendly_error_message(result.error, t)}")
+        elif result.image:
+            # Save using history sync manager (user-specific)
+            history_sync = get_current_user_history_sync()
+            filename = history_sync.save_to_history(
+                image=result.image,
+                prompt=gen_prompt,
+                settings=gen_settings,
+                duration=result.duration,
+                mode="basic",
+                text_response=result.text,
+                thinking=result.thinking,
+            )
+
+            # Toast notification for save success
+            if filename:
+                st.toast(t("toast.image_saved", filename=filename), icon="✅")
+
+            # Store as last result for this mode
+            st.session_state.basic_last_result = {
+                "image": result.image,
+                "text": result.text,
+                "thinking": result.thinking,
+                "duration": result.duration,
+                "filename": filename,
+            }
+
+            # Display result
+            _display_result(t, result.image, result.text, result.thinking,
+                           result.duration, filename)
+        else:
+            st.warning(f"⚠️ {t('basic.no_image')}")
 
     # Show last generated image from current session (only for basic mode)
     elif not is_generating and "basic_last_result" in st.session_state and st.session_state.basic_last_result:

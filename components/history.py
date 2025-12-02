@@ -258,9 +258,8 @@ def _open_preview_dialog(item: dict, t: Translator):
 
 
 def _on_data_source_change():
-    """Handle data source change - clear and reload history."""
+    """Handle data source change - trigger reload."""
     st.session_state.history_page = 1
-    st.session_state.history = []  # Clear current history
     st.session_state["_history_needs_reload"] = True
 
 
@@ -289,25 +288,47 @@ def render_history(t: Translator):
         )
 
     # Determine which history sync to use based on data source
-    data_source = st.session_state.get("history_data_source", "shared")
+    # Force "shared" when user is not logged in
+    if not user_logged_in:
+        data_source = "shared"
+        # Reset to shared if was personal (user logged out)
+        if st.session_state.get("history_data_source") == "personal":
+            st.session_state.history_data_source = "shared"
+    else:
+        data_source = st.session_state.get("history_data_source", "personal")
+
+    # Track previous data source to detect changes
+    prev_data_source = st.session_state.get("_history_prev_data_source")
+    data_source_changed = prev_data_source is not None and prev_data_source != data_source
+    st.session_state["_history_prev_data_source"] = data_source
+
     if user_logged_in and data_source == "personal":
         history_sync = get_current_user_history_sync()
-        history_key = "_history_personal"
+        history_key = "history_personal"
     else:
         history_sync = get_history_sync(user_id=None)  # Shared storage
-        history_key = "_history_shared"
+        history_key = "history_shared"
+
+    # Initialize history storage for this data source if not exists
+    if history_key not in st.session_state:
+        st.session_state[history_key] = []
 
     # Reload history when data source changes or first load
-    needs_reload = st.session_state.get("_history_needs_reload", False)
+    needs_reload = st.session_state.get("_history_needs_reload", False) or data_source_changed
     history_loaded_key = f"{history_key}_loaded"
 
     if needs_reload or not st.session_state.get(history_loaded_key):
+        # Clear the specific history list before reloading
+        st.session_state[history_key] = []
+        # Point the global "history" to the correct list for sync_from_disk
+        st.session_state.history = st.session_state[history_key]
         with st.spinner(t("history.loading")):
             history_sync.sync_from_disk(force=True)
         st.session_state[history_loaded_key] = True
         st.session_state["_history_needs_reload"] = False
 
-    full_history = st.session_state.get("history", [])
+    # Always use the correct history list for current data source
+    full_history = st.session_state.get(history_key, [])
 
     # Search and filter controls - Row 1
     col_search, col_filter = st.columns([3, 2])
