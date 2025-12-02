@@ -106,9 +106,11 @@ class AuthService:
     def init_session_state(self):
         """Initialize authentication-related session state."""
         if "auth_token" not in st.session_state:
-            st.session_state.auth_token = None
-        if "auth_user" not in st.session_state:
-            st.session_state.auth_user = None
+            # Try to load from browser storage
+            from .persistence import get_persistence
+            token, user = get_persistence().load_auth()
+            st.session_state.auth_token = token
+            st.session_state.auth_user = user
 
     def is_authenticated(self) -> bool:
         """Check if the current user is authenticated."""
@@ -170,6 +172,9 @@ class AuthService:
                 user_info = self._fetch_user_info(token.get("access_token"))
                 if user_info:
                     st.session_state.auth_user = user_info
+                    # Persist auth to browser storage
+                    from .persistence import get_persistence
+                    get_persistence().save_auth(token, user_info)
                     return True
 
         except Exception as e:
@@ -208,6 +213,9 @@ class AuthService:
         """Log out the current user."""
         st.session_state.auth_token = None
         st.session_state.auth_user = None
+        # Clear from browser storage
+        from .persistence import get_persistence
+        get_persistence().clear_auth()
 
     def render_user_info(self, t=None):
         """

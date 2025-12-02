@@ -112,7 +112,7 @@ class HistorySyncManager:
 
             try:
                 # Save to storage
-                filename = self._storage.save_image(
+                filename, r2_url = self._storage.save_image(
                     image=image,
                     prompt=prompt,
                     settings=settings,
@@ -125,6 +125,7 @@ class HistorySyncManager:
                 # Update session state history
                 self._update_session_history(
                     filename=filename,
+                    r2_url=r2_url,
                     image=image,
                     prompt=prompt,
                     settings=settings,
@@ -144,6 +145,7 @@ class HistorySyncManager:
     def _update_session_history(
         self,
         filename: str,
+        r2_url: Optional[str],
         image: Image.Image,
         prompt: str,
         settings: Dict[str, Any],
@@ -156,15 +158,10 @@ class HistorySyncManager:
         if "history" not in st.session_state:
             st.session_state.history = []
 
-        # Build R2 URL if available
-        r2_url = None
-        if self._storage.r2_enabled and filename:
-            r2_url = self._storage._r2.get_public_url(filename)
-
         record = {
             "prompt": prompt,
             "image": image,
-            "r2_url": r2_url,  # CDN URL for fast loading
+            "r2_url": r2_url,  # CDN URL for fast loading (passed from save_image)
             "text": text_response,
             "thinking": thinking,
             "duration": duration,

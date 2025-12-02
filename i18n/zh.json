@@ -255,6 +255,9 @@
   "history": {
     "title": "生成历史",
     "description": "查看之前生成的图像。图像会自动保存到磁盘。",
+    "data_source": "数据来源",
+    "data_source_personal": "👤 我的图片",
+    "data_source_shared": "🌐 共享",
     "empty": "还没有生成任何图像，开始创作吧！",
     "empty_hint": "前往「基础生图」或其他模式创建第一张图片。",
     "loading": "加载历史记录中...",

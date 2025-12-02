@@ -11,20 +11,15 @@ from services import get_persistence, HealthCheckService, get_auth_service
 def render_auth_section(t: Translator) -> bool:
     """
     Render the authentication section in the sidebar.
+    Login is optional - users can use all features without logging in.
 
     Returns:
         True if user is authenticated, False otherwise
     """
     auth = get_auth_service()
 
-    # If auth is not enabled, skip this section
-    if not auth.is_auth_required:
-        return True
-
-    # If auth is required but not available (missing config)
+    # If auth is not available (not configured), skip this section entirely
     if not auth.is_available:
-        st.warning(t("sidebar.auth.login_required"))
-        st.info("GitHub OAuth is not configured. Please set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.")
         return False
 
     st.subheader(t("sidebar.auth.title"))
@@ -50,8 +45,8 @@ def render_auth_section(t: Translator) -> bool:
 
         return True
     else:
-        # Show login button
-        st.info(t("sidebar.auth.login_benefits"))
+        # Show login button (optional, not required)
+        st.caption(t("sidebar.auth.login_benefits"))
 
         if auth.render_login_button(t("sidebar.auth.login_btn")):
             st.rerun()
@@ -203,11 +198,10 @@ def render_sidebar(t: Translator) -> dict:
     with st.sidebar:
         st.title(t("sidebar.title"))
 
-        # Authentication section (if enabled)
+        # Authentication section (optional - show if available)
         auth_service = get_auth_service()
-        is_authenticated = True
-        if auth_service.is_auth_required:
-            is_authenticated = render_auth_section(t)
+        user_authenticated = render_auth_section(t)
+        if auth_service.is_available:
             st.divider()
 
         # API Key section
@@ -393,5 +387,5 @@ def render_sidebar(t: Translator) -> dict:
         "enable_search": enable_search,
         "safety_level": safety_level,
         "api_key_valid": api_key_valid,
-        "is_authenticated": is_authenticated,
+        "is_authenticated": user_authenticated,
     }

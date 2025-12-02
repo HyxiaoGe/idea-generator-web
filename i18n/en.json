@@ -255,6 +255,9 @@
   "history": {
     "title": "Generation History",
     "description": "View your previously generated images. Images are automatically saved to disk.",
+    "data_source": "Data Source",
+    "data_source_personal": "👤 My Images",
+    "data_source_shared": "🌐 Shared",
     "empty": "No images generated yet. Start creating!",
     "empty_hint": "Go to Basic Generation or other modes to create your first image.",
     "loading": "Loading history...",

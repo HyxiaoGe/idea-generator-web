@@ -7,7 +7,12 @@ from datetime import datetime, date, timedelta
 import streamlit as st
 import requests
 from i18n import Translator
-from services import get_current_user_storage, get_current_user_history_sync
+from services import (
+    get_current_user_storage,
+    get_current_user_history_sync,
+    get_history_sync,
+    is_authenticated,
+)
 
 
 # Pagination settings
@@ -23,6 +28,9 @@ SORT_OPTIONS = ["newest", "oldest", "fastest", "slowest"]
 # Grid columns options
 GRID_COLS_OPTIONS = [2, 3, 4]
 DEFAULT_GRID_COLS = 4
+
+# Data source options
+DATA_SOURCE_OPTIONS = ["personal", "shared"]
 
 
 def _get_mode_label(mode: str, t: Translator) -> str:
@@ -49,10 +57,19 @@ def _init_history_state():
         "history_sort": "newest",
         "history_date_range": "all",
         "history_grid_cols": DEFAULT_GRID_COLS,
+        "history_data_source": "personal" if is_authenticated() else "shared",
     }
     for key, default_value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = default_value
+
+    # Validate per_page value (fix corrupted state)
+    if st.session_state.get("history_per_page") not in PER_PAGE_OPTIONS:
+        st.session_state["history_per_page"] = DEFAULT_PER_PAGE
+    
+    # Sync widget key with actual value
+    if "history_per_page_widget" not in st.session_state:
+        st.session_state["history_per_page_widget"] = st.session_state["history_per_page"]
 
 
 def _filter_history(
@@ -126,7 +143,12 @@ def _get_paginated_items(items: list, page: int, per_page: int) -> tuple:
     """Get paginated subset of items."""
     total_items = len(items)
     total_pages = max(1, math.ceil(total_items / per_page))
-    page = max(1, min(page, total_pages))
+    
+    # Clamp page to valid range and update session state
+    valid_page = max(1, min(page, total_pages))
+    if valid_page != page:
+        st.session_state.history_page = valid_page
+        page = valid_page
 
     start_idx = (page - 1) * per_page
     end_idx = start_idx + per_page
@@ -137,6 +159,12 @@ def _get_paginated_items(items: list, page: int, per_page: int) -> tuple:
 # Callbacks for filter changes - avoids manual rerun checks
 def _on_filter_change():
     """Reset to page 1 when any filter changes."""
+    st.session_state.history_page = 1
+
+
+def _on_per_page_change():
+    """Handle per_page change - sync widget value to session state."""
+    st.session_state.history_per_page = st.session_state.history_per_page_widget
     st.session_state.history_page = 1
 
 
@@ -229,6 +257,13 @@ def _open_preview_dialog(item: dict, t: Translator):
         )
 
 
+def _on_data_source_change():
+    """Handle data source change - clear and reload history."""
+    st.session_state.history_page = 1
+    st.session_state.history = []  # Clear current history
+    st.session_state["_history_needs_reload"] = True
+
+
 def render_history(t: Translator):
     """Render the image generation history with pagination and search."""
     _init_history_state()
@@ -236,17 +271,41 @@ def render_history(t: Translator):
     st.header(t("history.title"))
     st.caption(t("history.description"))
 
-    # Get history sync manager
-    history_sync = get_current_user_history_sync()
+    # Data source selector (only show if user is logged in)
+    user_logged_in = is_authenticated()
+    if user_logged_in:
+        data_source_labels = {
+            "personal": t("history.data_source_personal"),
+            "shared": t("history.data_source_shared"),
+        }
+        st.segmented_control(
+            t("history.data_source"),
+            options=DATA_SOURCE_OPTIONS,
+            format_func=lambda x: data_source_labels.get(x, x),
+            key="history_data_source",
+            default="personal",
+            selection_mode="single",
+            on_change=_on_data_source_change,
+        )
 
-    # Only sync from disk when entering history page for the first time
-    # or when explicitly refreshed (not on every rerun)
-    history_loaded_key = "_history_page_loaded"
-    if not st.session_state.get(history_loaded_key):
-        if "history" not in st.session_state or not st.session_state.history:
-            with st.spinner(t("history.loading")):
-                history_sync.sync_from_disk(force=True)
+    # Determine which history sync to use based on data source
+    data_source = st.session_state.get("history_data_source", "shared")
+    if user_logged_in and data_source == "personal":
+        history_sync = get_current_user_history_sync()
+        history_key = "_history_personal"
+    else:
+        history_sync = get_history_sync(user_id=None)  # Shared storage
+        history_key = "_history_shared"
+
+    # Reload history when data source changes or first load
+    needs_reload = st.session_state.get("_history_needs_reload", False)
+    history_loaded_key = f"{history_key}_loaded"
+
+    if needs_reload or not st.session_state.get(history_loaded_key):
+        with st.spinner(t("history.loading")):
+            history_sync.sync_from_disk(force=True)
         st.session_state[history_loaded_key] = True
+        st.session_state["_history_needs_reload"] = False
 
     full_history = st.session_state.get("history", [])
 
@@ -323,11 +382,19 @@ def render_history(t: Translator):
         )
 
     with col_per_page:
+        # Get current value from session state, ensure it's valid
+        current_per_page = st.session_state.get("history_per_page", DEFAULT_PER_PAGE)
+        if current_per_page not in PER_PAGE_OPTIONS:
+            current_per_page = DEFAULT_PER_PAGE
+            st.session_state.history_per_page = current_per_page
+        
+        current_idx = PER_PAGE_OPTIONS.index(current_per_page)
         st.selectbox(
             t("history.per_page"),
             options=PER_PAGE_OPTIONS,
-            key="history_per_page",
-            on_change=_on_filter_change,
+            index=current_idx,
+            key="history_per_page_widget",  # Use separate widget key
+            on_change=_on_per_page_change,
             label_visibility="collapsed"
         )
 
@@ -345,6 +412,8 @@ def render_history(t: Translator):
             options=GRID_COLS_OPTIONS,
             format_func=lambda x: str(x),
             key="history_grid_cols",
+            default=DEFAULT_GRID_COLS,
+            selection_mode="single",
             label_visibility="collapsed"
         )
 
@@ -376,18 +445,21 @@ def render_history(t: Translator):
     st.divider()
 
     # Pagination - only load current page items (lazy loading)
+    # Ensure per_page is a valid value from options
+    per_page = st.session_state.get("history_per_page", DEFAULT_PER_PAGE)
+    if per_page not in PER_PAGE_OPTIONS:
+        per_page = DEFAULT_PER_PAGE
+    
+    print(f"[History Debug] items={len(filtered_history)}, per_page={per_page}, page={st.session_state.history_page}")
+    
     paginated_items, total_pages = _get_paginated_items(
         filtered_history,
         st.session_state.history_page,
-        st.session_state.get("history_per_page", DEFAULT_PER_PAGE)
+        per_page
     )
 
-    # Pagination controls (top)
-    if total_pages > 1:
-        _render_pagination_controls(t, total_pages)
-
     # Display history items in grid
-    cols_per_row = st.session_state.get("history_grid_cols", DEFAULT_GRID_COLS)
+    cols_per_row = st.session_state.get("history_grid_cols") or DEFAULT_GRID_COLS
     for row_idx in range(0, len(paginated_items), cols_per_row):
         cols = st.columns(cols_per_row)
 
@@ -400,44 +472,57 @@ def render_history(t: Translator):
             with col:
                 _render_history_item(t, item, item_idx)
 
-    # Pagination controls (bottom)
+    # Pagination controls (only at bottom, only if more than 1 page)
     if total_pages > 1:
         st.divider()
-        _render_pagination_controls(t, total_pages, key_suffix="_bottom")
+        _render_pagination_controls(t, total_pages)
 
+
+
+def _on_prev_page():
+    """Go to previous page."""
+    if st.session_state.history_page > 1:
+        st.session_state.history_page -= 1
+
+
+def _on_next_page(total_pages: int):
+    """Go to next page."""
+    if st.session_state.history_page < total_pages:
+        st.session_state.history_page += 1
 
 
 def _render_pagination_controls(t: Translator, total_pages: int, key_suffix: str = ""):
     """Render pagination controls."""
+    current_page = st.session_state.history_page
+    
     col1, col2, col3 = st.columns([1, 2, 1])
 
     with col1:
-        if st.button(
+        st.button(
             f"◀ {t('history.prev_btn')}",
-            disabled=st.session_state.history_page <= 1,
+            disabled=current_page <= 1,
             width="stretch",
-            key=f"prev_btn{key_suffix}"
-        ):
-            st.session_state.history_page -= 1
-            # No explicit rerun needed - Streamlit auto-reruns after button click
+            key=f"prev_btn{key_suffix}",
+            on_click=_on_prev_page
+        )
 
     with col2:
         st.markdown(
             f"<div style='text-align: center; padding: 8px;'>"
-            f"{t('history.page_info', current=st.session_state.history_page, total=total_pages)}"
+            f"{t('history.page_info', current=current_page, total=total_pages)}"
             f"</div>",
             unsafe_allow_html=True
         )
 
     with col3:
-        if st.button(
+        st.button(
             f"{t('history.next_btn')} ▶",
-            disabled=st.session_state.history_page >= total_pages,
+            disabled=current_page >= total_pages,
             width="stretch",
-            key=f"next_btn{key_suffix}"
-        ):
-            st.session_state.history_page += 1
-            # No explicit rerun needed - Streamlit auto-reruns after button click
+            key=f"next_btn{key_suffix}",
+            on_click=_on_next_page,
+            args=(total_pages,)
+        )
 
 
 def _render_empty_state(t: Translator):
@@ -457,7 +542,6 @@ def _render_empty_state(t: Translator):
         )
 
 
-@st.fragment
 def _render_history_item(t: Translator, item: dict, idx: int):
     """Render a single history item with click-to-preview."""
     with st.container(border=True):

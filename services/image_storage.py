@@ -27,10 +27,11 @@ class ImageStorage:
         self.user_id = user_id
 
         # If user_id is provided, create user-specific directory
+        # Otherwise use the base output_dir directly (backward compatible)
         if user_id:
             self.base_output_dir = Path(output_dir) / "users" / user_id
         else:
-            self.base_output_dir = Path(output_dir) / "shared"
+            self.base_output_dir = Path(output_dir)
 
         self.base_output_dir.mkdir(parents=True, exist_ok=True)
         self.metadata_file = self.base_output_dir / "history.json"
@@ -177,7 +178,8 @@ class ImageStorage:
 
         self._save_metadata()
 
-        return filename
+        # Return filename and r2_url for immediate use
+        return filename, record.get("r2_url")
 
     def get_history(self, limit: int = 50) -> List[Dict[str, Any]]:
         """

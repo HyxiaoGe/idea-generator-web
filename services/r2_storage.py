@@ -113,18 +113,23 @@ class R2Storage:
         """Get user-specific prefix for data isolation."""
         if self.user_id:
             return f"users/{self.user_id}"
-        return "shared"
+        return ""  # No prefix for anonymous users (backward compatible)
 
     def _get_date_prefix(self) -> str:
         """Get date-based folder prefix (YYYY/MM/DD) with user prefix."""
         now = datetime.now()
         user_prefix = self._get_user_prefix()
-        return f"{user_prefix}/{now.year}/{now.month:02d}/{now.day:02d}"
+        date_path = f"{now.year}/{now.month:02d}/{now.day:02d}"
+        if user_prefix:
+            return f"{user_prefix}/{date_path}"
+        return date_path
 
     def _get_history_key(self) -> str:
         """Get the history.json key for the current user."""
         user_prefix = self._get_user_prefix()
-        return f"{user_prefix}/history.json"
+        if user_prefix:
+            return f"{user_prefix}/history.json"
+        return "history.json"
 
     def _generate_filename(self, mode: str, prompt: str) -> str:
         """
@@ -134,8 +139,8 @@ class R2Storage:
         """
         timestamp = datetime.now().strftime("%H%M%S")
 
-        # Create a slug from prompt (first 30 chars, alphanumeric only)
-        prompt_slug = "".join(c if c.isalnum() else "_" for c in prompt[:30])
+        # Create a slug from prompt (ASCII alphanumeric only for URL safety)
+        prompt_slug = "".join(c if c.isascii() and c.isalnum() else "_" for c in prompt[:30])
         prompt_slug = prompt_slug.strip("_")[:20]  # Trim and limit length
 
         if not prompt_slug:
@@ -184,9 +189,10 @@ class R2Storage:
             image.save(img_buffer, format="PNG")
             img_buffer.seek(0)
 
-            # Prepare metadata
+            # Prepare metadata (S3 metadata only supports ASCII, so we encode non-ASCII)
+            import urllib.parse
             metadata = {
-                "prompt": prompt[:256],  # R2 metadata has size limits
+                "prompt": urllib.parse.quote(prompt[:256], safe=""),  # URL-encode for non-ASCII
                 "mode": mode,
                 "duration": str(round(duration, 2)),
                 "aspect_ratio": settings.get("aspect_ratio", "16:9"),

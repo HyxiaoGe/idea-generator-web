@@ -82,6 +82,8 @@ class PersistenceService:
                 "enable_thinking": False,
                 "enable_search": False,
             },
+            "auth_token": None,
+            "auth_user": None,
         }
 
     def load_all(self) -> dict:
@@ -232,6 +234,25 @@ class PersistenceService:
     def load_mode(self) -> Optional[str]:
         """Load mode preference."""
         return self.load_all().get("mode")
+
+    def save_auth(self, token: dict, user: dict) -> bool:
+        """Save authentication token and user info."""
+        data = self.load_all()
+        data["auth_token"] = token
+        data["auth_user"] = user
+        return self.save_all(data)
+
+    def load_auth(self) -> tuple:
+        """Load authentication token and user info."""
+        data = self.load_all()
+        return data.get("auth_token"), data.get("auth_user")
+
+    def clear_auth(self) -> bool:
+        """Clear stored authentication data."""
+        data = self.load_all()
+        data["auth_token"] = None
+        data["auth_user"] = None
+        return self.save_all(data)
 
 
 # Global instance

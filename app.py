@@ -120,13 +120,6 @@ def main():
     st.title(f"🍌 {t('app.title')}")
     st.caption(t("app.subtitle"))
 
-    # Check authentication if required
-    auth_service = get_auth_service()
-    if auth_service.is_auth_required and not settings.get("is_authenticated"):
-        st.warning(t("sidebar.auth.login_required"))
-        st.info(t("sidebar.auth.login_help"))
-        return
-
     # Check if API key is valid
     if not settings.get("api_key_valid"):
         st.warning(t("errors.api_key_required"))
