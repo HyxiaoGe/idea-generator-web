@@ -187,8 +187,11 @@
     "cost_label": "预估成本",
     "images": "张图像",
     "variation_hint": "每次生成都会产生对提示词的独特诠释。",
+    "parallel_mode": "⚡ 并行模式",
+    "parallel_help": "并发生成图片以获得更快的结果（3-4倍提速）",
     "generating": "正在生成图像...",
     "progress_text": "正在生成第 {current} 张，共 {total} 张...",
+    "progress_parallel": "已完成 {completed} / {total} 张图片...",
     "complete": "生成完成！",
     "results": "生成的图像",
     "successful": "成功",
@@ -342,7 +345,14 @@
     "date_today": "📅 今天",
     "date_week": "📅 最近7天",
     "date_month": "📅 最近30天",
-    "grid_cols": "列数"
+    "grid_cols": "列数",
+    "chat_collection": "对话合集",
+    "batch_collection": "批量合集",
+    "images": "张图片",
+    "view_collection": "查看合集",
+    "image": "图片",
+    "duration": "耗时",
+    "response": "响应"
   },
   "errors": {
     "api_key_missing": "未配置 API 密钥，请在 .env 文件中设置 GOOGLE_API_KEY。",

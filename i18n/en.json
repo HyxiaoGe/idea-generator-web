@@ -176,7 +176,8 @@
         "Try: 'Make it look more realistic'"
       ]
     },
-    "messages_count": "{count} messages"
+    "messages_count": "{count} messages",
+    "response": "Response"
   },
   "batch": {
     "title": "Batch Generation",
@@ -187,8 +188,11 @@
     "cost_label": "Estimated Cost",
     "images": "images",
     "variation_hint": "Each generation will produce a unique interpretation of your prompt.",
+    "parallel_mode": "⚡ Parallel",
+    "parallel_help": "Generate images concurrently for faster results (3-4x speedup)",
     "generating": "Generating images...",
     "progress_text": "Generating image {current} of {total}...",
+    "progress_parallel": "Completed {completed} of {total} images...",
     "complete": "Generation complete!",
     "results": "Generated Images",
     "successful": "Successful",
@@ -342,7 +346,14 @@
     "date_today": "📅 Today",
     "date_week": "📅 Last 7 Days",
     "date_month": "📅 Last 30 Days",
-    "grid_cols": "Columns"
+    "grid_cols": "Columns",
+    "chat_collection": "Chat Collection",
+    "batch_collection": "Batch Collection",
+    "images": "images",
+    "view_collection": "View Collection",
+    "image": "Image",
+    "duration": "Duration",
+    "response": "Response"
   },
   "errors": {
     "api_key_missing": "API key not configured. Please set GOOGLE_API_KEY in your .env file.",

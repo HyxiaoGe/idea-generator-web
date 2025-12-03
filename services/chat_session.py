@@ -3,6 +3,7 @@ Chat Session Manager for multi-turn image generation.
 """
 import os
 import time
+import uuid
 from typing import Optional, List
 from dataclasses import dataclass, field
 from PIL import Image
@@ -59,6 +60,7 @@ class ChatSession:
         self.chat = None
         self.messages: List[ChatMessage] = []
         self.aspect_ratio = "16:9"
+        self.session_id: Optional[str] = None  # Unique ID for this chat session
 
     def update_api_key(self, api_key: str):
         """Update the API key and reinitialize the client."""
@@ -68,15 +70,17 @@ class ChatSession:
         self.clear_session()
 
     def start_session(self, aspect_ratio: str = "16:9"):
-        """Start a new chat session."""
+        """Start a new chat session with a unique session ID."""
         self.chat = self.client.chats.create(model=self.MODEL_ID)
         self.messages = []
         self.aspect_ratio = aspect_ratio
+        self.session_id = str(uuid.uuid4())  # Generate unique session ID
 
     def clear_session(self):
         """Clear the current chat session."""
         self.chat = None
         self.messages = []
+        self.session_id = None
 
     def send_message(
         self,
@@ -173,3 +177,7 @@ class ChatSession:
     def is_active(self) -> bool:
         """Check if there's an active chat session."""
         return self.chat is not None
+
+    def get_session_id(self) -> Optional[str]:
+        """Get the current session ID."""
+        return self.session_id

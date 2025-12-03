@@ -101,6 +101,8 @@ class ImageStorage:
         mode: str = "basic",
         text_response: Optional[str] = None,
         thinking: Optional[str] = None,
+        session_id: Optional[str] = None,
+        chat_index: Optional[int] = None,
     ) -> str:
         """
         Save an image to storage (local and optionally R2).
@@ -113,6 +115,8 @@ class ImageStorage:
             mode: Generation mode (basic, chat, batch, etc.)
             text_response: Optional text response from model
             thinking: Optional thinking process
+            session_id: Optional chat session ID for grouping
+            chat_index: Optional index within chat session
 
         Returns:
             The filename of the saved image
@@ -147,6 +151,10 @@ class ImageStorage:
             record["text_response"] = text_response[:500]
         if thinking:
             record["thinking"] = thinking[:500]
+        if session_id:
+            record["session_id"] = session_id
+        if chat_index is not None:
+            record["chat_index"] = chat_index
 
         # Save to R2 if enabled
         print(f"[Storage] R2 available: {self._r2.is_available}")
@@ -160,6 +168,8 @@ class ImageStorage:
                 mode=mode,
                 text_response=text_response,
                 thinking=thinking,
+                session_id=session_id,
+                chat_index=chat_index,
             )
             if r2_key:
                 record["r2_key"] = r2_key

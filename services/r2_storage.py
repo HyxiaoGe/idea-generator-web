@@ -157,6 +157,8 @@ class R2Storage:
         mode: str = "basic",
         text_response: Optional[str] = None,
         thinking: Optional[str] = None,
+        session_id: Optional[str] = None,
+        chat_index: Optional[int] = None,
     ) -> Optional[str]:
         """
         Save an image to R2 storage.
@@ -169,6 +171,8 @@ class R2Storage:
             mode: Generation mode (basic, chat, batch, etc.)
             text_response: Optional text response from model
             thinking: Optional thinking process
+            session_id: Optional chat session ID for grouping
+            chat_index: Optional index within chat session
 
         Returns:
             The R2 key (path) of the saved image, or None if failed
@@ -199,6 +203,11 @@ class R2Storage:
                 "resolution": settings.get("resolution", "1K"),
                 "created_at": datetime.now().isoformat(),
             }
+            
+            if session_id:
+                metadata["session_id"] = session_id
+            if chat_index is not None:
+                metadata["chat_index"] = str(chat_index)
 
             # Upload to R2 with long cache (images are immutable)
             self._client.put_object(
@@ -211,7 +220,7 @@ class R2Storage:
             )
 
             # Also save/update the history index
-            self._update_history_index(key, prompt, settings, duration, mode, text_response, thinking)
+            self._update_history_index(key, prompt, settings, duration, mode, text_response, thinking, session_id, chat_index)
 
             print(f"[R2 Save] SUCCESS - key={key}")
             return key
@@ -228,7 +237,9 @@ class R2Storage:
         duration: float,
         mode: str,
         text_response: Optional[str],
-        thinking: Optional[str]
+        thinking: Optional[str],
+        session_id: Optional[str] = None,
+        chat_index: Optional[int] = None,
     ):
         """Update the history index file in R2."""
         try:
@@ -253,6 +264,10 @@ class R2Storage:
                 record["text_response"] = text_response[:500]
             if thinking:
                 record["thinking"] = thinking[:500]
+            if session_id:
+                record["session_id"] = session_id
+            if chat_index is not None:
+                record["chat_index"] = chat_index
 
             history.insert(0, record)
 

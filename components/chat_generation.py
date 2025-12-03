@@ -209,6 +209,12 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
                 # Store in history using sync manager
                 if response.image:
                     history_sync = get_current_user_history_sync()
+                    
+                    # Get session ID and calculate chat index
+                    session_id = chat_session.get_session_id()
+                    # Count images in current session
+                    chat_index = sum(1 for msg in st.session_state.chat_messages if msg.get("image") is not None)
+                    
                     filename = history_sync.save_to_history(
                         image=response.image,
                         prompt=prompt,
@@ -217,6 +223,8 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
                         mode="chat",
                         text_response=response.text,
                         thinking=response.thinking,
+                        session_id=session_id,
+                        chat_index=chat_index,
                     )
 
                     # Toast notification for save success

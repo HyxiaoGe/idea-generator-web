@@ -89,6 +89,8 @@ class HistorySyncManager:
         mode: str = "basic",
         text_response: Optional[str] = None,
         thinking: Optional[str] = None,
+        session_id: Optional[str] = None,
+        chat_index: Optional[int] = None,
     ) -> Optional[str]:
         """
         Save an image to history with proper locking.
@@ -101,6 +103,8 @@ class HistorySyncManager:
             mode: Generation mode
             text_response: Optional text response
             thinking: Optional thinking process
+            session_id: Optional chat session ID for grouping
+            chat_index: Optional index within chat session
 
         Returns:
             Filename if saved successfully, None otherwise
@@ -120,6 +124,8 @@ class HistorySyncManager:
                     mode=mode,
                     text_response=text_response,
                     thinking=thinking,
+                    session_id=session_id,
+                    chat_index=chat_index,
                 )
 
                 # Update session state history
@@ -133,6 +139,8 @@ class HistorySyncManager:
                     mode=mode,
                     text_response=text_response,
                     thinking=thinking,
+                    session_id=session_id,
+                    chat_index=chat_index,
                 )
 
                 return filename
@@ -153,6 +161,8 @@ class HistorySyncManager:
         mode: str,
         text_response: Optional[str],
         thinking: Optional[str],
+        session_id: Optional[str],
+        chat_index: Optional[int],
     ):
         """Update the session state history."""
         if "history" not in st.session_state:
@@ -169,6 +179,8 @@ class HistorySyncManager:
             "mode": mode,
             "filename": filename,
             "created_at": datetime.now().isoformat(),
+            "session_id": session_id,  # Chat session ID for grouping
+            "chat_index": chat_index,  # Index within chat session
         }
 
         st.session_state.history.insert(0, record)
@@ -333,6 +345,8 @@ class HistorySyncManager:
                                 "mode": record.get("mode", "basic"),
                                 "filename": filename,
                                 "created_at": record.get("created_at"),
+                                "session_id": record.get("session_id"),
+                                "chat_index": record.get("chat_index"),
                             })
                     else:
                         # Collect for potential preloading
