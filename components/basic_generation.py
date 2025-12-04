@@ -12,7 +12,9 @@ from services import (
     get_friendly_error_message,
     get_current_user_prompt_storage,
     get_prompt_generator,
+    is_trial_mode,
 )
+from .trial_quota_display import check_and_show_quota_warning, consume_quota_after_generation
 
 
 def render_basic_generation(t: Translator, settings: dict, generator: ImageGenerator):
@@ -60,6 +62,11 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
 
     # Handle generation button click - start task and rerun to update UI
     if generate_clicked and prompt.strip() and can_generate:
+        # Check trial quota if in trial mode
+        if is_trial_mode():
+            if not check_and_show_quota_warning(t, "basic", settings["resolution"], 1):
+                return  # Quota exceeded, stop here
+        
         # Save generation params to session state for use after rerun
         st.session_state._pending_generation = {
             "prompt": prompt,
@@ -114,6 +121,10 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
                     result=result,
                     error=result.error if result.error else None
                 )
+                
+                # Consume trial quota if successful
+                if not result.error and result.image:
+                    consume_quota_after_generation("basic", gen_settings["resolution"], 1, True)
 
             except Exception as e:
                 GenerationStateManager.complete_generation(error=str(e))

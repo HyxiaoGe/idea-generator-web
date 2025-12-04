@@ -5,7 +5,8 @@ import os
 import time
 import streamlit as st
 from i18n import LANGUAGES, Translator
-from services import get_persistence, HealthCheckService, get_auth_service
+from services import get_persistence, HealthCheckService, get_auth_service, is_trial_mode
+from .trial_quota_display import render_quota_status_compact
 
 
 def render_auth_section(t: Translator) -> bool:
@@ -213,6 +214,10 @@ def render_sidebar(t: Translator) -> dict:
 
         st.divider()
 
+        # Trial quota status - REMOVED for silent enforcement
+        # Quota is enforced in background without user notification
+        # Users only see error messages when quota is exceeded
+
         # Language selection
         st.subheader(t("sidebar.language"))
         lang_options = list(LANGUAGES.keys())
@@ -247,6 +252,8 @@ def render_sidebar(t: Translator) -> dict:
             "search": t("sidebar.modes.search"),
             "history": t("sidebar.modes.history"),
         }
+        
+        # Quota status page removed - silent enforcement only
 
         # Get saved mode or default to "basic"
         mode_options = list(modes.keys())

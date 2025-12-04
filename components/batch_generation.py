@@ -16,8 +16,10 @@ from services import (
     GenerationStateManager,
     get_current_user_history_sync,
     get_friendly_error_message,
+    is_trial_mode,
 )
 from services.cost_estimator import estimate_cost
+from .trial_quota_display import check_and_show_quota_warning, consume_quota_after_generation
 
 
 def generate_batch(
@@ -267,6 +269,11 @@ def render_batch_generation(t: Translator, settings: dict, generator: ImageGener
                 st.rerun()
 
     if generate_clicked and prompt.strip() and can_generate:
+        # Check trial quota if in trial mode
+        if is_trial_mode():
+            if not check_and_show_quota_warning(t, "batch", settings["resolution"], count):
+                return  # Quota exceeded, stop here
+        
         # Start generation task
         task = GenerationStateManager.start_generation(
             prompt=prompt,
@@ -306,6 +313,11 @@ def render_batch_generation(t: Translator, settings: dict, generator: ImageGener
                     # Complete the generation task
                     GenerationStateManager.complete_generation(result=results)
                     status.update(label=t("batch.complete"), state="complete", expanded=True)
+                    
+                    # Consume trial quota for successful generations
+                    successful_count = len([r for r in results if r.image is not None])
+                    if successful_count > 0:
+                        consume_quota_after_generation("batch", settings["resolution"], successful_count, True)
 
                 except Exception as e:
                     GenerationStateManager.complete_generation(error=str(e))

@@ -385,5 +385,30 @@
     "cancel_btn": "Cancel",
     "cancelled": "Generation cancelled (API request may still complete)",
     "throttle_wait": "Please wait {seconds}s before next generation"
+  },
+  "trial": {
+    "mode_badge": "🎁 Trial Mode",
+    "quota_title": "Trial Quota",
+    "quota_used": "used",
+    "quota_exceeded": "Trial quota exceeded",
+    "quota_low_warning": "⚠️ Trial quota running low! Consider adding your own API key.",
+    "quota_status_title": "Trial Quota Status",
+    "quota_status_description": "Track your daily trial generation quota. Resets every day at UTC 00:00.",
+    "global_quota": "Global Daily Quota",
+    "mode_quotas": "Mode-Specific Quotas",
+    "used": "Used",
+    "remaining": "Remaining",
+    "limit": "Limit",
+    "cost_per_image": "Cost per image",
+    "storage": "Storage",
+    "resets_daily": "Resets daily at UTC 00:00",
+    "how_it_works": "How Trial Mode Works",
+    "how_it_works_content": "**Trial Mode** allows you to test image generation without an API key.\n\n- **Shared Quota**: All trial users share a daily quota pool\n- **Different Costs**: Higher quality (4K) costs more quota points\n- **Mode Limits**: Each generation mode has its own daily limit\n- **Daily Reset**: Quota resets every day at midnight UTC\n- **Cooldown**: 3 second cooldown between generations to prevent spam\n\n**Quota Costs:**\n- Basic 1K/2K: 1 point per image\n- Basic 4K: 3 points per image\n- Chat: 1 point per image\n- Batch 1K/2K: 1 point per image\n- Batch 4K: 3 points per image\n- Search: 2 points per image\n- Blend/Style: 2 points per image",
+    "get_unlimited": "Get Unlimited Access",
+    "get_unlimited_content": "Want unlimited generations?\n\n1. **Get your own API key** from [Google AI Studio](https://aistudio.google.com/app/apikey)\n2. **Enter it in the sidebar** under 'API Key' section\n3. **Enjoy unlimited generations** with your own quota!\n\nYour API key is stored securely in your browser and never shared.",
+    "get_more_quota_hint": "💡 To continue generating, either wait for daily reset or add your own API key in the sidebar.",
+    "not_in_trial_mode": "You are not in trial mode. You're using your own API key.",
+    "trial_info": "🎁 Trial Mode: {remaining} generations remaining today",
+    "view_quota": "View Quota Status"
   }
 }

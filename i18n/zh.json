@@ -384,5 +384,30 @@
     "cancel_btn": "取消",
     "cancelled": "已取消生成（API 请求可能仍在后台完成）",
     "throttle_wait": "请等待 {seconds} 秒后再生成"
+  },
+  "trial": {
+    "mode_badge": "🎁 试用模式",
+    "quota_title": "试用额度",
+    "quota_used": "已使用",
+    "quota_exceeded": "试用额度已超限",
+    "quota_low_warning": "⚠️ 试用额度即将用尽！建议添加自己的 API 密钥。",
+    "quota_status_title": "试用额度状态",
+    "quota_status_description": "查看每日试用生成额度。每天 UTC 00:00 自动重置。",
+    "global_quota": "全局每日额度",
+    "mode_quotas": "各模式专属额度",
+    "used": "已用",
+    "remaining": "剩余",
+    "limit": "上限",
+    "cost_per_image": "单张消耗",
+    "storage": "存储方式",
+    "resets_daily": "每天 UTC 00:00 重置",
+    "how_it_works": "试用模式如何运作",
+    "how_it_works_content": "**试用模式**允许您在没有 API 密钥的情况下测试图像生成。\n\n- **共享额度**: 所有试用用户共享每日额度池\n- **不同消耗**: 高质量 (4K) 消耗更多额度点数\n- **模式限制**: 每种生成模式都有自己的每日上限\n- **每日重置**: 额度在每天 UTC 午夜重置\n- **冷却时间**: 生成间隔 3 秒，防止滥用\n\n**额度消耗：**\n- 基础 1K/2K: 每张 1 点\n- 基础 4K: 每张 3 点\n- 对话: 每张 1 点\n- 批量 1K/2K: 每张 1 点\n- 批量 4K: 每张 3 点\n- 搜索: 每张 2 点\n- 混合/风格: 每张 2 点",
+    "get_unlimited": "获取无限制访问",
+    "get_unlimited_content": "想要无限制生成？\n\n1. **获取自己的 API 密钥** 从 [Google AI Studio](https://aistudio.google.com/app/apikey)\n2. **在侧边栏输入** 在「API 密钥」部分\n3. **享受无限制生成** 使用您自己的配额！\n\n您的 API 密钥安全存储在浏览器中，永不共享。",
+    "get_more_quota_hint": "💡 要继续生成，请等待每日重置或在侧边栏添加自己的 API 密钥。",
+    "not_in_trial_mode": "您不在试用模式。您正在使用自己的 API 密钥。",
+    "trial_info": "🎁 试用模式：今日还可生成 {remaining} 张",
+    "view_quota": "查看额度状态"
   }
 }

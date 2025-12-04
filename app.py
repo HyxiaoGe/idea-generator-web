@@ -38,9 +38,10 @@ from components import (
     render_style_transfer,
     render_search_generation,
     render_batch_generation,
+    render_quota_status_detailed,
 )
 from components.sidebar import get_current_api_key
-from services import ImageGenerator, ChatSession, init_from_persistence, init_auth, get_auth_service
+from services import ImageGenerator, ChatSession, init_from_persistence, init_auth, get_auth_service, is_trial_mode
 
 
 def init_services(api_key: str = None):
@@ -132,6 +133,8 @@ def main():
     if mode == "history":
         render_history(t)
         return
+    
+    # Quota status page removed - silent enforcement only
 
     # Lazy init services only when actually needed
     if st.session_state.get("_services_need_init"):

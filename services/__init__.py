@@ -31,6 +31,13 @@ from .auth import (
 )
 from .prompt_generator import PromptGenerator, get_prompt_generator
 from .prompt_storage import PromptStorage, get_prompt_storage, get_current_user_prompt_storage
+from .trial_quota import (
+    TrialQuotaService,
+    get_trial_quota_service,
+    is_trial_mode,
+    QUOTA_CONFIGS,
+    GLOBAL_DAILY_QUOTA,
+)
 
 __all__ = [
     "ImageGenerator",
@@ -71,4 +78,9 @@ __all__ = [
     "PromptStorage",
     "get_prompt_storage",
     "get_current_user_prompt_storage",
+    "TrialQuotaService",
+    "get_trial_quota_service",
+    "is_trial_mode",
+    "QUOTA_CONFIGS",
+    "GLOBAL_DAILY_QUOTA",
 ]

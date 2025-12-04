@@ -9,7 +9,9 @@ from services import (
     GenerationStateManager,
     get_current_user_history_sync,
     get_friendly_error_message,
+    is_trial_mode,
 )
+from .trial_quota_display import check_and_show_quota_warning, consume_quota_after_generation
 
 
 def render_search_generation(t: Translator, settings: dict, generator: ImageGenerator):
@@ -56,6 +58,10 @@ def render_search_generation(t: Translator, settings: dict, generator: ImageGene
     button_disabled = not prompt.strip() or not can_generate
     if st.button(t("basic.generate_btn"), type="primary", disabled=button_disabled):
         if prompt.strip() and can_generate:
+            # Check trial quota if in trial mode
+            if is_trial_mode():
+                if not check_and_show_quota_warning(t, "search", settings.get("resolution", "1K"), 1):
+                    return  # Quota exceeded, stop here
             # Start generation task
             task = GenerationStateManager.start_generation(
                 prompt=prompt,
@@ -80,6 +86,8 @@ def render_search_generation(t: Translator, settings: dict, generator: ImageGene
                 icon = "🛡️" if result.safety_blocked else "❌"
                 st.error(f"{icon} {t('basic.error')}: {get_friendly_error_message(result.error, t)}")
             elif result.image:
+                # Consume trial quota if successful
+                consume_quota_after_generation("search", settings.get("resolution", "1K"), 1, True)
                 # Save to history using sync manager
                 history_sync = get_current_user_history_sync()
                 filename = history_sync.save_to_history(

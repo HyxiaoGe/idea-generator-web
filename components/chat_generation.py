@@ -11,7 +11,9 @@ from services import (
     GenerationStateManager,
     get_current_user_history_sync,
     get_friendly_error_message,
+    is_trial_mode,
 )
+from .trial_quota_display import check_and_show_quota_warning, consume_quota_after_generation
 
 
 def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSession):
@@ -134,6 +136,11 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
         if not can_generate:
             st.warning(f"⚠️ {block_reason}")
             return
+        
+        # Check trial quota if in trial mode
+        if is_trial_mode():
+            if not check_and_show_quota_warning(t, "chat", settings.get("resolution", "1K"), 1):
+                return  # Quota exceeded, stop here
 
         # Add user message
         st.session_state.chat_messages.append({
@@ -206,6 +213,10 @@ def render_chat_generation(t: Translator, settings: dict, chat_session: ChatSess
                         width="content"
                     )
 
+                # Consume trial quota if successful
+                if response.image:
+                    consume_quota_after_generation("chat", settings.get("resolution", "1K"), 1, True)
+                
                 # Store in history using sync manager
                 if response.image:
                     history_sync = get_current_user_history_sync()
