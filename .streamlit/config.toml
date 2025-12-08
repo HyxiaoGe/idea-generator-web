@@ -4,17 +4,32 @@ backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F0F2F6"
 textColor = "#262730"
 font = "sans serif"
+# Explicitly set base theme to prevent empty string warnings
+base = "light"
 
 [server]
 maxUploadSize = 50
 enableXsrfProtection = true
 enableCORS = false
+# Reduce server-side logging
+fileWatcherType = "poll"
 
 [browser]
 gatherUsageStats = false
 
 [runner]
 magicEnabled = true
+# Reduce console output
+fastReruns = true
 
 [logger]
+# Set to error to suppress info/warning logs
 level = "error"
+# Suppress specific message types
+messageFormat = "%(message)s"
+
+[deprecation]
+# Disable deprecation warnings
+showfileUploaderEncoding = false
+showImageFormat = false
+showPyplotGlobalUse = false
