@@ -129,7 +129,6 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
                         "resolution": gen_settings["resolution"],
                         "count": 1
                     }
-                    print(f"[QuotaDebug] Set _quota_to_consume: {st.session_state._quota_to_consume}")
 
             except Exception as e:
                 GenerationStateManager.complete_generation(error=str(e))
@@ -179,7 +178,6 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
 
     # Consume quota if needed (after rerun)
     if "_quota_to_consume" in st.session_state:
-        print(f"[QuotaDebug] Found _quota_to_consume in session_state: {st.session_state._quota_to_consume}")
         quota_info = st.session_state._quota_to_consume
         consume_quota_after_generation(
             quota_info["mode"],
@@ -187,7 +185,6 @@ def render_basic_generation(t: Translator, settings: dict, generator: ImageGener
             quota_info["count"],
             True
         )
-        print(f"[QuotaDebug] Deleting _quota_to_consume from session_state")
         del st.session_state._quota_to_consume
 
     # Show last generated image from current session (only for basic mode)

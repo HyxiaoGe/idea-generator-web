@@ -15,3 +15,6 @@ gatherUsageStats = false
 
 [runner]
 magicEnabled = true
+
+[logger]
+level = "error"
