@@ -214,9 +214,10 @@ def render_sidebar(t: Translator) -> dict:
 
         st.divider()
 
-        # Trial quota status - REMOVED for silent enforcement
-        # Quota is enforced in background without user notification
-        # Users only see error messages when quota is exceeded
+        # Trial quota status (show if in trial mode)
+        if is_trial_mode():
+            render_quota_status_compact(t)
+            st.divider()
 
         # Language selection
         st.subheader(t("sidebar.language"))
