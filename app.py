@@ -2,6 +2,7 @@
 Nano Banana Lab - Streamlit Web UI
 AI Image Generation Playground powered by Google Gemini.
 """
+import os
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -16,9 +17,31 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Check maintenance mode
+def is_maintenance_mode():
+    """Check if maintenance mode is enabled from env or Streamlit secrets."""
+    # Try Streamlit secrets first (for Streamlit Cloud)
+    try:
+        maintenance = st.secrets.get("MAINTENANCE", "false")
+    except (FileNotFoundError, AttributeError):
+        # Fall back to environment variable
+        maintenance = os.getenv("MAINTENANCE", "false")
+
+    return str(maintenance).lower() in ["true", "1", "yes"]
+
+# Stop if in maintenance mode
+if is_maintenance_mode():
+    st.warning("🚧 系统维护中，图片生成功能暂时关闭")
+    st.info("System is under maintenance. Image generation features are temporarily unavailable.")
+    st.stop()
+
 # Hide Streamlit's default image toolbar (fullscreen button on hover)
+# Also prevent browser caching for security (immediate purge capability)
 st.markdown(
     """
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <style>
     button[title="View fullscreen"] {
         display: none !important;

@@ -362,6 +362,7 @@
     "generation_failed": "Image generation failed: {error}",
     "network_error": "Network error. Please check your connection.",
     "rate_limit": "Rate limit exceeded. Please wait a moment and try again.",
+    "blocked_keyword": "Blocked keyword",
     "api": {
       "overloaded": "Model is busy, please try again later",
       "unavailable": "Service temporarily unavailable, please try again later",

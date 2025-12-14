@@ -209,13 +209,15 @@ class R2Storage:
             if chat_index is not None:
                 metadata["chat_index"] = str(chat_index)
 
-            # Upload to R2 with long cache (images are immutable)
+            # Upload to R2 with safe cache policy
+            # Browser: no cache (max-age=0) - allows immediate purge
+            # CDN: 1 day cache (s-maxage=86400) - saves R2 egress cost
             self._client.put_object(
                 Bucket=self.bucket_name,
                 Key=key,
                 Body=img_buffer.getvalue(),
                 ContentType="image/png",
-                CacheControl="public, max-age=31536000, immutable",  # 1 year cache
+                CacheControl="public, max-age=0, s-maxage=86400",
                 Metadata=metadata
             )
 

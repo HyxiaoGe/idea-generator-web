@@ -11,6 +11,7 @@ from services import (
     get_current_user_history_sync,
     get_friendly_error_message,
     is_trial_mode,
+    get_content_filter,
 )
 from .trial_quota_display import check_and_show_quota_warning, consume_quota_after_generation
 
@@ -101,6 +102,16 @@ def render_style_transfer_mode(t: Translator, settings: dict, generator: ImageGe
     can_generate = content_file is not None and style_file is not None and can_generate_state
     if st.button(t("blend.generate_btn"), type="primary", disabled=not can_generate, key="style_transfer_btn"):
         if can_generate:
+            # Check content safety first (two-layer: keywords + AI)
+            content_filter = get_content_filter()
+            is_safe, blocked_reason = content_filter.is_safe(prompt)
+            if not is_safe:
+                st.error(content_filter.get_blocked_message(t.language, blocked_reason))
+                if blocked_reason.startswith("keyword:"):
+                    keyword = blocked_reason.split(":", 1)[1]
+                    st.caption(f"🚫 {t('errors.blocked_keyword')}: `{keyword}`")
+                return  # Blocked, stop here
+
             # Check trial quota if in trial mode
             if is_trial_mode():
                 if not check_and_show_quota_warning(t, "blend", settings.get("resolution", "1K"), 1):
@@ -231,6 +242,16 @@ def render_blend_mode(t: Translator, settings: dict, generator: ImageGenerator):
     can_generate = uploaded_files and len(uploaded_files) >= 2 and prompt.strip() and can_generate_state
     if st.button(t("blend.generate_btn"), type="primary", disabled=not can_generate, key="blend_multi_btn"):
         if can_generate:
+            # Check content safety first (two-layer: keywords + AI)
+            content_filter = get_content_filter()
+            is_safe, blocked_reason = content_filter.is_safe(prompt)
+            if not is_safe:
+                st.error(content_filter.get_blocked_message(t.language, blocked_reason))
+                if blocked_reason.startswith("keyword:"):
+                    keyword = blocked_reason.split(":", 1)[1]
+                    st.caption(f"🚫 {t('errors.blocked_keyword')}: `{keyword}`")
+                return  # Blocked, stop here
+
             # Check trial quota if in trial mode
             if is_trial_mode():
                 if not check_and_show_quota_warning(t, "blend", settings.get("resolution", "1K"), 1):

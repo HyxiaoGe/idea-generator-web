@@ -219,3 +219,4 @@ data/prompts/favorites/
 # Keep the directory structure
 !data/prompts/.gitkeep
 !data/prompts/favorites/.gitkeep
+**/banned_keywords_backup.json

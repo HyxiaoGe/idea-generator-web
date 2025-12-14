@@ -361,6 +361,7 @@
     "generation_failed": "图像生成失败：{error}",
     "network_error": "网络错误，请检查您的网络连接。",
     "rate_limit": "请求频率超限，请稀后再试。",
+    "blocked_keyword": "触发的关键词",
     "api": {
       "overloaded": "模型繁忙，请稍后重试",
       "unavailable": "服务暂时不可用，请稍后重试",

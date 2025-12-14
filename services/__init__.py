@@ -38,6 +38,9 @@ from .trial_quota import (
     QUOTA_CONFIGS,
     GLOBAL_DAILY_QUOTA,
 )
+from .content_filter import ContentFilter, get_content_filter
+from .ai_content_moderator import AIContentModerator, get_ai_moderator
+from .audit_logger import AuditLogger, get_audit_logger
 
 __all__ = [
     "ImageGenerator",
@@ -83,4 +86,10 @@ __all__ = [
     "is_trial_mode",
     "QUOTA_CONFIGS",
     "GLOBAL_DAILY_QUOTA",
+    "ContentFilter",
+    "get_content_filter",
+    "AIContentModerator",
+    "get_ai_moderator",
+    "AuditLogger",
+    "get_audit_logger",
 ]

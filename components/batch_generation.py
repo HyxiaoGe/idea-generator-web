@@ -17,6 +17,7 @@ from services import (
     get_current_user_history_sync,
     get_friendly_error_message,
     is_trial_mode,
+    get_content_filter,
 )
 from services.cost_estimator import estimate_cost
 from .trial_quota_display import check_and_show_quota_warning, consume_quota_after_generation
@@ -282,11 +283,21 @@ def render_batch_generation(t: Translator, settings: dict, generator: ImageGener
                 st.rerun()
 
     if generate_clicked and prompt.strip() and can_generate:
+        # Check content safety first (two-layer: keywords + AI)
+        content_filter = get_content_filter()
+        is_safe, blocked_reason = content_filter.is_safe(prompt)
+        if not is_safe:
+            st.error(content_filter.get_blocked_message(t.language, blocked_reason))
+            if blocked_reason.startswith("keyword:"):
+                keyword = blocked_reason.split(":", 1)[1]
+                st.caption(f"🚫 {t('errors.blocked_keyword')}: `{keyword}`")
+            return  # Blocked, stop here
+
         # Check trial quota if in trial mode
         if is_trial_mode():
             if not check_and_show_quota_warning(t, "batch", settings["resolution"], count):
                 return  # Quota exceeded, stop here
-        
+
         # Start generation task
         task = GenerationStateManager.start_generation(
             prompt=prompt,
