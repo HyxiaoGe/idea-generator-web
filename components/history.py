@@ -326,6 +326,105 @@ def _open_preview_dialog(item: dict, t: Translator):
         )
 
 
+@st.dialog("🧹", width="large")
+def _show_clean_dialog(t: Translator, history_sync, history_key: str):
+    """Dialog for cleaning invalid history entries."""
+    st.subheader(t("history.clean_dialog_title"))
+    st.markdown(t("history.clean_dialog_desc"))
+
+    # Get current history
+    full_history = st.session_state.get(history_key, [])
+
+    if not full_history:
+        st.info(t("history.clean_no_entries"))
+        return
+
+    # Scan for invalid entries
+    with st.spinner(t("history.clean_scanning")):
+        invalid_entries = []
+        valid_entries = []
+
+        for item in full_history:
+            image_url = item.get("r2_url") or item.get("image_url", "")
+
+            # Check if image exists
+            if not image_url or image_url == "N/A":
+                invalid_entries.append(item)
+                continue
+
+            # Check if it's a URL (R2 storage)
+            if isinstance(image_url, str) and image_url.startswith("http"):
+                # Try to check if image exists
+                try:
+                    response = requests.head(image_url, timeout=5)
+                    if response.status_code == 200:
+                        valid_entries.append(item)
+                    else:
+                        invalid_entries.append(item)
+                except:
+                    invalid_entries.append(item)
+            else:
+                # PIL Image or valid entry
+                if item.get("image"):
+                    valid_entries.append(item)
+                else:
+                    invalid_entries.append(item)
+
+    # Show results
+    st.metric(t("history.clean_total"), len(full_history))
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(t("history.clean_valid"), len(valid_entries), delta=None)
+    with col2:
+        st.metric(t("history.clean_invalid"), len(invalid_entries), delta=None, delta_color="inverse")
+
+    if not invalid_entries:
+        st.success(t("history.clean_no_invalid"))
+        return
+
+    st.divider()
+
+    # Show sample of invalid entries
+    st.markdown(f"**{t('history.clean_preview')}:**")
+    for i, entry in enumerate(invalid_entries[:5], 1):
+        prompt = entry.get("prompt", "N/A")[:60]
+        st.text(f"{i}. {prompt}...")
+
+    if len(invalid_entries) > 5:
+        st.caption(f"... {t('history.clean_and_more', count=len(invalid_entries) - 5)}")
+
+    st.divider()
+
+    # Confirmation
+    st.warning(t("history.clean_warning"))
+
+    col_cancel, col_confirm = st.columns(2)
+    with col_cancel:
+        if st.button(t("history.clean_cancel"), width="stretch", type="secondary"):
+            st.rerun()
+
+    with col_confirm:
+        if st.button(t("history.clean_confirm"), width="stretch", type="primary"):
+            # Perform cleanup
+            with st.spinner(t("history.clean_processing")):
+                # Update history
+                st.session_state[history_key] = valid_entries
+                st.session_state.history = valid_entries
+
+                # Save to disk/R2
+                try:
+                    history_sync.save_to_disk(force=True)
+                    st.success(t("history.clean_success", count=len(invalid_entries)))
+                    st.balloons()
+                except Exception as e:
+                    st.error(t("history.clean_error", error=str(e)))
+
+            # Close dialog and refresh
+            import time
+            time.sleep(2)
+            st.rerun()
+
+
 @st.dialog("💬", width="large")
 def _open_collection_dialog(collection: dict, t: Translator):
     """Modal dialog for collection preview with image carousel."""
@@ -613,13 +712,17 @@ def render_history(t: Translator):
             label_visibility="collapsed"
         )
 
-    # Refresh button + Grid columns selector
-    col_refresh, col_grid, col_spacer = st.columns([1, 1, 3])
+    # Refresh button + Clean button + Grid columns selector
+    col_refresh, col_clean, col_grid, col_spacer = st.columns([1, 1.2, 1, 2])
     with col_refresh:
         if st.button(f"🔄 {t('history.refresh_btn')}", width="stretch"):
             with st.spinner(t("history.loading")):
                 history_sync.sync_from_disk(force=True)
             st.session_state.history_page = 1
+
+    with col_clean:
+        if st.button(f"🧹 {t('history.clean_btn')}", width="stretch", help=t('history.clean_btn_help')):
+            _show_clean_dialog(t, history_sync, history_key)
 
     with col_grid:
         st.segmented_control(
