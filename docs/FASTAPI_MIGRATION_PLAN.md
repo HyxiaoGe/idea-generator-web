@@ -135,8 +135,7 @@ nano-banana-lab/
 │   └── API.md                     # API 文档
 │
 ├── .env.example                   # 环境变量模板 (更新)
-├── requirements.txt               # 依赖 (更新)
-├── requirements-dev.txt           # 开发依赖 (新建)
+├── pyproject.toml                 # 项目配置和依赖 (PEP 621)
 ├── Dockerfile                     # Docker 配置 (更新)
 ├── docker-compose.yml             # Docker Compose (更新)
 └── README.md                      # 项目说明 (更新)
@@ -768,10 +767,10 @@ TTL: 1 minute
 **任务清单**：
 
 1. **项目初始化**
+   - [x] 创建 `pyproject.toml` (PEP 621 标准)
    - [ ] 创建 `api/` 目录结构
    - [ ] 创建 `core/` 目录结构
-   - [ ] 更新 `requirements.txt` (添加 FastAPI 依赖)
-   - [ ] 创建 `requirements-dev.txt` (pytest, httpx 等)
+   - [ ] 删除旧的 `requirements.txt`
 
 2. **配置管理**
    - [ ] 创建 `api/config.py` (Pydantic Settings)
@@ -1158,40 +1157,48 @@ async def generate_basic(
 
 ---
 
-## 七、新增 requirements.txt
+## 七、依赖管理 (pyproject.toml)
 
-```txt
-# Core
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
+项目使用 `pyproject.toml` 管理依赖，符合 PEP 621 标准。
 
-# Auth & Security
-python-jose[cryptography]>=3.3.0
-httpx>=0.27.0
-passlib[bcrypt]>=1.7.4
+### 安装方式
 
-# Cache & Queue (Required)
-redis[hiredis]>=5.0.0
+```bash
+# 安装生产依赖
+pip install .
 
-# Task Queue (Required)
-arq>=0.26.0
+# 安装开发依赖
+pip install -e ".[dev]"
 
-# WebSocket
-websockets>=12.0
-
-# Existing (Keep)
-google-genai>=1.0.0
-Pillow>=10.0.0
-python-dotenv>=1.0.0
-boto3>=1.34.0
-
-# REMOVED (Streamlit completely removed):
-# streamlit>=1.30.0
-# extra-streamlit-components>=0.1.60
-# streamlit-oauth>=0.1.8
+# 使用 uv (推荐，更快)
+uv pip install -e ".[dev]"
 ```
+
+### 主要依赖
+
+| 类别 | 包 | 说明 |
+|------|------|------|
+| **Core** | fastapi, uvicorn, pydantic | Web 框架 |
+| **Auth** | python-jose, httpx, passlib | JWT 认证 |
+| **Cache** | redis[hiredis] | 会话/配额存储 |
+| **Queue** | arq | 异步任务队列 |
+| **AI** | google-genai, Pillow | 图像生成 |
+| **Storage** | boto3 | R2 云存储 |
+
+### 开发依赖
+
+| 包 | 说明 |
+|------|------|
+| pytest, pytest-asyncio | 测试框架 |
+| ruff | 代码格式化/检查 |
+| mypy | 类型检查 |
+| pre-commit | Git hooks |
+
+### 已移除 (Streamlit 相关)
+
+- ~~streamlit>=1.30.0~~
+- ~~extra-streamlit-components>=0.1.60~~
+- ~~streamlit-oauth>=0.1.8~~
 
 ---
 
@@ -1255,8 +1262,9 @@ boto3>=1.34.0
 
 **开始阶段一：基础架构搭建**
 
-1. 创建 `api/` 目录结构
-2. 更新 `requirements.txt`
+1. ~~创建 `pyproject.toml`~~ ✅ 已完成
+2. 创建 `api/` 目录结构
 3. 实现 FastAPI 入口和配置
 4. 实现健康检查端点
 5. 更新 Docker 配置 (添加 Redis)
+6. 删除旧的 `requirements.txt`
