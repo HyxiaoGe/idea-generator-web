@@ -1,16 +1,25 @@
-# Render Blueprint for Nano Banana Lab
+# Render Blueprint for Nano Banana Lab API
 # https://docs.render.com/blueprint-spec
 
 services:
   - type: web
-    name: nano-banana-lab
+    name: nano-banana-lab-api
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
+    buildCommand: pip install .
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: GOOGLE_API_KEY
         sync: false  # Set manually in Render dashboard
+      - key: REDIS_URL
+        sync: false  # Set manually or use Render Redis add-on
+      - key: SECRET_KEY
+        generateValue: true
       - key: PYTHON_VERSION
         value: 3.11.0
-    healthCheckPath: /_stcore/health
+    healthCheckPath: /api/health
     plan: free  # or starter, standard, etc.
+
+  - type: redis
+    name: nano-banana-redis
+    plan: free
+    ipAllowList: []

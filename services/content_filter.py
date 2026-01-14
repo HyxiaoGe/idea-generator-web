@@ -10,13 +10,6 @@ import json
 from typing import List, Tuple, Optional
 from datetime import datetime, timedelta
 
-# Try to import streamlit for secrets
-try:
-    import streamlit as st
-    HAS_STREAMLIT = True
-except ImportError:
-    HAS_STREAMLIT = False
-
 
 # Minimal fallback keywords (only used if R2 is unavailable)
 # Full keyword list is stored remotely in R2 to prevent user discovery
@@ -27,19 +20,7 @@ DEFAULT_BANNED_KEYWORDS = [
 
 
 def get_config_value(key: str, default: str = "") -> str:
-    """
-    Get configuration value from multiple sources.
-    Priority: st.secrets > os.environ > default
-    """
-    # Try Streamlit secrets first
-    if HAS_STREAMLIT:
-        try:
-            if hasattr(st, 'secrets') and key in st.secrets:
-                return str(st.secrets[key])
-        except Exception:
-            pass
-
-    # Fall back to environment variables
+    """Get configuration value from environment variables."""
     return os.getenv(key, default)
 
 
