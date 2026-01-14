@@ -34,12 +34,16 @@
 | 异步 Redis | redis[hiredis] | ^5.0.0 | 高性能异步客户端 |
 | 云存储 | boto3 | ^1.34.0 | 复用现有 R2 存储 |
 
-### 任务队列 (可选)
+### 任务队列 (必需)
 
 | 组件 | 选型 | 版本 | 说明 |
 |------|------|------|------|
-| 任务队列 | arq | ^0.26.0 | 轻量级异步任务队列 |
-| 备选方案 | Celery | ^5.4.0 | 重量级，功能更全 |
+| 任务队列 | arq | ^0.26.0 | 轻量级异步任务队列，基于 Redis |
+
+> **决策**: 使用 arq 而非 Celery，因为：
+> - 项目已使用 Redis，arq 直接复用
+> - 原生异步支持，与 FastAPI 契合
+> - 轻量级，部署简单
 
 ### 现有依赖 (保留)
 
@@ -240,7 +244,7 @@ POST /api/generate/blend
   }
   Response: { ...同基础生成 }
 
-# 批量生成
+# 批量生成 (异步任务)
 POST /api/generate/batch
   Request: {
     prompt: string,
@@ -253,17 +257,51 @@ POST /api/generate/batch
   Response: {
     success: boolean,
     data: {
-      task_id: string,             # 任务 ID (用于轮询)
-      status: "pending" | "processing" | "completed" | "failed",
+      task_id: string,             # 任务 ID (用于轮询/WebSocket)
+      status: "pending",
       total: number,
-      completed: number,
-      results: [...]               # 已完成的结果
+      completed: 0,
+      results: []
     }
   }
 
-# 获取批量任务状态
+# 获取批量任务状态 (轮询方式)
 GET /api/generate/batch/{task_id}
-  Response: { ...同上 }
+  Response: {
+    task_id: string,
+    status: "pending" | "processing" | "completed" | "failed",
+    total: number,
+    completed: number,
+    progress: number,              # 0-100 百分比
+    results: [{                    # 已完成的结果
+      index: number,
+      image_url: string,
+      duration: number,
+      error?: string
+    }],
+    error?: string,                # 任务级错误
+    created_at: string,
+    updated_at: string
+  }
+
+# WebSocket 实时进度推送
+WS /api/ws/tasks/{task_id}
+  # 服务端推送消息格式:
+  {
+    type: "progress" | "completed" | "failed" | "item_completed",
+    task_id: string,
+    data: {
+      status: string,
+      completed: number,
+      total: number,
+      progress: number,
+      latest_result?: {...}        # item_completed 时包含
+    }
+  }
+
+# 取消任务
+DELETE /api/generate/batch/{task_id}
+  Response: { success: true, cancelled: boolean }
 ```
 
 ### 3.3 聊天会话模块 `/api/chat`
@@ -1134,11 +1172,14 @@ python-jose[cryptography]>=3.3.0
 httpx>=0.27.0
 passlib[bcrypt]>=1.7.4
 
-# Cache & Queue
+# Cache & Queue (Required)
 redis[hiredis]>=5.0.0
 
-# Task Queue (Optional)
-# arq>=0.26.0
+# Task Queue (Required)
+arq>=0.26.0
+
+# WebSocket
+websockets>=12.0
 
 # Existing (Keep)
 google-genai>=1.0.0
@@ -1146,7 +1187,7 @@ Pillow>=10.0.0
 python-dotenv>=1.0.0
 boto3>=1.34.0
 
-# REMOVED:
+# REMOVED (Streamlit completely removed):
 # streamlit>=1.30.0
 # extra-streamlit-components>=0.1.60
 # streamlit-oauth>=0.1.8
@@ -1167,17 +1208,22 @@ boto3>=1.34.0
 - API 响应格式完全不同
 - 前端需要完全重写
 - 现有部署配置需更新
+- **Streamlit 代码将完全移除，不保留 legacy 分支**
 
-### 8.3 向后兼容
+### 8.3 基础设施要求
 
-- 如需保留 Streamlit 版本，可创建 `legacy/` 分支
-- R2 存储格式保持不变，数据可共用
+| 组件 | 必需 | 说明 |
+|------|------|------|
+| Redis | ✅ 是 | 会话、配额、任务队列 |
+| R2 存储 | ⚠️ 推荐 | 图片云存储，无则本地存储 |
+| PostgreSQL | ❌ 否 | 暂不需要关系型数据库 |
 
 ### 8.4 性能考虑
 
-- 图像生成是 I/O 密集型，考虑使用异步
-- 批量生成应使用任务队列
+- 图像生成是 I/O 密集型，全部使用异步
+- 批量生成使用 arq 任务队列，支持进度推送
 - Redis 需要配置持久化 (AOF/RDB)
+- WebSocket 连接需要考虑负载均衡配置
 
 ---
 
@@ -1194,10 +1240,23 @@ boto3>=1.34.0
 
 ---
 
-## 十、下一步行动
+## 十、技术决策确认
 
-1. **确认技术选型** - 是否需要调整 Redis/任务队列选择
-2. **确认 API 设计** - 是否需要调整端点或响应格式
-3. **开始阶段一** - 创建基础架构
+| 决策项 | 结论 |
+|--------|------|
+| Redis | ✅ 必需依赖 |
+| 任务队列 | ✅ 使用 arq，支持异步生成 + 进度推送 |
+| Streamlit | ❌ 完全移除，不保留 legacy |
+| 进度获取 | ✅ 支持 HTTP 轮询 + WebSocket 推送 |
 
-如有问题或需要调整，请随时提出。
+---
+
+## 十一、下一步行动
+
+**开始阶段一：基础架构搭建**
+
+1. 创建 `api/` 目录结构
+2. 更新 `requirements.txt`
+3. 实现 FastAPI 入口和配置
+4. 实现健康检查端点
+5. 更新 Docker 配置 (添加 Redis)
