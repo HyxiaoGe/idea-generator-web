@@ -3,14 +3,18 @@ Image storage service for persisting generated images.
 Supports both local storage and Cloudflare R2 cloud storage.
 Supports user-isolated storage when authentication is enabled.
 """
-import os
+
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
+
 from PIL import Image
 
 from .r2_storage import get_r2_storage
+
+logger = logging.getLogger(__name__)
 
 
 class ImageStorage:
@@ -103,7 +107,7 @@ class ImageStorage:
         thinking: Optional[str] = None,
         session_id: Optional[str] = None,
         chat_index: Optional[int] = None,
-    ) -> str:
+    ) -> Tuple[str, Optional[str]]:
         """
         Save an image to storage (local and optionally R2).
 
@@ -119,7 +123,7 @@ class ImageStorage:
             chat_index: Optional index within chat session
 
         Returns:
-            The filename of the saved image
+            Tuple of (filename, r2_url or None)
         """
         # Generate descriptive filename
         filename = self._generate_filename(mode, prompt)
@@ -157,9 +161,8 @@ class ImageStorage:
             record["chat_index"] = chat_index
 
         # Save to R2 if enabled
-        print(f"[Storage] R2 available: {self._r2.is_available}")
+        r2_url = None
         if self._r2.is_available:
-            print(f"[Storage] Saving to R2...")
             r2_key = self._r2.save_image(
                 image=image,
                 prompt=prompt,
@@ -173,12 +176,9 @@ class ImageStorage:
             )
             if r2_key:
                 record["r2_key"] = r2_key
-                record["r2_url"] = self._r2.get_public_url(r2_key)
-                print(f"[Storage] R2 save complete - key={r2_key}")
-            else:
-                print("[Storage] R2 save returned None")
-        else:
-            print("[Storage] R2 not available, skipping cloud storage")
+                r2_url = self._r2.get_public_url(r2_key)
+                record["r2_url"] = r2_url
+                logger.debug(f"Image saved to R2: {r2_key}")
 
         self.metadata["images"].insert(0, record)
 
@@ -189,34 +189,81 @@ class ImageStorage:
         self._save_metadata()
 
         # Return filename and r2_url for immediate use
-        return filename, record.get("r2_url")
+        return filename, r2_url
 
-    def get_history(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def get_history(
+        self,
+        limit: int = 50,
+        mode: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Get image history with metadata.
         Tries R2 first if available, falls back to local.
 
         Args:
             limit: Maximum number of records to return
+            mode: Optional mode filter
+            search: Optional search string for prompt
 
         Returns:
             List of image metadata records
         """
         # Try R2 first if available
         if self._r2.is_available:
-            r2_history = self._r2.get_history(limit=limit)
+            r2_history = self._r2.get_history(limit=limit * 2)  # Get more for filtering
             if r2_history:
-                return r2_history
+                # Apply filters
+                filtered = r2_history
+                if mode:
+                    filtered = [r for r in filtered if r.get("mode") == mode]
+                if search:
+                    search_lower = search.lower()
+                    filtered = [r for r in filtered if search_lower in r.get("prompt", "").lower()]
+                return filtered[:limit]
 
         # Fall back to local storage
         history = []
-        for record in self.metadata["images"][:limit]:
+        for record in self.metadata["images"]:
+            # Apply filters
+            if mode and record.get("mode") != mode:
+                continue
+            if search and search.lower() not in record.get("prompt", "").lower():
+                continue
+
             filepath = self.base_output_dir / record["filename"]
             if filepath.exists():
                 record_copy = record.copy()
                 record_copy["filepath"] = str(filepath)
                 history.append(record_copy)
+
+            if len(history) >= limit:
+                break
+
         return history
+
+    def get_history_item(self, item_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a single history item by ID (filename or r2_key).
+
+        Args:
+            item_id: The filename or R2 key
+
+        Returns:
+            History record or None
+        """
+        # Search in R2 history
+        if self._r2.is_available:
+            for record in self._r2.get_history(limit=100):
+                if record.get("key") == item_id or record.get("filename") == item_id:
+                    return record
+
+        # Search in local history
+        for record in self.metadata["images"]:
+            if record.get("filename") == item_id or record.get("r2_key") == item_id:
+                return record
+
+        return None
 
     def load_image(self, filename: str) -> Optional[Image.Image]:
         """
@@ -239,6 +286,60 @@ class ImageStorage:
             return self._r2.load_image(filename)
 
         return None
+
+    def load_image_bytes(self, filename: str) -> Optional[bytes]:
+        """
+        Load image as bytes from storage.
+
+        Args:
+            filename: Name/path of the image file or R2 key
+
+        Returns:
+            Image bytes or None if not found
+        """
+        # Try local storage first
+        filepath = self.base_output_dir / filename
+        if filepath.exists():
+            return filepath.read_bytes()
+
+        # Try R2 if available
+        if self._r2.is_available:
+            return self._r2.load_image_bytes(filename)
+
+        return None
+
+    def delete_image(self, item_id: str) -> bool:
+        """
+        Delete an image from storage.
+
+        Args:
+            item_id: The filename or R2 key
+
+        Returns:
+            True if deleted successfully
+        """
+        deleted = False
+
+        # Delete from local storage
+        for i, record in enumerate(self.metadata["images"]):
+            if record.get("filename") == item_id or record.get("r2_key") == item_id:
+                # Delete file
+                filepath = self.base_output_dir / record["filename"]
+                if filepath.exists():
+                    filepath.unlink()
+
+                # Delete from R2
+                if self._r2.is_available and record.get("r2_key"):
+                    self._r2.delete_image(record["r2_key"])
+                    self._r2.delete_from_history(record["r2_key"])
+
+                # Remove from metadata
+                self.metadata["images"].pop(i)
+                self._save_metadata()
+                deleted = True
+                break
+
+        return deleted
 
     def clear_history(self):
         """Clear all stored images and metadata (local and R2)."""
@@ -305,11 +406,7 @@ def get_storage(user_id: Optional[str] = None) -> ImageStorage:
     return _storage_instances[user_id]
 
 
-def get_current_user_storage() -> ImageStorage:
-    """
-    Get storage instance for the currently authenticated user.
-    Falls back to shared storage if no user is authenticated.
-    """
-    from .auth import get_user_id
-    user_id = get_user_id()
-    return get_storage(user_id=user_id)
+def clear_storage_cache():
+    """Clear all cached storage instances."""
+    global _storage_instances
+    _storage_instances = {}
