@@ -1,0 +1,32 @@
+version: '3.8'
+
+# Development configuration with hot-reload
+# Usage: docker-compose -f docker-compose.dev.yml up
+
+services:
+  # ============ API Server (Development) ============
+  api:
+    build: .
+    container_name: nano-banana-api-dev
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - REDIS_URL=redis://redis:6379/0
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    volumes:
+      - .:/app
+      - ./outputs:/app/outputs
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # ============ Redis ============
+  redis:
+    image: redis:7-alpine
+    container_name: nano-banana-redis-dev
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
