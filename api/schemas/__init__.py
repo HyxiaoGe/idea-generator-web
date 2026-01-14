@@ -48,6 +48,37 @@ from .quota import (
     QuotaConfigResponse,
 )
 
+from .chat import (
+    ChatMessage,
+    CreateChatRequest,
+    CreateChatResponse,
+    SendMessageRequest,
+    SendMessageResponse,
+    ChatSessionInfo,
+    ChatHistoryResponse,
+    ListChatsResponse,
+)
+
+from .history import (
+    HistoryItem,
+    HistorySettings,
+    HistoryListResponse,
+    HistoryDetailResponse,
+    HistoryDeleteResponse,
+    HistoryStatsResponse,
+)
+
+from .prompts import (
+    PromptTemplate,
+    PromptCategory,
+    ListPromptsResponse,
+    GeneratePromptsRequest,
+    GeneratePromptsResponse,
+    ToggleFavoriteResponse,
+    SavePromptRequest,
+    SavePromptResponse,
+)
+
 __all__ = [
     # Common
     "APIResponse",
@@ -87,4 +118,29 @@ __all__ = [
     "QuotaCheckRequest",
     "QuotaCheckResponse",
     "QuotaConfigResponse",
+    # Chat
+    "ChatMessage",
+    "CreateChatRequest",
+    "CreateChatResponse",
+    "SendMessageRequest",
+    "SendMessageResponse",
+    "ChatSessionInfo",
+    "ChatHistoryResponse",
+    "ListChatsResponse",
+    # History
+    "HistoryItem",
+    "HistorySettings",
+    "HistoryListResponse",
+    "HistoryDetailResponse",
+    "HistoryDeleteResponse",
+    "HistoryStatsResponse",
+    # Prompts
+    "PromptTemplate",
+    "PromptCategory",
+    "ListPromptsResponse",
+    "GeneratePromptsRequest",
+    "GeneratePromptsResponse",
+    "ToggleFavoriteResponse",
+    "SavePromptRequest",
+    "SavePromptResponse",
 ]
