@@ -7,13 +7,6 @@ import hashlib
 from typing import Tuple, Optional, Dict
 from datetime import datetime, timedelta
 
-# Try to import streamlit for secrets
-try:
-    import streamlit as st
-    HAS_STREAMLIT = True
-except ImportError:
-    HAS_STREAMLIT = False
-
 # Try to import Google GenAI
 try:
     import google.generativeai as genai
@@ -23,13 +16,7 @@ except ImportError:
 
 
 def get_config_value(key: str, default: str = "") -> str:
-    """Get configuration value from multiple sources."""
-    if HAS_STREAMLIT:
-        try:
-            if hasattr(st, 'secrets') and key in st.secrets:
-                return str(st.secrets[key])
-        except Exception:
-            pass
+    """Get configuration value from environment variables."""
     return os.getenv(key, default)
 
 

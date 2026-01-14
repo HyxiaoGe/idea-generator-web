@@ -10,22 +10,9 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 from queue import Queue
 
-# Try to import streamlit for secrets
-try:
-    import streamlit as st
-    HAS_STREAMLIT = True
-except ImportError:
-    HAS_STREAMLIT = False
-
 
 def get_config_value(key: str, default: str = "") -> str:
-    """Get configuration value from multiple sources."""
-    if HAS_STREAMLIT:
-        try:
-            if hasattr(st, 'secrets') and key in st.secrets:
-                return str(st.secrets[key])
-        except Exception:
-            pass
+    """Get configuration value from environment variables."""
     return os.getenv(key, default)
 
 
