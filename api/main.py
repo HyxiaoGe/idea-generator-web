@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import get_settings
 from core.redis import init_redis, close_redis
 from api.middleware import setup_exception_handlers
-from api.routers import health_router
+from api.routers import health_router, auth_router, generate_router, quota_router
 
 # Configure logging
 logging.basicConfig(
@@ -92,16 +92,22 @@ def create_app() -> FastAPI:
 
     # ============ Routers ============
 
-    # Health check (no prefix)
+    # Health check
     app.include_router(health_router, prefix="/api")
 
-    # API routes (to be added)
-    # app.include_router(auth_router, prefix="/api")
-    # app.include_router(generate_router, prefix="/api")
+    # Authentication
+    app.include_router(auth_router, prefix="/api")
+
+    # Image generation
+    app.include_router(generate_router, prefix="/api")
+
+    # Quota management
+    app.include_router(quota_router, prefix="/api")
+
+    # TODO: Additional routers to implement
     # app.include_router(chat_router, prefix="/api")
     # app.include_router(history_router, prefix="/api")
     # app.include_router(prompts_router, prefix="/api")
-    # app.include_router(quota_router, prefix="/api")
 
     # ============ Root Endpoint ============
 
