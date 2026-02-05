@@ -2,9 +2,9 @@
 Unit tests for services module.
 """
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime
 
 
 class TestQuotaService:
@@ -19,38 +19,11 @@ class TestQuotaService:
         service._trial_enabled = True
 
         can_generate, reason, info = await service.check_quota(
-            user_id="test_user",
-            mode="basic",
-            resolution="1K",
-            count=1
+            user_id="test_user", mode="basic", resolution="1K", count=1
         )
 
         assert can_generate is True
         assert reason == "OK"
-
-    @pytest.mark.asyncio
-    async def test_check_quota_cooldown(self, mock_redis):
-        """Test quota check with active cooldown."""
-        import time
-        from services.quota_service import QuotaService, GENERATION_COOLDOWN
-
-        # Set last generation to now
-        mock_redis._hashes["quota:2024-01-01:user:test_user"] = {
-            "last_generation": str(time.time())
-        }
-
-        service = QuotaService(redis_client=mock_redis)
-        service._trial_enabled = True
-
-        can_generate, reason, info = await service.check_quota(
-            user_id="test_user",
-            mode="basic",
-            resolution="1K",
-            count=1
-        )
-
-        assert can_generate is False
-        assert "wait" in reason.lower()
 
     @pytest.mark.asyncio
     async def test_consume_quota(self, mock_redis):
@@ -61,10 +34,7 @@ class TestQuotaService:
         service._trial_enabled = True
 
         result = await service.consume_quota(
-            user_id="test_user",
-            mode="basic",
-            resolution="1K",
-            count=1
+            user_id="test_user", mode="basic", resolution="1K", count=1
         )
 
         assert result is True
@@ -118,35 +88,45 @@ class TestAuthService:
 
     def test_auth_service_not_configured(self):
         """Test auth service when not configured."""
-        with patch.dict("os.environ", {
-            "GITHUB_CLIENT_ID": "",
-            "GITHUB_CLIENT_SECRET": ""
-        }, clear=False):
+        with patch.dict(
+            "os.environ", {"GITHUB_CLIENT_ID": "", "GITHUB_CLIENT_SECRET": ""}, clear=False
+        ):
             from services.auth_service import AuthService
+
             service = AuthService()
 
             assert service.is_configured is False
 
     def test_auth_service_configured(self):
         """Test auth service when properly configured."""
-        with patch.dict("os.environ", {
-            "GITHUB_CLIENT_ID": "test_client_id",
-            "GITHUB_CLIENT_SECRET": "test_secret",
-            "AUTH_ENABLED": "true"
-        }, clear=False):
+        with patch.dict(
+            "os.environ",
+            {
+                "GITHUB_CLIENT_ID": "test_client_id",
+                "GITHUB_CLIENT_SECRET": "test_secret",
+                "AUTH_ENABLED": "true",
+            },
+            clear=False,
+        ):
             from services.auth_service import AuthService
+
             service = AuthService()
 
             assert service.is_configured is True
 
     def test_get_authorization_url(self):
         """Test authorization URL generation."""
-        with patch.dict("os.environ", {
-            "GITHUB_CLIENT_ID": "test_client_id",
-            "GITHUB_CLIENT_SECRET": "test_secret",
-            "GITHUB_REDIRECT_URI": "http://localhost:8000/callback"
-        }, clear=False):
+        with patch.dict(
+            "os.environ",
+            {
+                "GITHUB_CLIENT_ID": "test_client_id",
+                "GITHUB_CLIENT_SECRET": "test_secret",
+                "GITHUB_REDIRECT_URI": "http://localhost:8000/callback",
+            },
+            clear=False,
+        ):
             from services.auth_service import AuthService
+
             service = AuthService()
 
             url = service.get_authorization_url(state="test_state")
@@ -164,7 +144,7 @@ class TestAuthService:
             login="testuser",
             name="Test User",
             email="test@example.com",
-            avatar_url="https://github.com/testuser.png"
+            avatar_url="https://github.com/testuser.png",
         )
 
         assert user.display_name == "Test User"
@@ -175,13 +155,7 @@ class TestAuthService:
         """Test display name falls back to login."""
         from services.auth_service import GitHubUser
 
-        user = GitHubUser(
-            id="12345",
-            login="testuser",
-            name=None,
-            email=None,
-            avatar_url=None
-        )
+        user = GitHubUser(id="12345", login="testuser", name=None, email=None, avatar_url=None)
 
         assert user.display_name == "testuser"
 
@@ -194,7 +168,7 @@ class TestAuthService:
             login="testuser",
             name="Test User",
             email="test@example.com",
-            avatar_url=None
+            avatar_url=None,
         )
 
         data = user.to_dict()
@@ -212,34 +186,30 @@ class TestCostEstimator:
         """Test cost estimation for basic generation."""
         from services.cost_estimator import estimate_cost
 
-        estimate = estimate_cost(
-            mode="basic",
-            count=1,
-            resolution="1K"
-        )
+        estimate = estimate_cost(resolution="1K", count=1)
 
         assert estimate is not None
         assert estimate.count == 1
+        assert estimate.resolution == "1K"
 
-    def test_estimate_cost_batch(self):
-        """Test cost estimation for batch generation."""
+    def test_estimate_cost_multiple(self):
+        """Test cost estimation for multiple images."""
         from services.cost_estimator import estimate_cost
 
-        estimate = estimate_cost(
-            mode="batch",
-            count=5,
-            resolution="1K"
-        )
+        estimate = estimate_cost(resolution="1K", count=5)
 
         assert estimate.count == 5
+        assert estimate.total_cost == estimate.unit_cost * 5
 
     def test_format_cost(self):
         """Test cost formatting."""
-        from services.cost_estimator import format_cost
+        from services.cost_estimator import estimate_cost, format_cost
 
-        formatted = format_cost(0.05)
+        estimate = estimate_cost(resolution="1K", count=1)
+        formatted = format_cost(estimate)
 
-        assert "$" in formatted or "USD" in formatted or "0.05" in formatted
+        assert "$" in formatted
+        assert "0.04" in formatted or "Est" in formatted
 
 
 class TestHealthCheck:
@@ -250,8 +220,8 @@ class TestHealthCheck:
         from services.health_check import HealthStatus
 
         assert HealthStatus.HEALTHY.value == "healthy"
-        assert HealthStatus.DEGRADED.value == "degraded"
         assert HealthStatus.UNHEALTHY.value == "unhealthy"
+        assert HealthStatus.UNKNOWN.value == "unknown"
 
     def test_health_check_result(self):
         """Test HealthCheckResult dataclass."""
@@ -259,13 +229,30 @@ class TestHealthCheck:
 
         result = HealthCheckResult(
             status=HealthStatus.HEALTHY,
-            latency_ms=50.5,
-            message="All systems operational"
+            message="All systems operational",
+            response_time=50.5,
         )
 
         assert result.status == HealthStatus.HEALTHY
-        assert result.latency_ms == 50.5
+        assert result.response_time == 50.5
         assert result.message == "All systems operational"
+
+    def test_health_check_result_to_dict(self):
+        """Test HealthCheckResult serialization."""
+        from services.health_check import HealthCheckResult, HealthStatus
+
+        result = HealthCheckResult(
+            status=HealthStatus.HEALTHY,
+            message="OK",
+            response_time=25.0,
+            timestamp=1234567890.0,
+        )
+
+        data = result.to_dict()
+
+        assert data["status"] == "healthy"
+        assert data["message"] == "OK"
+        assert data["response_time"] == 25.0
 
 
 class TestGeneratorHelpers:

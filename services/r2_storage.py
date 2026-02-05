@@ -3,12 +3,12 @@ Cloudflare R2 storage service for cloud image persistence.
 R2 is S3-compatible, so we use boto3 for the client.
 """
 
-import os
 import json
 import logging
-from io import BytesIO
+import os
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from io import BytesIO
+from typing import Any
 
 from PIL import Image
 
@@ -16,6 +16,7 @@ from PIL import Image
 try:
     import boto3
     from botocore.config import Config
+
     BOTO3_AVAILABLE = True
 except ImportError:
     BOTO3_AVAILABLE = False
@@ -36,7 +37,7 @@ def get_config_value(key: str, default: str = "") -> str:
 class R2Storage:
     """Service for storing and retrieving images from Cloudflare R2."""
 
-    def __init__(self, user_id: Optional[str] = None):
+    def __init__(self, user_id: str | None = None):
         """
         Initialize the R2 storage service.
 
@@ -75,9 +76,8 @@ class R2Storage:
                 aws_access_key_id=self.access_key_id,
                 aws_secret_access_key=self.secret_access_key,
                 config=Config(
-                    signature_version="s3v4",
-                    retries={"max_attempts": 3, "mode": "standard"}
-                )
+                    signature_version="s3v4", retries={"max_attempts": 3, "mode": "standard"}
+                ),
             )
             logger.info(f"R2 client initialized for bucket: {self.bucket_name}")
         except Exception as e:
@@ -133,14 +133,14 @@ class R2Storage:
         self,
         image: Image.Image,
         prompt: str,
-        settings: Dict[str, Any],
+        settings: dict[str, Any],
         duration: float = 0.0,
         mode: str = "basic",
-        text_response: Optional[str] = None,
-        thinking: Optional[str] = None,
-        session_id: Optional[str] = None,
-        chat_index: Optional[int] = None,
-    ) -> Optional[str]:
+        text_response: str | None = None,
+        thinking: str | None = None,
+        session_id: str | None = None,
+        chat_index: int | None = None,
+    ) -> str | None:
         """
         Save an image to R2 storage.
 
@@ -174,6 +174,7 @@ class R2Storage:
 
             # Prepare metadata (S3 metadata only supports ASCII, so we encode non-ASCII)
             import urllib.parse
+
             metadata = {
                 "prompt": urllib.parse.quote(prompt[:256], safe=""),  # URL-encode for non-ASCII
                 "mode": mode,
@@ -197,13 +198,20 @@ class R2Storage:
                 Body=img_buffer.getvalue(),
                 ContentType="image/png",
                 CacheControl="public, max-age=0, s-maxage=86400",
-                Metadata=metadata
+                Metadata=metadata,
             )
 
             # Also save/update the history index
             self._update_history_index(
-                key, prompt, settings, duration, mode,
-                text_response, thinking, session_id, chat_index
+                key,
+                prompt,
+                settings,
+                duration,
+                mode,
+                text_response,
+                thinking,
+                session_id,
+                chat_index,
             )
 
             logger.debug(f"Image saved to R2: {key}")
@@ -220,10 +228,10 @@ class R2Storage:
         settings: dict,
         duration: float,
         mode: str,
-        text_response: Optional[str],
-        thinking: Optional[str],
-        session_id: Optional[str] = None,
-        chat_index: Optional[int] = None,
+        text_response: str | None,
+        thinking: str | None,
+        session_id: str | None = None,
+        chat_index: int | None = None,
     ):
         """Update the history index file in R2."""
         try:
@@ -264,7 +272,7 @@ class R2Storage:
                 Bucket=self.bucket_name,
                 Key=history_key,
                 Body=json.dumps(history, ensure_ascii=False, indent=2),
-                ContentType="application/json"
+                ContentType="application/json",
             )
 
             self._metadata_cache = history
@@ -272,17 +280,14 @@ class R2Storage:
         except Exception as e:
             logger.error(f"Failed to update history index: {e}")
 
-    def _load_history_index(self) -> List[Dict[str, Any]]:
+    def _load_history_index(self) -> list[dict[str, Any]]:
         """Load the history index from R2."""
         if self._metadata_cache is not None:
             return self._metadata_cache
 
         try:
             history_key = self._get_history_key()
-            response = self._client.get_object(
-                Bucket=self.bucket_name,
-                Key=history_key
-            )
+            response = self._client.get_object(Bucket=self.bucket_name, Key=history_key)
             content = response["Body"].read().decode("utf-8")
             self._metadata_cache = json.loads(content)
             return self._metadata_cache
@@ -292,7 +297,7 @@ class R2Storage:
             logger.error(f"Failed to load history index: {e}")
             return []
 
-    def get_history(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def get_history(self, limit: int = 50) -> list[dict[str, Any]]:
         """
         Get image history from R2.
 
@@ -308,7 +313,7 @@ class R2Storage:
         history = self._load_history_index()
         return history[:limit]
 
-    def load_image(self, key: str) -> Optional[Image.Image]:
+    def load_image(self, key: str) -> Image.Image | None:
         """
         Load an image from R2.
 
@@ -322,17 +327,14 @@ class R2Storage:
             return None
 
         try:
-            response = self._client.get_object(
-                Bucket=self.bucket_name,
-                Key=key
-            )
+            response = self._client.get_object(Bucket=self.bucket_name, Key=key)
             image_data = response["Body"].read()
             return Image.open(BytesIO(image_data))
         except Exception as e:
             logger.error(f"Failed to load image from R2: {e}")
             return None
 
-    def load_image_bytes(self, key: str) -> Optional[bytes]:
+    def load_image_bytes(self, key: str) -> bytes | None:
         """
         Load image bytes from R2.
 
@@ -346,16 +348,13 @@ class R2Storage:
             return None
 
         try:
-            response = self._client.get_object(
-                Bucket=self.bucket_name,
-                Key=key
-            )
+            response = self._client.get_object(Bucket=self.bucket_name, Key=key)
             return response["Body"].read()
         except Exception as e:
             logger.error(f"Failed to load image bytes from R2: {e}")
             return None
 
-    def get_public_url(self, key: str) -> Optional[str]:
+    def get_public_url(self, key: str) -> str | None:
         """
         Get the public URL for an image.
 
@@ -375,10 +374,7 @@ class R2Storage:
             return False
 
         try:
-            self._client.delete_object(
-                Bucket=self.bucket_name,
-                Key=key
-            )
+            self._client.delete_object(Bucket=self.bucket_name, Key=key)
             return True
         except Exception as e:
             logger.error(f"Failed to delete image from R2: {e}")
@@ -398,7 +394,7 @@ class R2Storage:
                 Bucket=self.bucket_name,
                 Key=history_key,
                 Body=json.dumps(history, ensure_ascii=False, indent=2),
-                ContentType="application/json"
+                ContentType="application/json",
             )
             self._metadata_cache = history
             return True
@@ -422,8 +418,7 @@ class R2Storage:
                     objects = [{"Key": obj["Key"]} for obj in page["Contents"]]
                     if objects:
                         self._client.delete_objects(
-                            Bucket=self.bucket_name,
-                            Delete={"Objects": objects}
+                            Bucket=self.bucket_name, Delete={"Objects": objects}
                         )
 
             self._metadata_cache = None
@@ -437,10 +432,10 @@ class R2Storage:
 
 
 # Cache for user-specific R2 storage instances
-_r2_storage_instances: Dict[Optional[str], R2Storage] = {}
+_r2_storage_instances: dict[str | None, R2Storage] = {}
 
 
-def get_r2_storage(user_id: Optional[str] = None) -> R2Storage:
+def get_r2_storage(user_id: str | None = None) -> R2Storage:
     """
     Get or create an R2 storage instance for the given user.
 

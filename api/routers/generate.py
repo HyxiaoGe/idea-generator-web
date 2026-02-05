@@ -10,46 +10,44 @@ Endpoints:
 - POST /api/generate/search - Search-grounded generation
 """
 
-import uuid
-import time
-import base64
 import logging
-from io import BytesIO
-from typing import Optional
+import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
-from core.config import get_settings
-from core.redis import get_redis
-from core.exceptions import QuotaExceededError, GenerationError
-from services import (
-    ImageGenerator,
-    R2Storage,
-    get_r2_storage,
-    QuotaService,
-    get_quota_service,
-    is_trial_mode,
-    get_friendly_error_message,
-)
+from api.dependencies import get_image_repository
+from api.routers.auth import get_current_user
 from api.schemas.generate import (
-    GenerateImageRequest,
-    GenerateImageResponse,
-    GeneratedImage,
-    GenerationSettings,
-    GenerationMode,
     BatchGenerateRequest,
     BatchGenerateResponse,
-    TaskProgress,
-    BlendImagesRequest,
-    StyleTransferRequest,
+    GeneratedImage,
+    GenerateImageRequest,
+    GenerateImageResponse,
+    GenerationMode,
+    GenerationSettings,
     SearchGenerateRequest,
-    AspectRatio,
-    Resolution,
-    SafetyLevel,
+    TaskProgress,
 )
-from api.routers.auth import get_current_user
+from core.config import get_settings
+from core.exceptions import QuotaExceededError
+from core.redis import get_redis
+from database.repositories import ImageRepository
+from services import (
+    # Multi-provider support
+    GenerationRequest as ProviderRequest,
+)
+from services import (
+    # Legacy (still used for backward compatibility)
+    ImageGenerator,
+    MediaType,
+    get_friendly_error_message,
+    get_provider_router,
+    get_quota_service,
+    is_trial_mode,
+)
 from services.auth_service import GitHubUser
+from services.storage import get_storage_manager
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +56,8 @@ router = APIRouter(prefix="/generate", tags=["generation"])
 
 # ============ Helpers ============
 
-def get_user_id_from_user(user: Optional[GitHubUser]) -> str:
+
+def get_user_id_from_user(user: GitHubUser | None) -> str:
     """Get user ID for quota tracking."""
     if user:
         return user.user_folder_id
@@ -70,7 +69,7 @@ async def check_quota_and_consume(
     mode: str,
     resolution: str,
     count: int = 1,
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
 ) -> bool:
     """
     Check quota and consume if available.
@@ -112,30 +111,63 @@ async def check_quota_and_consume(
     return True
 
 
-def create_generator(api_key: Optional[str] = None) -> ImageGenerator:
-    """Create image generator with appropriate API key."""
+def create_generator(api_key: str | None = None) -> ImageGenerator:
+    """Create image generator with appropriate API key (legacy, for backward compatibility)."""
     settings = get_settings()
-    key = api_key or settings.google_api_key
+    key = api_key or settings.get_google_api_key()
 
     if not key:
-        raise HTTPException(
-            status_code=400,
-            detail="No API key configured"
-        )
+        raise HTTPException(status_code=400, detail="No API key configured")
 
     return ImageGenerator(api_key=key)
 
 
+def build_provider_request(
+    prompt: str,
+    settings: GenerationSettings,
+    user_id: str | None = None,
+    preferred_provider: str | None = None,
+    preferred_model: str | None = None,
+    enable_thinking: bool = False,
+    enable_search: bool = False,
+    reference_images: list | None = None,
+) -> ProviderRequest:
+    """Build a unified provider request from API parameters."""
+    return ProviderRequest(
+        prompt=prompt,
+        aspect_ratio=settings.aspect_ratio.value,
+        resolution=settings.resolution.value,
+        safety_level=settings.safety_level.value,
+        preferred_provider=preferred_provider,
+        preferred_model=preferred_model,
+        enable_thinking=enable_thinking,
+        enable_search=enable_search,
+        reference_images=reference_images,
+        user_id=user_id,
+        request_id=f"gen_{uuid.uuid4().hex[:12]}",
+    )
+
+
 # ============ Endpoints ============
+
 
 @router.post("", response_model=GenerateImageResponse)
 async def generate_image(
     request: GenerateImageRequest,
-    user: Optional[GitHubUser] = Depends(get_current_user),
-    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    user: GitHubUser | None = Depends(get_current_user),
+    image_repo: ImageRepository | None = Depends(get_image_repository),
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
+    x_provider: str | None = Header(None, alias="X-Provider"),
+    x_model: str | None = Header(None, alias="X-Model"),
+    x_routing_strategy: str | None = Header(None, alias="X-Routing-Strategy"),  # noqa: ARG001
 ):
     """
     Generate a single image from a text prompt.
+
+    Supports multi-provider routing via headers:
+    - X-Provider: Specify provider (google, openai, bfl, stability)
+    - X-Model: Specify model ID
+    - X-Routing-Strategy: Override routing (priority, cost, quality, speed)
 
     Returns the generated image info and metadata.
     """
@@ -149,71 +181,124 @@ async def generate_image(
         api_key=x_api_key,
     )
 
-    # Create generator
-    generator = create_generator(x_api_key)
-
-    # Generate image
-    start_time = time.time()
-    result = generator.generate(
+    # Build provider request
+    provider_request = build_provider_request(
         prompt=request.prompt,
-        aspect_ratio=request.settings.aspect_ratio.value,
-        resolution=request.settings.resolution.value,
+        settings=request.settings,
+        user_id=user_id,
+        preferred_provider=x_provider,
+        preferred_model=x_model,
         enable_thinking=request.include_thinking,
-        safety_level=request.settings.safety_level.value,
     )
+
+    # Use multi-provider router
+    router_instance = get_provider_router()
+
+    try:
+        # Route and execute with fallback
+        result = await router_instance.execute_with_fallback(
+            request=provider_request,
+            media_type=MediaType.IMAGE,
+        )
+    except ValueError as e:
+        # No providers available
+        logger.warning(f"No providers available, falling back to legacy: {e}")
+        # Fallback to legacy generator
+        generator = create_generator(x_api_key)
+        legacy_result = generator.generate(
+            prompt=request.prompt,
+            aspect_ratio=request.settings.aspect_ratio.value,
+            resolution=request.settings.resolution.value,
+            enable_thinking=request.include_thinking,
+            safety_level=request.settings.safety_level.value,
+        )
+        # Convert legacy result
+        result = type(
+            "Result",
+            (),
+            {
+                "success": legacy_result.image is not None,
+                "image": legacy_result.image,
+                "error": legacy_result.error,
+                "text_response": legacy_result.text,
+                "thinking": legacy_result.thinking,
+                "duration": legacy_result.duration,
+                "provider": "google",
+                "model": "gemini-3-pro-image-preview",
+            },
+        )()
 
     if result.error:
-        raise HTTPException(
-            status_code=400,
-            detail=get_friendly_error_message(result.error)
-        )
+        raise HTTPException(status_code=400, detail=get_friendly_error_message(result.error))
 
     if not result.image:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate image"
-        )
+        raise HTTPException(status_code=500, detail="Failed to generate image")
 
     # Save to storage
-    r2_storage = get_r2_storage(user_id=user_id if user else None)
+    storage = get_storage_manager(user_id=user_id if user else None)
 
-    image_key = r2_storage.save_image(
-        image=result.image,
-        prompt=request.prompt,
-        settings={
-            "aspect_ratio": request.settings.aspect_ratio.value,
-            "resolution": request.settings.resolution.value,
-        },
-        duration=result.duration,
-        mode="basic",
-        text_response=result.text,
-        thinking=result.thinking,
-    )
-
-    if not image_key:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to save image"
+    try:
+        storage_obj = await storage.save_image(
+            image=result.image,
+            prompt=request.prompt,
+            settings={
+                "aspect_ratio": request.settings.aspect_ratio.value,
+                "resolution": request.settings.resolution.value,
+                "provider": result.provider,
+                "model": result.model,
+            },
+            duration=result.duration,
+            mode="basic",
+            text_response=result.text_response,
+            thinking=result.thinking,
         )
+    except Exception as e:
+        logger.error(f"Failed to save image: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save image")
 
-    # Build response
-    public_url = r2_storage.get_public_url(image_key)
+    # Save to PostgreSQL if available
+    if image_repo:
+        try:
+            await image_repo.create(
+                storage_key=storage_obj.key,
+                filename=storage_obj.filename,
+                prompt=request.prompt,
+                mode="basic",
+                storage_backend=get_settings().storage_backend,
+                public_url=storage_obj.public_url,
+                aspect_ratio=request.settings.aspect_ratio.value,
+                resolution=request.settings.resolution.value,
+                provider=result.provider,
+                model=result.model,
+                width=result.image.width,
+                height=result.image.height,
+                generation_duration_ms=int(result.duration * 1000) if result.duration else None,
+                text_response=result.text_response,
+                thinking=result.thinking,
+                user_id=None,  # TODO: Get user UUID from authenticated user
+            )
+        except Exception as e:
+            logger.warning(f"Failed to save image to database: {e}")
+            # Continue - file storage is the primary storage
 
     return GenerateImageResponse(
         image=GeneratedImage(
-            key=image_key,
-            filename=image_key.split("/")[-1],
-            url=public_url,
+            key=storage_obj.key,
+            filename=storage_obj.filename,
+            url=storage_obj.public_url,
             width=result.image.width,
             height=result.image.height,
         ),
         prompt=request.prompt,
         thinking=result.thinking,
-        text_response=result.text,
+        text_response=result.text_response,
         duration=result.duration,
         mode=GenerationMode.BASIC,
         settings=request.settings,
         created_at=datetime.now(),
+        # New: provider info
+        provider=result.provider,
+        model=result.model,
     )
 
 
@@ -221,8 +306,8 @@ async def generate_image(
 async def batch_generate(
     request: BatchGenerateRequest,
     background_tasks: BackgroundTasks,
-    user: Optional[GitHubUser] = Depends(get_current_user),
-    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    user: GitHubUser | None = Depends(get_current_user),
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
 ):
     """
     Queue a batch image generation task.
@@ -257,10 +342,13 @@ async def batch_generate(
         "created_at": datetime.now().isoformat(),
     }
 
-    await redis.hset(f"task:{task_id}", mapping={
-        k: str(v) if not isinstance(v, (list, dict)) else __import__("json").dumps(v)
-        for k, v in task_data.items()
-    })
+    await redis.hset(
+        f"task:{task_id}",
+        mapping={
+            k: str(v) if not isinstance(v, list | dict) else __import__("json").dumps(v)
+            for k, v in task_data.items()
+        },
+    )
     await redis.expire(f"task:{task_id}", 86400)  # 24 hour TTL
 
     # Queue task via arq (or run in background for simple cases)
@@ -287,7 +375,7 @@ async def process_batch_generation(
     prompts: list,
     settings: GenerationSettings,
     user_id: str,
-    api_key: Optional[str],
+    api_key: str | None,
 ):
     """Background task to process batch generation."""
     import json
@@ -299,7 +387,7 @@ async def process_batch_generation(
     await redis.hset(task_key, "started_at", datetime.now().isoformat())
 
     generator = create_generator(api_key)
-    r2_storage = get_r2_storage(user_id=user_id if user_id != "anonymous" else None)
+    storage = get_storage_manager(user_id=user_id if user_id != "anonymous" else None)
 
     results = []
     errors = []
@@ -317,9 +405,9 @@ async def process_batch_generation(
             )
 
             if result.error:
-                errors.append(f"Prompt {i+1}: {result.error}")
+                errors.append(f"Prompt {i + 1}: {result.error}")
             elif result.image:
-                image_key = r2_storage.save_image(
+                storage_obj = await storage.save_image(
                     image=result.image,
                     prompt=prompt,
                     settings={
@@ -330,15 +418,16 @@ async def process_batch_generation(
                     mode="batch",
                 )
 
-                if image_key:
-                    results.append({
-                        "key": image_key,
-                        "filename": image_key.split("/")[-1],
-                        "url": r2_storage.get_public_url(image_key),
-                    })
+                results.append(
+                    {
+                        "key": storage_obj.key,
+                        "filename": storage_obj.filename,
+                        "url": storage_obj.public_url,
+                    }
+                )
 
         except Exception as e:
-            errors.append(f"Prompt {i+1}: {str(e)}")
+            errors.append(f"Prompt {i + 1}: {str(e)}")
             logger.error(f"Batch generation error: {e}")
 
         # Update progress
@@ -363,10 +452,7 @@ async def get_task_progress(task_id: str):
     task_data = await redis.hgetall(task_key)
 
     if not task_data:
-        raise HTTPException(
-            status_code=404,
-            detail="Task not found"
-        )
+        raise HTTPException(status_code=404, detail="Task not found")
 
     results = json.loads(task_data.get("results", "[]"))
     errors = json.loads(task_data.get("errors", "[]"))
@@ -379,21 +465,29 @@ async def get_task_progress(task_id: str):
         current_prompt=task_data.get("current_prompt"),
         results=[GeneratedImage(**r) for r in results],
         errors=errors,
-        started_at=datetime.fromisoformat(task_data["started_at"]) if "started_at" in task_data else None,
-        completed_at=datetime.fromisoformat(task_data["completed_at"]) if "completed_at" in task_data else None,
+        started_at=datetime.fromisoformat(task_data["started_at"])
+        if "started_at" in task_data
+        else None,
+        completed_at=datetime.fromisoformat(task_data["completed_at"])
+        if "completed_at" in task_data
+        else None,
     )
 
 
 @router.post("/search", response_model=GenerateImageResponse)
 async def search_grounded_generate(
     request: SearchGenerateRequest,
-    user: Optional[GitHubUser] = Depends(get_current_user),
-    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    user: GitHubUser | None = Depends(get_current_user),
+    image_repo: ImageRepository | None = Depends(get_image_repository),
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
+    x_provider: str | None = Header(None, alias="X-Provider"),
+    x_model: str | None = Header(None, alias="X-Model"),
 ):
     """
     Generate an image with search grounding.
 
     Uses real-time search data to inform generation.
+    Note: Search grounding is currently only supported by Google Gemini.
     """
     user_id = get_user_id_from_user(user)
 
@@ -405,65 +499,159 @@ async def search_grounded_generate(
         api_key=x_api_key,
     )
 
-    # Create generator
-    generator = create_generator(x_api_key)
-
-    # Generate with search enabled
-    result = generator.generate(
+    # Build provider request with search enabled
+    provider_request = build_provider_request(
         prompt=request.prompt,
-        aspect_ratio=request.settings.aspect_ratio.value,
-        resolution=request.settings.resolution.value,
+        settings=request.settings,
+        user_id=user_id,
+        preferred_provider=x_provider or "google",  # Search only works with Google
+        preferred_model=x_model,
         enable_search=True,
-        safety_level=request.settings.safety_level.value,
     )
+
+    # Use multi-provider router
+    router_instance = get_provider_router()
+
+    try:
+        result = await router_instance.execute_with_fallback(
+            request=provider_request,
+            media_type=MediaType.IMAGE,
+        )
+    except ValueError as e:
+        logger.warning(f"No providers available for search, falling back to legacy: {e}")
+        generator = create_generator(x_api_key)
+        legacy_result = generator.generate(
+            prompt=request.prompt,
+            aspect_ratio=request.settings.aspect_ratio.value,
+            resolution=request.settings.resolution.value,
+            enable_search=True,
+            safety_level=request.settings.safety_level.value,
+        )
+        result = type(
+            "Result",
+            (),
+            {
+                "success": legacy_result.image is not None,
+                "image": legacy_result.image,
+                "error": legacy_result.error,
+                "text_response": legacy_result.text,
+                "search_sources": legacy_result.search_sources,
+                "duration": legacy_result.duration,
+                "provider": "google",
+                "model": "gemini-3-pro-image-preview",
+            },
+        )()
 
     if result.error:
-        raise HTTPException(
-            status_code=400,
-            detail=get_friendly_error_message(result.error)
-        )
+        raise HTTPException(status_code=400, detail=get_friendly_error_message(result.error))
 
     if not result.image:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate image"
-        )
+        raise HTTPException(status_code=500, detail="Failed to generate image")
 
     # Save to storage
-    r2_storage = get_r2_storage(user_id=user_id if user else None)
+    storage = get_storage_manager(user_id=user_id if user else None)
 
-    image_key = r2_storage.save_image(
-        image=result.image,
-        prompt=request.prompt,
-        settings={
-            "aspect_ratio": request.settings.aspect_ratio.value,
-            "resolution": request.settings.resolution.value,
-        },
-        duration=result.duration,
-        mode="search",
-        text_response=result.text,
-    )
-
-    if not image_key:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to save image"
+    try:
+        storage_obj = await storage.save_image(
+            image=result.image,
+            prompt=request.prompt,
+            settings={
+                "aspect_ratio": request.settings.aspect_ratio.value,
+                "resolution": request.settings.resolution.value,
+                "provider": result.provider,
+                "model": result.model,
+            },
+            duration=result.duration,
+            mode="search",
+            text_response=result.text_response,
         )
+    except Exception as e:
+        logger.error(f"Failed to save image: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save image")
 
-    public_url = r2_storage.get_public_url(image_key)
+    # Save to PostgreSQL if available
+    if image_repo:
+        try:
+            await image_repo.create(
+                storage_key=storage_obj.key,
+                filename=storage_obj.filename,
+                prompt=request.prompt,
+                mode="search",
+                storage_backend=get_settings().storage_backend,
+                public_url=storage_obj.public_url,
+                aspect_ratio=request.settings.aspect_ratio.value,
+                resolution=request.settings.resolution.value,
+                provider=result.provider,
+                model=result.model,
+                width=result.image.width,
+                height=result.image.height,
+                generation_duration_ms=int(result.duration * 1000) if result.duration else None,
+                text_response=result.text_response,
+                user_id=None,  # TODO: Get user UUID from authenticated user
+            )
+        except Exception as e:
+            logger.warning(f"Failed to save image to database: {e}")
 
     return GenerateImageResponse(
         image=GeneratedImage(
-            key=image_key,
-            filename=image_key.split("/")[-1],
-            url=public_url,
+            key=storage_obj.key,
+            filename=storage_obj.filename,
+            url=storage_obj.public_url,
             width=result.image.width,
             height=result.image.height,
         ),
         prompt=request.prompt,
-        text_response=result.text,
+        text_response=result.text_response,
+        search_sources=getattr(result, "search_sources", None),
         duration=result.duration,
         mode=GenerationMode.SEARCH,
         settings=request.settings,
         created_at=datetime.now(),
+        provider=result.provider,
+        model=result.model,
     )
+
+
+# ============ Provider Management Endpoints ============
+
+
+@router.get("/providers")
+async def list_providers():
+    """
+    List all available image generation providers and their models.
+
+    Returns provider info including:
+    - Provider name and display name
+    - Available models with capabilities
+    - Pricing and quality scores
+    """
+    router_instance = get_provider_router()
+    providers = router_instance.list_available_providers(media_type=MediaType.IMAGE)
+
+    return {
+        "providers": providers,
+        "default_provider": get_settings().default_image_provider,
+        "routing_strategy": get_settings().default_routing_strategy,
+    }
+
+
+@router.get("/providers/{provider_name}/health")
+async def check_provider_health(provider_name: str):
+    """
+    Check health status of a specific provider.
+
+    Returns:
+    - is_healthy: bool
+    - latency_ms: int
+    - last_check: timestamp
+    """
+    router_instance = get_provider_router()
+    health = await router_instance.check_provider_health(provider_name)
+
+    return {
+        "provider": provider_name,
+        "is_healthy": health.is_healthy,
+        "latency_ms": health.latency_ms,
+        "error_count": health.error_count,
+        "success_count": health.success_count,
+    }

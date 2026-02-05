@@ -2,12 +2,12 @@
 API Health Check Service for monitoring Google GenAI availability.
 """
 
+import logging
 import os
 import time
-import logging
-from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from google import genai
 from google.genai import types
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class HealthStatus(Enum):
     """API health status."""
+
     UNKNOWN = "unknown"
     HEALTHY = "healthy"
     UNHEALTHY = "unhealthy"
@@ -26,13 +27,14 @@ class HealthStatus(Enum):
 @dataclass
 class HealthCheckResult:
     """Result of a health check."""
+
     status: HealthStatus
     message: str
     response_time: float = 0.0
     timestamp: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "status": self.status.value,
@@ -44,14 +46,14 @@ class HealthCheckResult:
 
 
 # Health check configuration
-HEALTH_CHECK_TIMEOUT = 10.0   # Timeout for health check request
+HEALTH_CHECK_TIMEOUT = 10.0  # Timeout for health check request
 HEALTH_CHECK_MODEL = "gemini-2.0-flash"  # Use a fast model for health checks
 
 
 class GeminiHealthChecker:
     """Service for checking Google GenAI API health."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """
         Initialize the health checker.
 
@@ -59,11 +61,11 @@ class GeminiHealthChecker:
             api_key: Google API key to use for health checks
         """
         self._api_key = api_key or os.getenv("GOOGLE_API_KEY")
-        self._last_result: Optional[HealthCheckResult] = None
+        self._last_result: HealthCheckResult | None = None
         self._last_check_time: float = 0.0
 
     @property
-    def api_key(self) -> Optional[str]:
+    def api_key(self) -> str | None:
         """Get the API key."""
         return self._api_key
 
@@ -73,11 +75,11 @@ class GeminiHealthChecker:
         self._api_key = value
 
     @property
-    def last_result(self) -> Optional[HealthCheckResult]:
+    def last_result(self) -> HealthCheckResult | None:
         """Get the last health check result."""
         return self._last_result
 
-    def check_health(self, api_key: Optional[str] = None) -> HealthCheckResult:
+    def check_health(self, api_key: str | None = None) -> HealthCheckResult:
         """
         Perform a health check by sending a simple text request.
 
@@ -94,7 +96,7 @@ class GeminiHealthChecker:
                 status=HealthStatus.UNHEALTHY,
                 message="No API key configured",
                 timestamp=time.time(),
-                error="Missing API key"
+                error="Missing API key",
             )
 
         start_time = time.time()
@@ -109,7 +111,7 @@ class GeminiHealthChecker:
                 config=types.GenerateContentConfig(
                     response_modalities=["Text"],
                     max_output_tokens=10,
-                )
+                ),
             )
 
             response_time = time.time() - start_time
@@ -121,7 +123,7 @@ class GeminiHealthChecker:
                     message=f"API slow ({response_time:.1f}s)",
                     response_time=response_time,
                     timestamp=time.time(),
-                    error="Slow response"
+                    error="Slow response",
                 )
             # Check if we got a valid response
             elif response.candidates and len(response.candidates) > 0:
@@ -129,7 +131,7 @@ class GeminiHealthChecker:
                     status=HealthStatus.HEALTHY,
                     message=f"API is responsive ({response_time:.1f}s)",
                     response_time=response_time,
-                    timestamp=time.time()
+                    timestamp=time.time(),
                 )
             else:
                 result = HealthCheckResult(
@@ -137,7 +139,7 @@ class GeminiHealthChecker:
                     message="API returned empty response",
                     response_time=response_time,
                     timestamp=time.time(),
-                    error="Empty response"
+                    error="Empty response",
                 )
 
         except Exception as e:
@@ -163,7 +165,7 @@ class GeminiHealthChecker:
                 message=message,
                 response_time=response_time,
                 timestamp=time.time(),
-                error=error_msg
+                error=error_msg,
             )
             logger.warning(f"Health check failed: {error_msg}")
 
@@ -171,7 +173,7 @@ class GeminiHealthChecker:
         self._last_check_time = time.time()
         return result
 
-    async def check_health_async(self, api_key: Optional[str] = None) -> HealthCheckResult:
+    async def check_health_async(self, api_key: str | None = None) -> HealthCheckResult:
         """
         Perform a health check asynchronously.
 
@@ -209,10 +211,10 @@ class GeminiHealthChecker:
 
 
 # Singleton instance
-_health_checker: Optional[GeminiHealthChecker] = None
+_health_checker: GeminiHealthChecker | None = None
 
 
-def get_health_checker(api_key: Optional[str] = None) -> GeminiHealthChecker:
+def get_health_checker(api_key: str | None = None) -> GeminiHealthChecker:
     """Get or create the health checker instance."""
     global _health_checker
     if _health_checker is None:

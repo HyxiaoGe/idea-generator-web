@@ -10,35 +10,34 @@ Endpoints:
 """
 
 import json
-import uuid
 import logging
+import uuid
 from datetime import datetime
-from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 
-from core.config import get_settings
-from core.redis import get_redis
-from core.exceptions import QuotaExceededError
-from services import (
-    ChatSession,
-    get_r2_storage,
-    get_quota_service,
-    is_trial_mode,
-    get_friendly_error_message,
-)
+from api.routers.auth import get_current_user
 from api.schemas.chat import (
+    ChatHistoryResponse,
+    ChatMessage,
+    ChatSessionInfo,
     CreateChatRequest,
     CreateChatResponse,
+    ListChatsResponse,
     SendMessageRequest,
     SendMessageResponse,
-    ChatSessionInfo,
-    ChatHistoryResponse,
-    ListChatsResponse,
-    ChatMessage,
 )
 from api.schemas.generate import GeneratedImage
-from api.routers.auth import get_current_user
+from core.config import get_settings
+from core.exceptions import QuotaExceededError
+from core.redis import get_redis
+from services import (
+    ChatSession,
+    get_friendly_error_message,
+    get_quota_service,
+    get_r2_storage,
+    is_trial_mode,
+)
 from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
@@ -51,7 +50,8 @@ CHAT_SESSION_TTL = 86400
 
 # ============ Helpers ============
 
-def get_user_id_from_user(user: Optional[GitHubUser]) -> str:
+
+def get_user_id_from_user(user: GitHubUser | None) -> str:
     """Get user ID for session storage."""
     if user:
         return user.user_folder_id
@@ -68,7 +68,7 @@ def get_user_sessions_key(user_id: str) -> str:
     return f"chat_sessions:{user_id}"
 
 
-async def check_quota(user_id: str, api_key: Optional[str] = None):
+async def check_quota(user_id: str, api_key: str | None = None):
     """Check and consume quota for chat generation."""
     if api_key and not is_trial_mode(api_key):
         return
@@ -99,10 +99,11 @@ async def check_quota(user_id: str, api_key: Optional[str] = None):
 
 # ============ Endpoints ============
 
+
 @router.post("", response_model=CreateChatResponse)
 async def create_chat_session(
     request: CreateChatRequest,
-    user: Optional[GitHubUser] = Depends(get_current_user),
+    user: GitHubUser | None = Depends(get_current_user),
 ):
     """
     Create a new chat session for multi-turn image generation.
@@ -142,8 +143,8 @@ async def create_chat_session(
 async def send_message(
     session_id: str,
     request: SendMessageRequest,
-    user: Optional[GitHubUser] = Depends(get_current_user),
-    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    user: GitHubUser | None = Depends(get_current_user),
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
 ):
     """
     Send a message in an existing chat session.
@@ -164,8 +165,9 @@ async def send_message(
     await check_quota(user_id, x_api_key)
 
     # Create ChatSession and restore state
+    # Note: Chat sessions currently only support Google Gemini for multi-turn context
     settings = get_settings()
-    api_key = x_api_key or settings.google_api_key
+    api_key = x_api_key or settings.get_google_api_key()
 
     if not api_key:
         raise HTTPException(status_code=400, detail="No API key configured")
@@ -189,10 +191,7 @@ async def send_message(
     )
 
     if response.error:
-        raise HTTPException(
-            status_code=400,
-            detail=get_friendly_error_message(response.error)
-        )
+        raise HTTPException(status_code=400, detail=get_friendly_error_message(response.error))
 
     # Save image if generated
     image_data = None
@@ -219,18 +218,22 @@ async def send_message(
 
     # Update session with new messages
     now = datetime.now()
-    session_data["messages"].append({
-        "role": "user",
-        "content": request.message,
-        "timestamp": now.isoformat(),
-    })
-    session_data["messages"].append({
-        "role": "assistant",
-        "content": response.text or "",
-        "image_key": image_data.key if image_data else None,
-        "thinking": response.thinking,
-        "timestamp": now.isoformat(),
-    })
+    session_data["messages"].append(
+        {
+            "role": "user",
+            "content": request.message,
+            "timestamp": now.isoformat(),
+        }
+    )
+    session_data["messages"].append(
+        {
+            "role": "assistant",
+            "content": response.text or "",
+            "image_key": image_data.key if image_data else None,
+            "thinking": response.thinking,
+            "timestamp": now.isoformat(),
+        }
+    )
     session_data["last_activity"] = now.isoformat()
 
     # Save updated session
@@ -248,7 +251,7 @@ async def send_message(
 @router.get("/{session_id}", response_model=ChatHistoryResponse)
 async def get_chat_history(
     session_id: str,
-    user: Optional[GitHubUser] = Depends(get_current_user),
+    user: GitHubUser | None = Depends(get_current_user),
 ):
     """
     Get the conversation history for a chat session.
@@ -276,13 +279,15 @@ async def get_chat_history(
                 url=r2_storage.get_public_url(msg["image_key"]),
             )
 
-        messages.append(ChatMessage(
-            role=msg["role"],
-            content=msg["content"],
-            image=image,
-            thinking=msg.get("thinking"),
-            timestamp=datetime.fromisoformat(msg["timestamp"]),
-        ))
+        messages.append(
+            ChatMessage(
+                role=msg["role"],
+                content=msg["content"],
+                image=image,
+                thinking=msg.get("thinking"),
+                timestamp=datetime.fromisoformat(msg["timestamp"]),
+            )
+        )
 
     return ChatHistoryResponse(
         session_id=session_id,
@@ -293,7 +298,7 @@ async def get_chat_history(
 
 @router.get("", response_model=ListChatsResponse)
 async def list_chat_sessions(
-    user: Optional[GitHubUser] = Depends(get_current_user),
+    user: GitHubUser | None = Depends(get_current_user),
 ):
     """
     List all chat sessions for the current user.
@@ -311,13 +316,15 @@ async def list_chat_sessions(
 
         if session_json:
             data = json.loads(session_json)
-            sessions.append(ChatSessionInfo(
-                session_id=data["session_id"],
-                aspect_ratio=data["aspect_ratio"],
-                message_count=len(data["messages"]),
-                created_at=datetime.fromisoformat(data["created_at"]),
-                last_activity=datetime.fromisoformat(data["last_activity"]),
-            ))
+            sessions.append(
+                ChatSessionInfo(
+                    session_id=data["session_id"],
+                    aspect_ratio=data["aspect_ratio"],
+                    message_count=len(data["messages"]),
+                    created_at=datetime.fromisoformat(data["created_at"]),
+                    last_activity=datetime.fromisoformat(data["last_activity"]),
+                )
+            )
 
     # Sort by last activity, newest first
     sessions.sort(key=lambda x: x.last_activity, reverse=True)
@@ -331,7 +338,7 @@ async def list_chat_sessions(
 @router.delete("/{session_id}")
 async def delete_chat_session(
     session_id: str,
-    user: Optional[GitHubUser] = Depends(get_current_user),
+    user: GitHubUser | None = Depends(get_current_user),
 ):
     """
     Delete a chat session.

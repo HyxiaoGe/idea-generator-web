@@ -2,8 +2,10 @@
 Async helper utilities for Streamlit.
 Handles event loop management to avoid "Event loop is closed" errors.
 """
+
 import asyncio
-from typing import Coroutine, Any
+from collections.abc import Coroutine
+from typing import Any
 
 
 def run_async(coro: Coroutine) -> Any:

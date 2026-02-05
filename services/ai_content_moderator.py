@@ -2,14 +2,15 @@
 AI-powered content moderation service using Gemini Flash.
 Provides intelligent safety classification beyond keyword matching.
 """
-import os
+
 import hashlib
-from typing import Tuple, Optional, Dict
+import os
 from datetime import datetime, timedelta
 
 # Try to import Google GenAI
 try:
     import google.generativeai as genai
+
     HAS_GENAI = True
 except ImportError:
     HAS_GENAI = False
@@ -74,12 +75,16 @@ Prompt to analyze: "{prompt}"
 
 Classification:"""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """Initialize AI content moderator."""
         self.api_key = api_key or get_config_value("GOOGLE_API_KEY", "")
-        self.enabled = get_config_value("AI_MODERATION_ENABLED", "true").lower() in ["true", "1", "yes"]
+        self.enabled = get_config_value("AI_MODERATION_ENABLED", "true").lower() in [
+            "true",
+            "1",
+            "yes",
+        ]
         self.model = None
-        self._cache: Dict[str, Tuple[bool, str, datetime]] = {}
+        self._cache: dict[str, tuple[bool, str, datetime]] = {}
         self._cache_ttl = timedelta(hours=24)  # Cache results for 24 hours
 
         if self.enabled and HAS_GENAI and self.api_key:
@@ -95,7 +100,7 @@ Classification:"""
         """Generate cache key from prompt."""
         return hashlib.md5(prompt.lower().encode()).hexdigest()
 
-    def _get_cached_result(self, prompt: str) -> Optional[Tuple[bool, str]]:
+    def _get_cached_result(self, prompt: str) -> tuple[bool, str] | None:
         """Get cached moderation result if available and not expired."""
         cache_key = self._get_cache_key(prompt)
         if cache_key in self._cache:
@@ -119,7 +124,7 @@ Classification:"""
             for key, _ in sorted_cache[:200]:  # Remove oldest 200
                 del self._cache[key]
 
-    def check_safety(self, prompt: str) -> Tuple[bool, str]:
+    def check_safety(self, prompt: str) -> tuple[bool, str]:
         """
         Check if a prompt is safe using AI classification.
 
@@ -156,7 +161,7 @@ Classification:"""
                     "HATE_SPEECH": "BLOCK_NONE",
                     "SEXUALLY_EXPLICIT": "BLOCK_NONE",
                     "DANGEROUS_CONTENT": "BLOCK_NONE",
-                }
+                },
             )
 
             # Parse response
@@ -217,7 +222,7 @@ Classification:"""
                 "illegal_content": "⚠️ 检测到违法内容，请求已被拦截。",
                 "policy_violation": "⚠️ 内容违反使用政策，请修改提示词。",
                 "default": "⚠️ 您的提示词被AI安全系统标记。",
-            }
+            },
         }
 
         lang_messages = messages.get(language, messages["en"])
@@ -228,7 +233,7 @@ Classification:"""
 _ai_moderator = None
 
 
-def get_ai_moderator(api_key: Optional[str] = None) -> AIContentModerator:
+def get_ai_moderator(api_key: str | None = None) -> AIContentModerator:
     """Get or create the global AI content moderator instance."""
     global _ai_moderator
     if _ai_moderator is None:

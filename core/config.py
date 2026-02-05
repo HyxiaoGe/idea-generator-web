@@ -5,7 +5,7 @@ Supports loading from environment variables and .env files.
 """
 
 from functools import lru_cache
-from typing import Optional, List
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,30 +35,120 @@ class Settings(BaseSettings):
     jwt_expire_days: int = 7
 
     # ============ CORS ============
-    cors_origins: List[str] = ["*"]
+    cors_origins: list[str] = ["*"]
     cors_allow_credentials: bool = True
-    cors_allow_methods: List[str] = ["*"]
-    cors_allow_headers: List[str] = ["*"]
+    cors_allow_methods: list[str] = ["*"]
+    cors_allow_headers: list[str] = ["*"]
 
     # ============ Redis ============
     redis_url: str = "redis://localhost:6379/0"
     redis_max_connections: int = 10
 
-    # ============ Google Gemini API ============
-    google_api_key: Optional[str] = None
+    # ============ Multi-Provider Configuration ============
 
-    # ============ Cloudflare R2 Storage ============
+    # Google Gemini/Imagen (default provider)
+    provider_google_enabled: bool = True
+    provider_google_api_key: str | None = None
+    provider_google_priority: int = 1
+
+    # OpenAI GPT-Image/DALL-E (supports third-party proxies like OpenRouter)
+    provider_openai_enabled: bool = False
+    provider_openai_api_key: str | None = None
+    provider_openai_base_url: str | None = None  # e.g. https://openrouter.ai/api/v1
+    provider_openai_referer: str | None = (
+        None  # Required by some proxies (e.g., OpenRouter HTTP-Referer)
+    )
+    provider_openai_priority: int = 2
+
+    # Black Forest Labs (FLUX)
+    provider_bfl_enabled: bool = False
+    provider_bfl_api_key: str | None = None
+    provider_bfl_priority: int = 3
+
+    # Stability AI
+    provider_stability_enabled: bool = False
+    provider_stability_api_key: str | None = None
+    provider_stability_priority: int = 4
+
+    # Runway (Video)
+    provider_runway_enabled: bool = False
+    provider_runway_api_key: str | None = None
+    provider_runway_priority: int = 1
+
+    # Kling (Video)
+    provider_kling_enabled: bool = False
+    provider_kling_api_key: str | None = None
+    provider_kling_secret_key: str | None = None  # Kling requires both access key and secret key
+    provider_kling_priority: int = 2
+
+    # Pika Labs (Video)
+    provider_pika_enabled: bool = False
+    provider_pika_api_key: str | None = None
+    provider_pika_priority: int = 3
+
+    # ============ Chinese Image Providers ============
+
+    # Alibaba (通义万相 / Wanxiang)
+    provider_alibaba_enabled: bool = False
+    provider_alibaba_api_key: str | None = None  # DashScope API key
+    provider_alibaba_priority: int = 10
+
+    # Zhipu AI (智谱 / CogView)
+    provider_zhipu_enabled: bool = False
+    provider_zhipu_api_key: str | None = None
+    provider_zhipu_priority: int = 11
+
+    # ByteDance (即梦 / Jimeng)
+    provider_bytedance_enabled: bool = False
+    provider_bytedance_access_key: str | None = None  # Volcano Engine access key
+    provider_bytedance_secret_key: str | None = None  # Volcano Engine secret key
+    provider_bytedance_priority: int = 12
+
+    # MiniMax
+    provider_minimax_enabled: bool = False
+    provider_minimax_api_key: str | None = None
+    provider_minimax_group_id: str | None = None  # Optional group ID
+    provider_minimax_priority: int = 13
+
+    # ============ Provider Routing ============
+    default_image_provider: str = "google"
+    default_video_provider: str = "runway"
+    default_routing_strategy: str = "priority"  # priority, cost, quality, speed
+    enable_fallback: bool = True
+    fallback_image_providers: list[str] = ["google", "openai", "bfl"]
+    fallback_video_providers: list[str] = ["runway", "kling", "pika"]
+
+    # ============ Storage Configuration ============
+    # Backend: local, minio, oss
+    storage_backend: str = "local"
+    storage_bucket: str = "nano-banana-images"
+    storage_public_url: str | None = None  # CDN URL
+    storage_local_path: str = "outputs/web"
+
+    # MinIO Configuration
+    minio_endpoint: str | None = None  # e.g., localhost:9000
+    minio_access_key: str | None = None
+    minio_secret_key: str | None = None
+    minio_bucket: str | None = None  # Override storage_bucket for MinIO
+    minio_use_ssl: bool = False
+
+    # Alibaba Cloud OSS Configuration
+    oss_endpoint: str | None = None  # e.g., oss-cn-hangzhou.aliyuncs.com
+    oss_access_key: str | None = None
+    oss_secret_key: str | None = None
+
+    # ============ Cloudflare R2 Storage (Legacy) ============
     r2_enabled: bool = True
-    r2_account_id: Optional[str] = None
-    r2_access_key_id: Optional[str] = None
-    r2_secret_access_key: Optional[str] = None
+    r2_account_id: str | None = None
+    r2_access_key_id: str | None = None
+    r2_secret_access_key: str | None = None
     r2_bucket_name: str = "nano-banana-images"
-    r2_public_url: Optional[str] = None
+    r2_public_url: str | None = None
 
     # ============ GitHub OAuth ============
-    github_client_id: Optional[str] = None
-    github_client_secret: Optional[str] = None
-    github_redirect_uri: Optional[str] = None
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+    github_redirect_uri: str | None = None
     auth_enabled: bool = False
 
     # ============ Trial Mode ============
@@ -75,6 +165,13 @@ class Settings(BaseSettings):
     trial_batch_4k_limit: int = 5
     trial_search_limit: int = 15
     trial_blend_limit: int = 10
+
+    # ============ PostgreSQL Database ============
+    database_enabled: bool = False
+    database_url: str | None = None  # postgresql+asyncpg://user:pass@host:port/db
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_echo: bool = False  # Echo SQL statements (debug only)
 
     # ============ Logging ============
     log_level: str = "INFO"
@@ -99,21 +196,125 @@ class Settings(BaseSettings):
     @property
     def is_r2_configured(self) -> bool:
         """Check if R2 storage is properly configured."""
-        return all([
-            self.r2_enabled,
-            self.r2_account_id,
-            self.r2_access_key_id,
-            self.r2_secret_access_key,
-        ])
+        return all(
+            [
+                self.r2_enabled,
+                self.r2_account_id,
+                self.r2_access_key_id,
+                self.r2_secret_access_key,
+            ]
+        )
+
+    @property
+    def is_storage_configured(self) -> bool:
+        """Check if storage is properly configured."""
+        backend = self.storage_backend.lower()
+        if backend == "local":
+            return True
+        elif backend == "minio":
+            return all([self.minio_endpoint, self.minio_access_key, self.minio_secret_key])
+        elif backend == "oss":
+            return all([self.oss_endpoint, self.oss_access_key, self.oss_secret_key])
+        return False
 
     @property
     def is_auth_configured(self) -> bool:
         """Check if GitHub OAuth is properly configured."""
-        return all([
-            self.auth_enabled,
-            self.github_client_id,
-            self.github_client_secret,
-        ])
+        return all(
+            [
+                self.auth_enabled,
+                self.github_client_id,
+                self.github_client_secret,
+            ]
+        )
+
+    @property
+    def is_database_configured(self) -> bool:
+        """Check if PostgreSQL database is properly configured."""
+        return self.database_enabled and bool(self.database_url)
+
+    # ============ Provider Helper Methods ============
+
+    def get_google_api_key(self) -> str | None:
+        """Get Google API key."""
+        return self.provider_google_api_key
+
+    def get_enabled_image_providers(self) -> list[str]:
+        """Get list of enabled image providers sorted by priority."""
+        providers = []
+        # Global providers
+        if self.provider_google_enabled and self.get_google_api_key():
+            providers.append(("google", self.provider_google_priority))
+        if self.provider_openai_enabled and self.provider_openai_api_key:
+            providers.append(("openai", self.provider_openai_priority))
+        if self.provider_bfl_enabled and self.provider_bfl_api_key:
+            providers.append(("bfl", self.provider_bfl_priority))
+        if self.provider_stability_enabled and self.provider_stability_api_key:
+            providers.append(("stability", self.provider_stability_priority))
+        # Chinese providers
+        if self.provider_alibaba_enabled and self.provider_alibaba_api_key:
+            providers.append(("alibaba", self.provider_alibaba_priority))
+        if self.provider_zhipu_enabled and self.provider_zhipu_api_key:
+            providers.append(("zhipu", self.provider_zhipu_priority))
+        if self.provider_bytedance_enabled and self.provider_bytedance_access_key:
+            providers.append(("bytedance", self.provider_bytedance_priority))
+        if self.provider_minimax_enabled and self.provider_minimax_api_key:
+            providers.append(("minimax", self.provider_minimax_priority))
+
+        # Sort by priority (lower = higher priority)
+        providers.sort(key=lambda x: x[1])
+        return [p[0] for p in providers]
+
+    def get_enabled_video_providers(self) -> list[str]:
+        """Get list of enabled video providers sorted by priority."""
+        providers = []
+        if self.provider_runway_enabled and self.provider_runway_api_key:
+            providers.append(("runway", self.provider_runway_priority))
+        if self.provider_kling_enabled and self.provider_kling_api_key:
+            providers.append(("kling", self.provider_kling_priority))
+        if self.provider_pika_enabled and self.provider_pika_api_key:
+            providers.append(("pika", self.provider_pika_priority))
+
+        providers.sort(key=lambda x: x[1])
+        return [p[0] for p in providers]
+
+    def get_provider_api_key(self, provider: str) -> str | None:
+        """Get API key for a specific provider."""
+        provider_keys = {
+            # Global providers
+            "google": self.get_google_api_key(),
+            "openai": self.provider_openai_api_key,
+            "bfl": self.provider_bfl_api_key,
+            "stability": self.provider_stability_api_key,
+            "runway": self.provider_runway_api_key,
+            "kling": self.provider_kling_api_key,
+            "pika": self.provider_pika_api_key,
+            # Chinese providers
+            "alibaba": self.provider_alibaba_api_key,
+            "zhipu": self.provider_zhipu_api_key,
+            "bytedance": self.provider_bytedance_access_key,
+            "minimax": self.provider_minimax_api_key,
+        }
+        return provider_keys.get(provider)
+
+    def is_provider_enabled(self, provider: str) -> bool:
+        """Check if a specific provider is enabled."""
+        provider_enabled = {
+            # Global providers
+            "google": self.provider_google_enabled,
+            "openai": self.provider_openai_enabled,
+            "bfl": self.provider_bfl_enabled,
+            "stability": self.provider_stability_enabled,
+            "runway": self.provider_runway_enabled,
+            "kling": self.provider_kling_enabled,
+            "pika": self.provider_pika_enabled,
+            # Chinese providers
+            "alibaba": self.provider_alibaba_enabled,
+            "zhipu": self.provider_zhipu_enabled,
+            "bytedance": self.provider_bytedance_enabled,
+            "minimax": self.provider_minimax_enabled,
+        }
+        return provider_enabled.get(provider, False)
 
 
 @lru_cache

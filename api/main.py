@@ -10,18 +10,30 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from core.config import get_settings
-from core.redis import init_redis, close_redis
 from api.middleware import setup_exception_handlers
 from api.routers import (
-    health_router,
+    admin_router,
+    analytics_router,
     auth_router,
-    generate_router,
-    quota_router,
     chat_router,
+    favorites_router,
+    generate_router,
+    health_router,
     history_router,
+    images_router,
+    notifications_router,
+    projects_router,
     prompts_router,
+    quota_router,
+    search_router,
+    settings_router,
+    templates_router,
+    video_router,
+    websocket_router,
 )
+from core.config import get_settings
+from core.redis import close_redis, init_redis
+from database import close_database, init_database
 
 # Configure logging
 logging.basicConfig(
@@ -52,6 +64,17 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize Redis: {e}")
         raise
 
+    # Initialize PostgreSQL Database
+    if settings.is_database_configured:
+        try:
+            await init_database()
+            logger.info("PostgreSQL database initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {e}")
+            # Don't raise - database is optional, services can fall back to file storage
+    else:
+        logger.info("Database not configured, using file-based storage")
+
     logger.info("Application startup complete")
 
     yield
@@ -61,6 +84,9 @@ async def lifespan(app: FastAPI):
 
     # Close Redis
     await close_redis()
+
+    # Close Database
+    await close_database()
 
     logger.info("Application shutdown complete")
 
@@ -76,7 +102,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title=settings.app_name,
-        description="AI Image Generation API powered by Google Gemini",
+        description="AI Image & Video Generation API with multi-provider support",
         version=settings.app_version,
         docs_url="/docs" if not settings.is_production else None,
         redoc_url="/redoc" if not settings.is_production else None,
@@ -120,6 +146,39 @@ def create_app() -> FastAPI:
 
     # Prompt library
     app.include_router(prompts_router, prefix="/api")
+
+    # Video generation
+    app.include_router(video_router, prefix="/api")
+
+    # Image serving (for local storage proxy)
+    app.include_router(images_router, prefix="/api")
+
+    # User settings
+    app.include_router(settings_router, prefix="/api")
+
+    # Favorites (bookmarks)
+    app.include_router(favorites_router, prefix="/api")
+
+    # Templates
+    app.include_router(templates_router, prefix="/api")
+
+    # Projects (workspaces)
+    app.include_router(projects_router, prefix="/api")
+
+    # Notifications
+    app.include_router(notifications_router, prefix="/api")
+
+    # Analytics
+    app.include_router(analytics_router, prefix="/api")
+
+    # Search
+    app.include_router(search_router, prefix="/api")
+
+    # WebSocket
+    app.include_router(websocket_router, prefix="/api")
+
+    # Admin
+    app.include_router(admin_router, prefix="/api")
 
     # ============ Root Endpoint ============
 

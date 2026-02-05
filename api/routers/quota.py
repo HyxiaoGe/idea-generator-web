@@ -8,27 +8,25 @@ Endpoints:
 """
 
 import logging
-from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, Depends, Header
 
-from core.redis import get_redis
-from services import (
-    QuotaService,
-    get_quota_service,
-    is_trial_mode,
-    QUOTA_CONFIGS,
-    GLOBAL_DAILY_QUOTA,
-    GENERATION_COOLDOWN,
-)
+from api.routers.auth import get_current_user
 from api.schemas.quota import (
-    QuotaStatusResponse,
+    ModeQuota,
     QuotaCheckRequest,
     QuotaCheckResponse,
     QuotaConfigResponse,
-    ModeQuota,
+    QuotaStatusResponse,
 )
-from api.routers.auth import get_current_user
+from core.redis import get_redis
+from services import (
+    GENERATION_COOLDOWN,
+    GLOBAL_DAILY_QUOTA,
+    QUOTA_CONFIGS,
+    get_quota_service,
+    is_trial_mode,
+)
 from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
@@ -38,7 +36,8 @@ router = APIRouter(prefix="/quota", tags=["quota"])
 
 # ============ Helpers ============
 
-def get_user_id_from_user(user: Optional[GitHubUser]) -> str:
+
+def get_user_id_from_user(user: GitHubUser | None) -> str:
     """Get user ID for quota tracking."""
     if user:
         return user.user_folder_id
@@ -47,10 +46,11 @@ def get_user_id_from_user(user: Optional[GitHubUser]) -> str:
 
 # ============ Endpoints ============
 
+
 @router.get("", response_model=QuotaStatusResponse)
 async def get_quota_status(
-    user: Optional[GitHubUser] = Depends(get_current_user),
-    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    user: GitHubUser | None = Depends(get_current_user),
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
 ):
     """
     Get current quota status for the user.
@@ -86,10 +86,7 @@ async def get_quota_status(
     status = await quota_service.get_quota_status(user_id)
 
     # Convert modes to ModeQuota objects
-    modes = {
-        key: ModeQuota(**mode_data)
-        for key, mode_data in status.get("modes", {}).items()
-    }
+    modes = {key: ModeQuota(**mode_data) for key, mode_data in status.get("modes", {}).items()}
 
     return QuotaStatusResponse(
         is_trial_mode=status.get("is_trial_mode", False),
@@ -107,8 +104,8 @@ async def get_quota_status(
 @router.post("/check", response_model=QuotaCheckResponse)
 async def check_quota(
     request: QuotaCheckRequest,
-    user: Optional[GitHubUser] = Depends(get_current_user),
-    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    user: GitHubUser | None = Depends(get_current_user),
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
 ):
     """
     Check if quota is available for a generation request.
@@ -145,7 +142,9 @@ async def check_quota(
     )
 
     cost = info.get("cost", 0)
-    remaining = info.get("global_remaining", 0) - cost if can_generate else info.get("global_remaining", 0)
+    remaining = (
+        info.get("global_remaining", 0) - cost if can_generate else info.get("global_remaining", 0)
+    )
 
     return QuotaCheckResponse(
         can_generate=can_generate,

@@ -2,11 +2,13 @@
 Experiment 02: Thinking Process
 See how the model reasons before generating an image.
 """
+
 import os
 import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from config import client, PRO_MODEL_ID, OUTPUT_DIR
+from config import OUTPUT_DIR, PRO_MODEL_ID, client
 from google.genai import types
 
 
@@ -18,13 +20,9 @@ def generate_with_thinking(prompt: str, aspect_ratio: str = "16:9"):
         contents=prompt,
         config=types.GenerateContentConfig(
             response_modalities=["Text", "Image"],
-            image_config=types.ImageConfig(
-                aspect_ratio=aspect_ratio
-            ),
-            thinking_config=types.ThinkingConfig(
-                include_thoughts=True
-            )
-        )
+            image_config=types.ImageConfig(aspect_ratio=aspect_ratio),
+            thinking_config=types.ThinkingConfig(include_thoughts=True),
+        ),
     )
 
     # Save image and print text
@@ -42,17 +40,18 @@ def generate_with_thinking(prompt: str, aspect_ratio: str = "16:9"):
 
     return None
 
+
 if __name__ == "__main__":
     # A complex prompt that requires reasoning
     prompt = "Create an unusual but realistic image that might go viral on social media"
-    
+
     print(f"Prompt: {prompt}")
     print("=" * 50)
     print("Generating with thinking enabled...")
     print("=" * 50)
-    
+
     result = generate_with_thinking(prompt, aspect_ratio="16:9")
-    
+
     if result:
         print("\nDone!")
     else:

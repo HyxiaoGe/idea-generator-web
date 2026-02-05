@@ -7,10 +7,12 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import os
+
+from dotenv import load_dotenv
+
 from services.prompt_generator import get_prompt_generator
 from services.prompt_storage import get_prompt_storage
-from dotenv import load_dotenv
-import os
 
 load_dotenv()
 
@@ -27,7 +29,7 @@ def test_prompt_generation():
 
     try:
         generator = get_prompt_generator(api_key)
-        
+
         # Test 1: Generate category prompts
         print("Test 1: Generate category prompts")
         prompts = generator.generate_category_prompts(
@@ -75,7 +77,7 @@ def test_prompt_storage():
 
     try:
         storage = get_prompt_storage()
-        
+
         # Test 1: Save and load
         print("Test 1: Save and load prompts")
         test_prompts = [
@@ -92,7 +94,7 @@ def test_prompt_storage():
                 "source": "test"
             }
         ]
-        
+
         storage.save_category_prompts("test_category", test_prompts, sync_to_cloud=False)
         loaded = storage.load_category_prompts("test_category", try_cloud=False)
         print(f"✅ Saved and loaded {len(loaded)} prompts")

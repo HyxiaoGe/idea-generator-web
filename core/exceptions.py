@@ -7,7 +7,7 @@ All exceptions inherit from AppException and include:
 - status_code: HTTP status code to return
 """
 
-from typing import Optional, Dict, Any
+from typing import Any
 
 
 class AppException(Exception):
@@ -19,16 +19,16 @@ class AppException(Exception):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        error_code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        message: str | None = None,
+        error_code: str | None = None,
+        details: dict[str, Any] | None = None,
     ):
         self.message = message or self.message
         self.error_code = error_code or self.error_code
         self.details = details or {}
         super().__init__(self.message)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert exception to dictionary for API response."""
         result = {
             "code": self.error_code,

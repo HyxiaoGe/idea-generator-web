@@ -1,17 +1,17 @@
 """
 Chat Session Manager for multi-turn image generation.
 """
+
 import os
 import time
 import uuid
-from typing import Optional, List
 from dataclasses import dataclass, field
-from PIL import Image
 from io import BytesIO
 
-from google import genai
-from google.genai import types
 from dotenv import load_dotenv
+from google import genai
+from PIL import Image
+
 from .generator import build_safety_settings
 
 load_dotenv()
@@ -20,21 +20,23 @@ load_dotenv()
 @dataclass
 class ChatMessage:
     """A single message in the chat."""
+
     role: str  # "user" or "assistant"
     content: str
-    image: Optional[Image.Image] = None
-    thinking: Optional[str] = None
+    image: Image.Image | None = None
+    thinking: str | None = None
     timestamp: float = field(default_factory=time.time)
 
 
 @dataclass
 class ChatResponse:
     """Response from a chat message."""
-    text: Optional[str] = None
-    image: Optional[Image.Image] = None
-    thinking: Optional[str] = None
+
+    text: str | None = None
+    image: Image.Image | None = None
+    thinking: str | None = None
     duration: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None
     safety_blocked: bool = False
 
 
@@ -46,7 +48,7 @@ class ChatSession:
 
     MODEL_ID = "gemini-3-pro-image-preview"
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """
         Initialize the chat session.
 
@@ -58,9 +60,9 @@ class ChatSession:
             raise ValueError("GOOGLE_API_KEY not found")
         self.client = genai.Client(api_key=self._api_key)
         self.chat = None
-        self.messages: List[ChatMessage] = []
+        self.messages: list[ChatMessage] = []
         self.aspect_ratio = "16:9"
-        self.session_id: Optional[str] = None  # Unique ID for this chat session
+        self.session_id: str | None = None  # Unique ID for this chat session
 
     def update_api_key(self, api_key: str):
         """Update the API key and reinitialize the client."""
@@ -85,7 +87,7 @@ class ChatSession:
     def send_message(
         self,
         message: str,
-        aspect_ratio: Optional[str] = None,
+        aspect_ratio: str | None = None,
         safety_level: str = "moderate",
     ) -> ChatResponse:
         """
@@ -112,9 +114,7 @@ class ChatSession:
             # Build config with safety settings
             config = {
                 "response_modalities": ["TEXT", "IMAGE"],
-                "image_config": {
-                    "aspect_ratio": aspect_ratio or self.aspect_ratio
-                },
+                "image_config": {"aspect_ratio": aspect_ratio or self.aspect_ratio},
                 "safety_settings": build_safety_settings(safety_level),
             }
 
@@ -122,9 +122,9 @@ class ChatSession:
             api_response = self.chat.send_message(message, config=config)
 
             # Check for safety blocks
-            if hasattr(api_response, 'candidates') and api_response.candidates:
+            if hasattr(api_response, "candidates") and api_response.candidates:
                 candidate = api_response.candidates[0]
-                if hasattr(candidate, 'finish_reason') and str(candidate.finish_reason) == "SAFETY":
+                if hasattr(candidate, "finish_reason") and str(candidate.finish_reason) == "SAFETY":
                     response.safety_blocked = True
                     response.error = "Content blocked by safety filter"
                     response.duration = time.time() - start_time
@@ -132,32 +132,34 @@ class ChatSession:
 
             # Process response
             for part in api_response.parts:
-                if hasattr(part, 'thought') and part.thought:
+                if hasattr(part, "thought") and part.thought:
                     response.thinking = part.text
-                elif hasattr(part, 'text') and part.text:
+                elif hasattr(part, "text") and part.text:
                     response.text = part.text
-                elif hasattr(part, 'inline_data') and part.inline_data:
+                elif hasattr(part, "inline_data") and part.inline_data:
                     image_data = part.inline_data.data
                     response.image = Image.open(BytesIO(image_data))
                 # Handle as_image() method if available (only if no image yet)
-                if response.image is None and hasattr(part, 'as_image'):
+                if response.image is None and hasattr(part, "as_image"):
                     try:
                         img = part.as_image()
                         # Only use if it's a valid PIL Image
                         if img and isinstance(img, Image.Image):
                             response.image = img
-                    except:
+                    except Exception:
                         pass
 
             response.duration = time.time() - start_time
 
             # Record assistant message
-            self.messages.append(ChatMessage(
-                role="assistant",
-                content=response.text or "",
-                image=response.image,
-                thinking=response.thinking
-            ))
+            self.messages.append(
+                ChatMessage(
+                    role="assistant",
+                    content=response.text or "",
+                    image=response.image,
+                    thinking=response.thinking,
+                )
+            )
 
         except Exception as e:
             error_msg = str(e)
@@ -170,7 +172,7 @@ class ChatSession:
 
         return response
 
-    def get_history(self) -> List[ChatMessage]:
+    def get_history(self) -> list[ChatMessage]:
         """Get the chat history."""
         return self.messages.copy()
 
@@ -178,6 +180,6 @@ class ChatSession:
         """Check if there's an active chat session."""
         return self.chat is not None
 
-    def get_session_id(self) -> Optional[str]:
+    def get_session_id(self) -> str | None:
         """Get the current session ID."""
         return self.session_id

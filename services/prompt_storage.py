@@ -2,11 +2,11 @@
 Prompt library storage service.
 Supports local JSON storage and Cloudflare R2 cloud sync.
 """
-import os
+
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 from .r2_storage import get_r2_storage
 
@@ -14,7 +14,7 @@ from .r2_storage import get_r2_storage
 class PromptStorage:
     """Service for storing and managing prompt library."""
 
-    def __init__(self, user_id: Optional[str] = None):
+    def __init__(self, user_id: str | None = None):
         """
         Initialize the prompt storage service.
 
@@ -37,8 +37,8 @@ class PromptStorage:
         self._r2 = get_r2_storage(user_id=user_id)
 
         # In-memory cache
-        self._cache: Dict[str, List[Dict[str, Any]]] = {}
-        self._cache_timestamp: Dict[str, float] = {}
+        self._cache: dict[str, list[dict[str, Any]]] = {}
+        self._cache_timestamp: dict[str, float] = {}
         self.cache_ttl = 300  # 5 minutes
 
     @property
@@ -57,9 +57,9 @@ class PromptStorage:
     def save_category_prompts(
         self,
         category: str,
-        prompts: List[Dict[str, Any]],
+        prompts: list[dict[str, Any]],
         sync_to_cloud: bool = True,
-        language: str = "en"
+        language: str = "en",
     ) -> bool:
         """
         Save prompts for a category.
@@ -82,11 +82,11 @@ class PromptStorage:
                 "prompts": prompts,
                 "count": len(prompts),
                 "updated_at": datetime.now().isoformat(),
-                "version": 1
+                "version": 1,
             }
 
             # Save locally
-            with open(file_path, 'w', encoding='utf-8') as f:
+            with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
 
             # Invalidate cache
@@ -104,12 +104,8 @@ class PromptStorage:
             return False
 
     def load_category_prompts(
-        self,
-        category: str,
-        use_cache: bool = True,
-        try_cloud: bool = True,
-        language: str = "en"
-    ) -> List[Dict[str, Any]]:
+        self, category: str, use_cache: bool = True, try_cloud: bool = True, language: str = "en"
+    ) -> list[dict[str, Any]]:
         """
         Load prompts for a category.
 
@@ -123,7 +119,7 @@ class PromptStorage:
             List of prompt dictionaries
         """
         cache_key = f"{category}_{language}"
-        
+
         # Check cache first
         if use_cache and cache_key in self._cache:
             cache_age = datetime.now().timestamp() - self._cache_timestamp.get(cache_key, 0)
@@ -134,7 +130,7 @@ class PromptStorage:
         file_path = self._get_category_file(category, language)
         if file_path.exists():
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, encoding="utf-8") as f:
                     data = json.load(f)
                     prompts = data.get("prompts", [])
                     # Update cache
@@ -149,12 +145,14 @@ class PromptStorage:
             prompts = self._load_from_r2(category, language)
             if prompts:
                 # Save to local cache
-                self.save_category_prompts(category, prompts, sync_to_cloud=False, language=language)
+                self.save_category_prompts(
+                    category, prompts, sync_to_cloud=False, language=language
+                )
                 return prompts
 
         return []
 
-    def get_all_categories(self, language: str = "en") -> List[str]:
+    def get_all_categories(self, language: str = "en") -> list[str]:
         """Get list of all available categories for a language."""
         categories = set()
 
@@ -171,9 +169,9 @@ class PromptStorage:
             cloud_categories = self._list_r2_categories(language)
             categories.update(cloud_categories)
 
-        return sorted(list(categories))
+        return sorted(categories)
 
-    def get_all_prompts(self) -> Dict[str, List[Dict[str, Any]]]:
+    def get_all_prompts(self) -> dict[str, list[dict[str, Any]]]:
         """Get all prompts from all categories."""
         all_prompts = {}
         for category in self.get_all_categories():
@@ -183,11 +181,7 @@ class PromptStorage:
         return all_prompts
 
     def add_prompt_to_category(
-        self,
-        category: str,
-        prompt: Dict[str, Any],
-        position: str = "end",
-        language: str = "en"
+        self, category: str, prompt: dict[str, Any], position: str = "end", language: str = "en"
     ) -> bool:
         """
         Add a single prompt to a category.
@@ -217,7 +211,7 @@ class PromptStorage:
 
         return self.save_category_prompts(category, prompts, language=language)
 
-    def add_to_favorites(self, prompt: Dict[str, Any]) -> bool:
+    def add_to_favorites(self, prompt: dict[str, Any]) -> bool:
         """
         Add a prompt to user's favorites.
 
@@ -232,7 +226,7 @@ class PromptStorage:
 
             # Load existing favorites
             if favorites_file.exists():
-                with open(favorites_file, 'r', encoding='utf-8') as f:
+                with open(favorites_file, encoding="utf-8") as f:
                     favorites = json.load(f)
             else:
                 favorites = []
@@ -246,7 +240,7 @@ class PromptStorage:
                 favorites.insert(0, favorite)
 
                 # Save
-                with open(favorites_file, 'w', encoding='utf-8') as f:
+                with open(favorites_file, "w", encoding="utf-8") as f:
                     json.dump(favorites, f, ensure_ascii=False, indent=2)
 
                 return True
@@ -257,12 +251,12 @@ class PromptStorage:
             print(f"Failed to add to favorites: {e}")
             return False
 
-    def get_favorites(self) -> List[Dict[str, Any]]:
+    def get_favorites(self) -> list[dict[str, Any]]:
         """Get user's favorite prompts."""
         try:
             favorites_file = self._get_favorites_file()
             if favorites_file.exists():
-                with open(favorites_file, 'r', encoding='utf-8') as f:
+                with open(favorites_file, encoding="utf-8") as f:
                     return json.load(f)
         except Exception as e:
             print(f"Failed to load favorites: {e}")
@@ -275,14 +269,14 @@ class PromptStorage:
             if not favorites_file.exists():
                 return False
 
-            with open(favorites_file, 'r', encoding='utf-8') as f:
+            with open(favorites_file, encoding="utf-8") as f:
                 favorites = json.load(f)
 
             # Filter out the prompt
             new_favorites = [f for f in favorites if f.get("prompt") != prompt_text]
 
             if len(new_favorites) < len(favorites):
-                with open(favorites_file, 'w', encoding='utf-8') as f:
+                with open(favorites_file, "w", encoding="utf-8") as f:
                     json.dump(new_favorites, f, ensure_ascii=False, indent=2)
                 return True
 
@@ -292,7 +286,7 @@ class PromptStorage:
             print(f"Failed to remove from favorites: {e}")
             return False
 
-    def search_prompts(self, query: str, category: Optional[str] = None) -> List[Dict[str, Any]]:
+    def search_prompts(self, query: str, category: str | None = None) -> list[dict[str, Any]]:
         """
         Search prompts by keyword.
 
@@ -336,7 +330,7 @@ class PromptStorage:
                 Key=key,
                 Body=json.dumps(data, ensure_ascii=False, indent=2),
                 ContentType="application/json",
-                CacheControl="public, max-age=3600"  # 1 hour cache
+                CacheControl="public, max-age=3600",  # 1 hour cache
             )
             print(f"[PromptStorage] Synced {category}_{language} to R2")
             return True
@@ -344,17 +338,14 @@ class PromptStorage:
             print(f"[PromptStorage] Failed to sync to R2: {e}")
             return False
 
-    def _load_from_r2(self, category: str, language: str = "en") -> Optional[List[Dict[str, Any]]]:
+    def _load_from_r2(self, category: str, language: str = "en") -> list[dict[str, Any]] | None:
         """Load category data from R2."""
         if not self.r2_enabled:
             return None
 
         try:
             key = f"prompts/library/{category}_{language}.json"
-            response = self._r2._client.get_object(
-                Bucket=self._r2.bucket_name,
-                Key=key
-            )
+            response = self._r2._client.get_object(Bucket=self._r2.bucket_name, Key=key)
             data = json.loads(response["Body"].read().decode("utf-8"))
             print(f"[PromptStorage] Loaded {category}_{language} from R2")
             return data.get("prompts", [])
@@ -364,16 +355,14 @@ class PromptStorage:
             print(f"[PromptStorage] Failed to load from R2: {e}")
             return None
 
-    def _list_r2_categories(self, language: str = "en") -> List[str]:
+    def _list_r2_categories(self, language: str = "en") -> list[str]:
         """List available categories in R2."""
         if not self.r2_enabled:
             return []
 
         try:
             response = self._r2._client.list_objects_v2(
-                Bucket=self._r2.bucket_name,
-                Prefix=f"prompts/library/",
-                Delimiter="/"
+                Bucket=self._r2.bucket_name, Prefix="prompts/library/", Delimiter="/"
             )
 
             categories = set()
@@ -391,7 +380,7 @@ class PromptStorage:
             print(f"[PromptStorage] Failed to list R2 categories: {e}")
             return []
 
-    def sync_all_to_cloud(self) -> Dict[str, bool]:
+    def sync_all_to_cloud(self) -> dict[str, bool]:
         """Sync all local categories to cloud."""
         results = {}
         for category in self.get_all_categories():
@@ -402,7 +391,7 @@ class PromptStorage:
                     "prompts": prompts,
                     "count": len(prompts),
                     "updated_at": datetime.now().isoformat(),
-                    "version": 1
+                    "version": 1,
                 }
                 results[category] = self._sync_to_r2(category, data)
         return results
@@ -414,10 +403,10 @@ class PromptStorage:
 
 
 # Cache for user-specific storage instances
-_storage_instances: Dict[Optional[str], PromptStorage] = {}
+_storage_instances: dict[str | None, PromptStorage] = {}
 
 
-def get_prompt_storage(user_id: Optional[str] = None) -> PromptStorage:
+def get_prompt_storage(user_id: str | None = None) -> PromptStorage:
     """
     Get or create a prompt storage instance.
 
@@ -438,5 +427,6 @@ def get_prompt_storage(user_id: Optional[str] = None) -> PromptStorage:
 def get_current_user_prompt_storage() -> PromptStorage:
     """Get prompt storage for the currently authenticated user."""
     from .auth import get_user_id
+
     user_id = get_user_id()
     return get_prompt_storage(user_id=user_id)

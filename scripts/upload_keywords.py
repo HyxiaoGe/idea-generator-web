@@ -6,15 +6,14 @@ Usage:
     python scripts/upload_keywords.py
 """
 import json
-import os
-from pathlib import Path
 
 # Add parent directory to path to import services
 import sys
+from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from services.r2_storage import get_r2_storage
-
 
 # Banned keywords list (consolidated from content_filter.py)
 BANNED_KEYWORDS = [
@@ -86,7 +85,7 @@ def upload_keywords_to_r2():
 
         print(f"✅ Successfully uploaded {len(BANNED_KEYWORDS)} keywords to R2")
         print(f"   Bucket: {r2.bucket_name}")
-        print(f"   Key: config/banned_keywords.json")
+        print("   Key: config/banned_keywords.json")
         return True
 
     except Exception as e:
@@ -110,7 +109,7 @@ def save_local_backup():
         json.dump(keywords_data, f, ensure_ascii=False, indent=2)
 
     print(f"💾 Local backup saved to: {backup_path}")
-    print(f"   ⚠️  DO NOT commit this file to git!")
+    print("   ⚠️  DO NOT commit this file to git!")
 
 
 if __name__ == "__main__":

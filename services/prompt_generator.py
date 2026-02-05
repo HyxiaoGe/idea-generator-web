@@ -2,13 +2,14 @@
 AI-powered prompt generator service using Google Gemini.
 Generates high-quality image generation prompts for various categories.
 """
-import os
+
 import json
-import time
-from typing import List, Optional, Dict, Any
+import os
+from typing import Any
+
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -22,7 +23,7 @@ class PromptGenerator:
     # Fallback model if flash is not available
     FALLBACK_MODEL_ID = "gemini-1.5-flash"
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """
         Initialize the prompt generator.
 
@@ -35,12 +36,8 @@ class PromptGenerator:
         self.client = genai.Client(api_key=self._api_key)
 
     def generate_category_prompts(
-        self,
-        category: str,
-        style: Optional[str] = None,
-        count: int = 15,
-        language: str = "en"
-    ) -> List[Dict[str, Any]]:
+        self, category: str, style: str | None = None, count: int = 15, language: str = "en"
+    ) -> list[dict[str, Any]]:
         """
         Generate prompts for a specific category.
 
@@ -64,7 +61,7 @@ class PromptGenerator:
                     temperature=0.9,  # Higher creativity
                     top_p=0.95,
                     max_output_tokens=4096,
-                )
+                ),
             )
 
             # Parse JSON response
@@ -89,20 +86,24 @@ class PromptGenerator:
             for item in prompts_data[:count]:
                 if isinstance(item, str):
                     # Simple string format
-                    formatted_prompts.append({
-                        "prompt": item,
-                        "description": "",
-                        "tags": [category],
-                        "source": "ai_generated"
-                    })
+                    formatted_prompts.append(
+                        {
+                            "prompt": item,
+                            "description": "",
+                            "tags": [category],
+                            "source": "ai_generated",
+                        }
+                    )
                 elif isinstance(item, dict):
                     # Structured format
-                    formatted_prompts.append({
-                        "prompt": item.get("prompt", item.get("text", "")),
-                        "description": item.get("description", ""),
-                        "tags": item.get("tags", [category]),
-                        "source": "ai_generated"
-                    })
+                    formatted_prompts.append(
+                        {
+                            "prompt": item.get("prompt", item.get("text", "")),
+                            "description": item.get("description", ""),
+                            "tags": item.get("tags", [category]),
+                            "source": "ai_generated",
+                        }
+                    )
 
             return formatted_prompts
 
@@ -115,17 +116,13 @@ class PromptGenerator:
             return self._get_fallback_prompts(category, count)
 
     def _build_generation_prompt(
-        self,
-        category: str,
-        style: Optional[str],
-        count: int,
-        language: str
+        self, category: str, style: str | None, count: int, language: str
     ) -> str:
         """Build the system prompt for generation."""
         if language == "zh":
             return f"""
 生成 {count} 个高质量的 AI 图像生成提示词，类别：{category}
-{f'风格偏好：{style}' if style else ''}
+{f"风格偏好：{style}" if style else ""}
 
 要求：
 - 每个提示词 20-50 个字
@@ -154,7 +151,7 @@ class PromptGenerator:
         else:
             return f"""
 Generate {count} high-quality AI image generation prompts for category: {category}
-{f'Style preference: {style}' if style else ''}
+{f"Style preference: {style}" if style else ""}
 
 Requirements:
 - Each prompt should be 20-50 words
@@ -166,7 +163,7 @@ Requirements:
 - Natural, conversational English
 
 Example format:
-"A young woman portrait, soft window light illuminating her face, 
+"A young woman portrait, soft window light illuminating her face,
 blurred background, warm tones, peaceful atmosphere, close-up view"
 
 Return JSON format:
@@ -226,7 +223,7 @@ Return only the enhanced prompt, no explanation. Keep it under 50 words.
                 config=types.GenerateContentConfig(
                     temperature=0.7,
                     max_output_tokens=256,
-                )
+                ),
             )
             return response.text.strip().strip('"').strip("'")
         except Exception as e:
@@ -234,11 +231,8 @@ Return only the enhanced prompt, no explanation. Keep it under 50 words.
             return basic_prompt
 
     def generate_variations(
-        self,
-        base_prompt: str,
-        count: int = 5,
-        variation_type: str = "style"
-    ) -> List[str]:
+        self, base_prompt: str, count: int = 5, variation_type: str = "style"
+    ) -> list[str]:
         """
         Generate variations of a base prompt.
 
@@ -272,7 +266,7 @@ Only return the JSON array, no other text.
                 config=types.GenerateContentConfig(
                     temperature=0.9,
                     max_output_tokens=1024,
-                )
+                ),
             )
 
             text = response.text.strip()
@@ -291,7 +285,7 @@ Only return the JSON array, no other text.
             print(f"Variation generation failed: {e}")
             return [base_prompt]
 
-    def _get_fallback_prompts(self, category: str, count: int) -> List[Dict[str, Any]]:
+    def _get_fallback_prompts(self, category: str, count: int) -> list[dict[str, Any]]:
         """Get fallback prompts if generation fails."""
         fallback_templates = {
             "portrait": [
@@ -326,28 +320,26 @@ Only return the JSON array, no other text.
             ],
         }
 
-        templates = fallback_templates.get(category, [
-            f"high quality {category} image",
-            f"professional {category} photography",
-            f"artistic {category} illustration",
-        ])
+        templates = fallback_templates.get(
+            category,
+            [
+                f"high quality {category} image",
+                f"professional {category} photography",
+                f"artistic {category} illustration",
+            ],
+        )
 
         return [
-            {
-                "prompt": prompt,
-                "description": "",
-                "tags": [category],
-                "source": "fallback"
-            }
+            {"prompt": prompt, "description": "", "tags": [category], "source": "fallback"}
             for prompt in templates[:count]
         ]
 
 
 # Global instance cache
-_generator_instance: Optional[PromptGenerator] = None
+_generator_instance: PromptGenerator | None = None
 
 
-def get_prompt_generator(api_key: Optional[str] = None) -> PromptGenerator:
+def get_prompt_generator(api_key: str | None = None) -> PromptGenerator:
     """Get or create the global prompt generator instance."""
     global _generator_instance
     if _generator_instance is None or api_key:

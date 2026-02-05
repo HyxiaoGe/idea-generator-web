@@ -3,9 +3,9 @@
 Delete flagged content from R2 storage.
 Removes both image file and metadata.
 """
+import argparse
 import os
 import sys
-import argparse
 from urllib.parse import urlparse
 
 # Add parent directory to path
@@ -35,7 +35,7 @@ def delete_by_url(image_url: str, dry_run: bool = False):
 
     if not path.startswith('images/'):
         print(f"❌ Invalid image URL: {image_url}")
-        print(f"   Expected format: https://domain/images/YYYY/MM/DD/filename.png")
+        print("   Expected format: https://domain/images/YYYY/MM/DD/filename.png")
         return False
 
     # Extract the key parts
@@ -52,7 +52,7 @@ def delete_by_url(image_url: str, dry_run: bool = False):
     metadata_key = f"metadata/{year}/{month}/{day}/{filename.replace('.png', '.json')}"
 
     print(f"\n{'='*60}")
-    print(f"Deleting flagged content:")
+    print("Deleting flagged content:")
     print(f"{'='*60}")
     print(f"Image URL:    {image_url}")
     print(f"Image Key:    {image_key}")
@@ -76,7 +76,7 @@ def delete_by_url(image_url: str, dry_run: bool = False):
         except:
             print(f"✗ Metadata not found: {metadata_key}")
 
-        print(f"\nRun without --dry-run to actually delete")
+        print("\nRun without --dry-run to actually delete")
         return True
 
     # Actually delete
@@ -101,8 +101,8 @@ def delete_by_url(image_url: str, dry_run: bool = False):
     print(f"\n✅ Deleted {deleted_count}/2 files")
 
     # Purge from Cloudflare CDN
-    print(f"\n⚡ Next step: Purge CDN cache")
-    print(f"   Go to: Cloudflare Dashboard → Caching → Purge Cache")
+    print("\n⚡ Next step: Purge CDN cache")
+    print("   Go to: Cloudflare Dashboard → Caching → Purge Cache")
     print(f"   Purge URL: {image_url}")
 
     return deleted_count > 0
@@ -130,7 +130,7 @@ def delete_orphaned_metadata_by_date(date: str, dry_run: bool = False):
         year, month, day = dt.strftime("%Y"), dt.strftime("%m"), dt.strftime("%d")
     except ValueError:
         print(f"❌ Invalid date format: {date}")
-        print(f"   Expected: YYYY-MM-DD (e.g., 2025-12-12)")
+        print("   Expected: YYYY-MM-DD (e.g., 2025-12-12)")
         return False
 
     print(f"\n{'='*60}")
@@ -179,7 +179,7 @@ def delete_orphaned_metadata_by_date(date: str, dry_run: bool = False):
                 # Image doesn't exist - this is orphaned metadata
                 orphaned.append(metadata_key)
 
-        print(f"📊 Analysis Results:")
+        print("📊 Analysis Results:")
         print(f"   Total metadata:  {len(metadata_files)}")
         print(f"   Valid (有图片):   {len(valid)}")
         print(f"   Orphaned (孤立): {len(orphaned)}")
@@ -190,7 +190,7 @@ def delete_orphaned_metadata_by_date(date: str, dry_run: bool = False):
             return True
 
         # Show orphaned files
-        print(f"🗑️  Orphaned metadata files:")
+        print("🗑️  Orphaned metadata files:")
         for i, key in enumerate(orphaned[:10], 1):
             print(f"   {i}. {key}")
 
@@ -199,7 +199,7 @@ def delete_orphaned_metadata_by_date(date: str, dry_run: bool = False):
         print()
 
         if dry_run:
-            print(f"🔍 DRY RUN - No files will be deleted")
+            print("🔍 DRY RUN - No files will be deleted")
             print(f"   Run without --dry-run to delete {len(orphaned)} orphaned metadata files")
             return True
 
@@ -239,7 +239,7 @@ def clean_history_json(dry_run: bool = False):
         return False
 
     print(f"\n{'='*60}")
-    print(f"Cleaning history.json files")
+    print("Cleaning history.json files")
     print(f"{'='*60}")
     print(f"Dry Run: {dry_run}")
     print(f"{'='*60}\n")
@@ -317,11 +317,11 @@ def clean_history_json(dry_run: bool = False):
             total_kept += kept_count
 
             if removed_count == 0:
-                print(f"   ✅ No changes needed")
+                print("   ✅ No changes needed")
                 continue
 
             if dry_run:
-                print(f"   🔍 DRY RUN - would update this file")
+                print("   🔍 DRY RUN - would update this file")
             else:
                 # Upload updated history.json
                 r2._client.put_object(
@@ -330,7 +330,7 @@ def clean_history_json(dry_run: bool = False):
                     Body=json.dumps(valid_entries, ensure_ascii=False, indent=2).encode('utf-8'),
                     ContentType="application/json"
                 )
-                print(f"   ✅ Updated history.json")
+                print("   ✅ Updated history.json")
 
             print()
 
@@ -339,13 +339,13 @@ def clean_history_json(dry_run: bool = False):
             continue
 
     print(f"{'='*60}")
-    print(f"Summary:")
+    print("Summary:")
     print(f"  Total entries removed: {total_removed}")
     print(f"  Total entries kept:    {total_kept}")
     print(f"{'='*60}")
 
     if dry_run:
-        print(f"\n🔍 DRY RUN - Run without --dry-run to apply changes")
+        print("\n🔍 DRY RUN - Run without --dry-run to apply changes")
 
     return True
 
@@ -413,19 +413,17 @@ Examples:
             print()  # Blank line between operations
 
     # Clean orphaned metadata by date
-    if args.date:
-        if delete_orphaned_metadata_by_date(args.date, dry_run=args.dry_run):
-            success_count += 1
+    if args.date and delete_orphaned_metadata_by_date(args.date, dry_run=args.dry_run):
+        success_count += 1
 
     # Clean history.json files
-    if args.clean_history:
-        if clean_history_json(dry_run=args.dry_run):
-            success_count += 1
+    if args.clean_history and clean_history_json(dry_run=args.dry_run):
+        success_count += 1
 
     if args.dry_run:
-        print(f"\n✅ Dry run completed")
+        print("\n✅ Dry run completed")
     else:
-        print(f"\n✅ Operation completed")
+        print("\n✅ Operation completed")
 
 
 if __name__ == "__main__":

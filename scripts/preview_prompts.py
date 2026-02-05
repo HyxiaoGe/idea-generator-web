@@ -1,16 +1,17 @@
 """
 Preview prompt generation - see what AI generates before full initialization.
 """
-import sys
 import os
+import sys
 from pathlib import Path
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from services.prompt_generator import get_prompt_generator
+
 from dotenv import load_dotenv
-import json
+
+from services.prompt_generator import get_prompt_generator
 
 load_dotenv()
 
@@ -54,7 +55,7 @@ def preview_prompts():
                     prompt_text = prompt_data.get("prompt", "")
                     description = prompt_data.get("description", "")
                     tags = prompt_data.get("tags", [])
-                    
+
                     print(f"{i}. {prompt_text}")
                     if description:
                         print(f"   📝 {description}")

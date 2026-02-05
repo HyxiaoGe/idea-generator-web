@@ -2,8 +2,7 @@
 Integration tests for quota endpoints.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class TestQuotaEndpoints:
@@ -11,10 +10,7 @@ class TestQuotaEndpoints:
 
     def test_get_quota_status_with_api_key(self, client):
         """Test quota status when user has API key."""
-        response = client.get(
-            "/api/quota",
-            headers={"X-API-Key": "user-api-key"}
-        )
+        response = client.get("/api/quota", headers={"X-API-Key": "user-api-key"})
 
         assert response.status_code == 200
         data = response.json()
@@ -32,11 +28,9 @@ class TestQuotaEndpoints:
     def test_check_quota_allowed(self, client, mock_quota_service, mock_redis_fixture):
         """Test quota check when allowed."""
         with patch("api.routers.quota.get_quota_service", return_value=mock_quota_service):
-            response = client.post("/api/quota/check", json={
-                "mode": "basic",
-                "resolution": "1K",
-                "count": 1
-            })
+            response = client.post(
+                "/api/quota/check", json={"mode": "basic", "resolution": "1K", "count": 1}
+            )
 
             assert response.status_code == 200
             data = response.json()
@@ -46,18 +40,14 @@ class TestQuotaEndpoints:
         """Test quota check when exceeded."""
         mock_service = MagicMock()
         mock_service.is_trial_enabled = True
-        mock_service.check_quota = AsyncMock(return_value=(
-            False,
-            "Daily quota exceeded",
-            {"global_used": 50, "global_limit": 50}
-        ))
+        mock_service.check_quota = AsyncMock(
+            return_value=(False, "Daily quota exceeded", {"global_used": 50, "global_limit": 50})
+        )
 
         with patch("api.routers.quota.get_quota_service", return_value=mock_service):
-            response = client.post("/api/quota/check", json={
-                "mode": "basic",
-                "resolution": "1K",
-                "count": 1
-            })
+            response = client.post(
+                "/api/quota/check", json={"mode": "basic", "resolution": "1K", "count": 1}
+            )
 
             assert response.status_code == 200
             data = response.json()
@@ -79,7 +69,7 @@ class TestQuotaEndpoints:
         response = client.post(
             "/api/quota/check",
             json={"mode": "basic", "resolution": "1K", "count": 1},
-            headers={"X-API-Key": "user-api-key"}
+            headers={"X-API-Key": "user-api-key"},
         )
 
         assert response.status_code == 200

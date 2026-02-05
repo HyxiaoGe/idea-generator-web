@@ -3,13 +3,11 @@
 Content moderation log analysis tool.
 Analyzes audit logs to identify patterns, false positives, and optimization opportunities.
 """
+import argparse
+import json
 import os
 import sys
-import json
-import argparse
 from datetime import datetime, timedelta
-from collections import defaultdict
-from typing import List, Dict, Any
 
 # Add parent directory to path to import services
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -48,7 +46,7 @@ class ModerationLogAnalyzer:
             return
 
         # Overall stats
-        print(f"📊 Overall Statistics")
+        print("📊 Overall Statistics")
         print(f"   Total Checks:    {summary['total_checks']}")
         print(f"   ✅ Allowed:      {summary['allowed']} ({summary['allowed']/summary['total_checks']*100:.1f}%)")
         print(f"   ❌ Blocked:      {summary['blocked']} ({summary['blocked']/summary['total_checks']*100:.1f}%)")
@@ -56,39 +54,39 @@ class ModerationLogAnalyzer:
         print()
 
         # Block breakdown
-        print(f"🛡️ Block Breakdown")
+        print("🛡️ Block Breakdown")
         print(f"   Layer 1 (Keywords): {summary['block_breakdown']['layer1_keyword']}")
         print(f"   Layer 2 (AI):       {summary['block_breakdown']['layer2_ai']}")
         print()
 
         # Top blocked keywords
         if summary['top_blocked_keywords']:
-            print(f"🔑 Top Blocked Keywords")
+            print("🔑 Top Blocked Keywords")
             for item in summary['top_blocked_keywords'][:5]:
                 print(f"   • {item['keyword']:<20} ({item['count']} times)")
             print()
 
         # AI classifications
         if summary['ai_classifications']:
-            print(f"🤖 AI Classifications")
+            print("🤖 AI Classifications")
             for category, count in summary['ai_classifications'].items():
                 print(f"   • {category:<20} ({count} times)")
             print()
 
         # Performance metrics
-        print(f"⚡ Performance Metrics")
+        print("⚡ Performance Metrics")
         print(f"   Layer 1 Avg:  {summary['average_times_ms']['layer1']:.2f}ms")
         print(f"   Layer 2 Avg:  {summary['average_times_ms']['layer2']:.2f}ms")
         print(f"   Total Avg:    {summary['average_times_ms']['total']:.2f}ms")
         print()
 
         # Accuracy
-        print(f"📈 Accuracy Metrics")
+        print("📈 Accuracy Metrics")
         print(f"   Block Rate:  {summary['accuracy_metrics']['block_rate']:.2f}%")
         print(f"   Flag Rate:   {summary['accuracy_metrics']['flag_rate']:.2f}%")
         print()
 
-    def find_false_positive_candidates(self, date: str, limit: int = 20) -> List[Dict]:
+    def find_false_positive_candidates(self, date: str, limit: int = 20) -> list[dict]:
         """
         Find potential false positives - blocked prompts that might be legitimate.
 
@@ -178,7 +176,7 @@ class ModerationLogAnalyzer:
 
         return candidates
 
-    def find_unused_keywords(self, days: int = 30) -> List[str]:
+    def find_unused_keywords(self, days: int = 30) -> list[str]:
         """
         Find keywords that haven't been triggered in N days.
         These might be candidates for removal.
@@ -232,14 +230,14 @@ class ModerationLogAnalyzer:
         # Find unused
         unused = sorted(all_keywords - triggered_keywords)
 
-        print(f"📊 Keyword Usage Statistics:")
+        print("📊 Keyword Usage Statistics:")
         print(f"   Total Keywords:     {len(all_keywords)}")
         print(f"   Used (last {days}d):    {len(triggered_keywords)}")
         print(f"   Unused:             {len(unused)}")
         print()
 
         if unused and len(unused) <= 20:
-            print(f"Unused keywords:")
+            print("Unused keywords:")
             for keyword in unused:
                 print(f"   • {keyword}")
             print()

@@ -8,7 +8,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any
 
 from PIL import Image
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class ImageStorage:
     """Service for storing and retrieving generated images."""
 
-    def __init__(self, output_dir: str = "outputs/web", user_id: Optional[str] = None):
+    def __init__(self, output_dir: str = "outputs/web", user_id: str | None = None):
         """
         Initialize the image storage service.
 
@@ -84,9 +84,9 @@ class ImageStorage:
         """Load metadata from disk."""
         if self.metadata_file.exists():
             try:
-                with open(self.metadata_file, "r", encoding="utf-8") as f:
+                with open(self.metadata_file, encoding="utf-8") as f:
                     self.metadata = json.load(f)
-            except (json.JSONDecodeError, IOError):
+            except (OSError, json.JSONDecodeError):
                 self.metadata = {"images": []}
         else:
             self.metadata = {"images": []}
@@ -100,14 +100,14 @@ class ImageStorage:
         self,
         image: Image.Image,
         prompt: str,
-        settings: Dict[str, Any],
+        settings: dict[str, Any],
         duration: float = 0.0,
         mode: str = "basic",
-        text_response: Optional[str] = None,
-        thinking: Optional[str] = None,
-        session_id: Optional[str] = None,
-        chat_index: Optional[int] = None,
-    ) -> Tuple[str, Optional[str]]:
+        text_response: str | None = None,
+        thinking: str | None = None,
+        session_id: str | None = None,
+        chat_index: int | None = None,
+    ) -> tuple[str, str | None]:
         """
         Save an image to storage (local and optionally R2).
 
@@ -194,9 +194,9 @@ class ImageStorage:
     def get_history(
         self,
         limit: int = 50,
-        mode: Optional[str] = None,
-        search: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        mode: str | None = None,
+        search: str | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Get image history with metadata.
         Tries R2 first if available, falls back to local.
@@ -242,7 +242,7 @@ class ImageStorage:
 
         return history
 
-    def get_history_item(self, item_id: str) -> Optional[Dict[str, Any]]:
+    def get_history_item(self, item_id: str) -> dict[str, Any] | None:
         """
         Get a single history item by ID (filename or r2_key).
 
@@ -265,7 +265,7 @@ class ImageStorage:
 
         return None
 
-    def load_image(self, filename: str) -> Optional[Image.Image]:
+    def load_image(self, filename: str) -> Image.Image | None:
         """
         Load an image from storage.
         Tries local first, then R2 if available.
@@ -287,7 +287,7 @@ class ImageStorage:
 
         return None
 
-    def load_image_bytes(self, filename: str) -> Optional[bytes]:
+    def load_image_bytes(self, filename: str) -> bytes | None:
         """
         Load image as bytes from storage.
 
@@ -357,14 +357,14 @@ class ImageStorage:
         if self._r2.is_available:
             self._r2.clear_history()
 
-    def get_image_path(self, filename: str) -> Optional[Path]:
+    def get_image_path(self, filename: str) -> Path | None:
         """Get the full path to a local image file."""
         filepath = self.base_output_dir / filename
         if filepath.exists():
             return filepath
         return None
 
-    def get_download_filename(self, record: Dict[str, Any]) -> str:
+    def get_download_filename(self, record: dict[str, Any]) -> str:
         """
         Generate a user-friendly download filename.
 
@@ -383,10 +383,10 @@ class ImageStorage:
 
 
 # Cache for user-specific storage instances
-_storage_instances: Dict[Optional[str], ImageStorage] = {}
+_storage_instances: dict[str | None, ImageStorage] = {}
 
 
-def get_storage(user_id: Optional[str] = None) -> ImageStorage:
+def get_storage(user_id: str | None = None) -> ImageStorage:
     """
     Get or create a storage instance for the given user.
 

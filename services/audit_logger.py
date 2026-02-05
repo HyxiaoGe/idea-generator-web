@@ -2,13 +2,14 @@
 Content moderation audit logging service.
 Records all moderation checks for analysis, review, and optimization.
 """
-import os
-import json
+
 import hashlib
+import json
+import os
 import threading
-from typing import Dict, Any, Optional, List
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from queue import Queue
+from typing import Any
 
 
 def get_config_value(key: str, default: str = "") -> str:
@@ -24,21 +25,30 @@ class AuditLogger:
 
     def __init__(self):
         """Initialize audit logger."""
-        self.enabled = get_config_value("AUDIT_LOGGING_ENABLED", "true").lower() in ["true", "1", "yes"]
-        self.async_upload = get_config_value("AUDIT_ASYNC_UPLOAD", "true").lower() in ["true", "1", "yes"]
+        self.enabled = get_config_value("AUDIT_LOGGING_ENABLED", "true").lower() in [
+            "true",
+            "1",
+            "yes",
+        ]
+        self.async_upload = get_config_value("AUDIT_ASYNC_UPLOAD", "true").lower() in [
+            "true",
+            "1",
+            "yes",
+        ]
 
         # R2 storage paths
         self.base_path = "logs/content_moderation"
 
         # Async upload queue
         self._upload_queue: Queue = Queue()
-        self._upload_thread: Optional[threading.Thread] = None
+        self._upload_thread: threading.Thread | None = None
 
         if self.enabled and self.async_upload:
             self._start_upload_worker()
 
     def _start_upload_worker(self):
         """Start background thread for async uploads."""
+
         def worker():
             while True:
                 try:
@@ -46,7 +56,7 @@ class AuditLogger:
                     if log_data is None:  # Shutdown signal
                         break
                     self._upload_to_r2(log_data)
-                except Exception as e:
+                except Exception:
                     # Empty queue or error, continue
                     pass
 
@@ -56,10 +66,10 @@ class AuditLogger:
     def log_moderation_check(
         self,
         prompt: str,
-        layer1_result: Optional[Dict[str, Any]] = None,
-        layer2_result: Optional[Dict[str, Any]] = None,
-        final_decision: Dict[str, Any] = None,
-        context: Optional[Dict[str, Any]] = None
+        layer1_result: dict[str, Any] | None = None,
+        layer2_result: dict[str, Any] | None = None,
+        final_decision: dict[str, Any] = None,
+        context: dict[str, Any] | None = None,
     ):
         """
         Log a content moderation check.
@@ -93,15 +103,15 @@ class AuditLogger:
     def _build_log_entry(
         self,
         prompt: str,
-        layer1_result: Optional[Dict[str, Any]],
-        layer2_result: Optional[Dict[str, Any]],
-        final_decision: Dict[str, Any],
-        context: Optional[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        layer1_result: dict[str, Any] | None,
+        layer2_result: dict[str, Any] | None,
+        final_decision: dict[str, Any],
+        context: dict[str, Any] | None,
+    ) -> dict[str, Any]:
         """Build structured log entry."""
         import uuid
 
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         log_id = str(uuid.uuid4())
 
         # Hash prompt for deduplication
@@ -111,22 +121,17 @@ class AuditLogger:
         log_entry = {
             "log_id": log_id,
             "timestamp": timestamp.isoformat(),
-
-            "user_input": {
-                "prompt": prompt,
-                "prompt_hash": prompt_hash,
-                "length": len(prompt)
-            },
-
-            "layer1_keyword": layer1_result or {
+            "user_input": {"prompt": prompt, "prompt_hash": prompt_hash, "length": len(prompt)},
+            "layer1_keyword": layer1_result
+            or {
                 "checked": False,
                 "passed": None,
                 "matched_keywords": [],
                 "execution_time_ms": 0,
-                "total_keywords_count": 0
+                "total_keywords_count": 0,
             },
-
-            "layer2_ai": layer2_result or {
+            "layer2_ai": layer2_result
+            or {
                 "checked": False,
                 "passed": None,
                 "classification": None,
@@ -134,21 +139,14 @@ class AuditLogger:
                 "ai_raw_response": None,
                 "execution_time_ms": 0,
                 "model": None,
-                "cache_hit": False
+                "cache_hit": False,
             },
-
-            "final_decision": final_decision or {
-                "allowed": True,
-                "blocked_by": None,
-                "blocked_reason": None,
-                "total_time_ms": 0
-            },
-
+            "final_decision": final_decision
+            or {"allowed": True, "blocked_by": None, "blocked_reason": None, "total_time_ms": 0},
             "context": context or {},
-
             "analysis_flags": self._generate_analysis_flags(
                 prompt, layer1_result, layer2_result, final_decision
-            )
+            ),
         }
 
         return log_entry
@@ -156,16 +154,12 @@ class AuditLogger:
     def _generate_analysis_flags(
         self,
         prompt: str,
-        layer1_result: Optional[Dict[str, Any]],
-        layer2_result: Optional[Dict[str, Any]],
-        final_decision: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        layer1_result: dict[str, Any] | None,
+        layer2_result: dict[str, Any] | None,
+        final_decision: dict[str, Any],
+    ) -> dict[str, Any]:
         """Generate automatic flags for review."""
-        flags = {
-            "needs_review": False,
-            "review_reason": [],
-            "confidence": "high"
-        }
+        flags = {"needs_review": False, "review_reason": [], "confidence": "high"}
 
         # Flag 1: Contradictory results
         if layer1_result and layer2_result:
@@ -197,7 +191,7 @@ class AuditLogger:
 
         return flags
 
-    def _upload_to_r2(self, log_entry: Dict[str, Any]):
+    def _upload_to_r2(self, log_entry: dict[str, Any]):
         """Upload log entry to R2 storage."""
         try:
             from .r2_storage import get_r2_storage
@@ -232,20 +226,20 @@ class AuditLogger:
             r2._client.put_object(
                 Bucket=r2.bucket_name,
                 Key=key,
-                Body=json.dumps(log_entry, ensure_ascii=False, indent=2).encode('utf-8'),
+                Body=json.dumps(log_entry, ensure_ascii=False, indent=2).encode("utf-8"),
                 ContentType="application/json",
                 Metadata={
                     "log_id": log_entry["log_id"],
                     "allowed": str(allowed).lower(),
                     "needs_review": str(needs_review).lower(),
-                    "date": date_str
-                }
+                    "date": date_str,
+                },
             )
 
         except Exception as e:
             print(f"[AuditLogger] Failed to upload to R2: {e}")
 
-    def generate_daily_summary(self, date: str) -> Dict[str, Any]:
+    def generate_daily_summary(self, date: str) -> dict[str, Any]:
         """
         Generate daily summary statistics.
 
@@ -269,10 +263,7 @@ class AuditLogger:
             # List all logs for the day
             prefix = f"{self.base_path}/{year}/{month}/{day}/"
 
-            response = r2._client.list_objects_v2(
-                Bucket=r2.bucket_name,
-                Prefix=prefix
-            )
+            response = r2._client.list_objects_v2(Bucket=r2.bucket_name, Prefix=prefix)
 
             if "Contents" not in response:
                 return {"date": date, "total_checks": 0}
@@ -295,10 +286,7 @@ class AuditLogger:
             for obj in response.get("Contents", []):
                 try:
                     # Download log
-                    log_response = r2._client.get_object(
-                        Bucket=r2.bucket_name,
-                        Key=obj["Key"]
-                    )
+                    log_response = r2._client.get_object(Bucket=r2.bucket_name, Key=obj["Key"])
                     log_data = json.loads(log_response["Body"].read().decode("utf-8"))
 
                     total_checks += 1
@@ -345,30 +333,28 @@ class AuditLogger:
                 "blocked": blocked_count,
                 "allowed": allowed_count,
                 "flagged": flagged_count,
-
-                "block_breakdown": {
-                    "layer1_keyword": layer1_blocks,
-                    "layer2_ai": layer2_blocks
-                },
-
+                "block_breakdown": {"layer1_keyword": layer1_blocks, "layer2_ai": layer2_blocks},
                 "top_blocked_keywords": sorted(
                     [{"keyword": k, "count": v} for k, v in keyword_counter.items()],
                     key=lambda x: x["count"],
-                    reverse=True
+                    reverse=True,
                 )[:10],
-
                 "ai_classifications": ai_category_counter,
-
                 "average_times_ms": {
                     "layer1": round(total_layer1_time / total_checks, 2) if total_checks > 0 else 0,
                     "layer2": round(total_layer2_time / total_checks, 2) if total_checks > 0 else 0,
-                    "total": round((total_layer1_time + total_layer2_time) / total_checks, 2) if total_checks > 0 else 0
+                    "total": round((total_layer1_time + total_layer2_time) / total_checks, 2)
+                    if total_checks > 0
+                    else 0,
                 },
-
                 "accuracy_metrics": {
-                    "block_rate": round(blocked_count / total_checks * 100, 2) if total_checks > 0 else 0,
-                    "flag_rate": round(flagged_count / total_checks * 100, 2) if total_checks > 0 else 0
-                }
+                    "block_rate": round(blocked_count / total_checks * 100, 2)
+                    if total_checks > 0
+                    else 0,
+                    "flag_rate": round(flagged_count / total_checks * 100, 2)
+                    if total_checks > 0
+                    else 0,
+                },
             }
 
             # Save summary to R2
@@ -376,8 +362,8 @@ class AuditLogger:
             r2._client.put_object(
                 Bucket=r2.bucket_name,
                 Key=summary_key,
-                Body=json.dumps(summary, ensure_ascii=False, indent=2).encode('utf-8'),
-                ContentType="application/json"
+                Body=json.dumps(summary, ensure_ascii=False, indent=2).encode("utf-8"),
+                ContentType="application/json",
             )
 
             return summary

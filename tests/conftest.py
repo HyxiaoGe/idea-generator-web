@@ -3,14 +3,14 @@ Pytest configuration and fixtures.
 """
 
 import os
-import json
-import pytest
-from typing import AsyncGenerator, Dict, Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from collections.abc import AsyncGenerator
 from datetime import datetime
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 # Set test environment before importing app
 os.environ["ENVIRONMENT"] = "testing"
@@ -21,10 +21,12 @@ os.environ["REDIS_URL"] = "redis://localhost:6379/15"
 
 # ============ App Fixtures ============
 
+
 @pytest.fixture
 def client() -> TestClient:
     """Synchronous test client."""
     from api.main import app
+
     return TestClient(app)
 
 
@@ -32,23 +34,22 @@ def client() -> TestClient:
 async def async_client() -> AsyncGenerator[AsyncClient, None]:
     """Asynchronous test client."""
     from api.main import app
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test"
-    ) as client:
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
 
 
 # ============ Mock Redis ============
 
+
 class MockRedis:
     """Mock Redis client for testing."""
 
     def __init__(self):
-        self._data: Dict[str, Any] = {}
-        self._sets: Dict[str, set] = {}
-        self._hashes: Dict[str, Dict[str, str]] = {}
-        self._expiry: Dict[str, int] = {}
+        self._data: dict[str, Any] = {}
+        self._sets: dict[str, set] = {}
+        self._hashes: dict[str, dict[str, str]] = {}
+        self._expiry: dict[str, int] = {}
 
     async def get(self, key: str) -> str | None:
         return self._data.get(key)
@@ -72,7 +73,9 @@ class MockRedis:
         self._expiry[key] = seconds
         return True
 
-    async def hset(self, key: str, field: str = None, value: str = None, mapping: Dict = None) -> int:
+    async def hset(
+        self, key: str, field: str = None, value: str = None, mapping: dict = None
+    ) -> int:
         if key not in self._hashes:
             self._hashes[key] = {}
         if mapping:
@@ -88,7 +91,7 @@ class MockRedis:
             return self._hashes[key].get(field)
         return None
 
-    async def hgetall(self, key: str) -> Dict[str, str]:
+    async def hgetall(self, key: str) -> dict[str, str]:
         return self._hashes.get(key, {})
 
     async def hdel(self, key: str, *fields: str) -> int:
@@ -197,6 +200,7 @@ def mock_redis():
 @pytest.fixture
 def mock_redis_fixture(mock_redis):
     """Fixture that patches get_redis to return mock."""
+
     async def get_mock_redis():
         return mock_redis
 
@@ -209,11 +213,13 @@ def mock_redis_fixture(mock_redis):
 
 # ============ Mock Services ============
 
+
 @pytest.fixture
 def mock_image_generator():
     """Mock ImageGenerator service."""
-    from services.generator import GenerationResult
     from PIL import Image
+
+    from services.generator import GenerationResult
 
     mock = MagicMock()
     mock.generate.return_value = GenerationResult(
@@ -255,16 +261,18 @@ def mock_quota_service():
     mock.is_trial_enabled = True
     mock.check_quota = AsyncMock(return_value=(True, "OK", {"cost": 1, "global_remaining": 49}))
     mock.consume_quota = AsyncMock(return_value=True)
-    mock.get_quota_status = AsyncMock(return_value={
-        "is_trial_mode": True,
-        "date": "2024-01-01",
-        "global_used": 1,
-        "global_limit": 50,
-        "global_remaining": 49,
-        "modes": {},
-        "cooldown_active": False,
-        "cooldown_remaining": 0,
-    })
+    mock.get_quota_status = AsyncMock(
+        return_value={
+            "is_trial_mode": True,
+            "date": "2024-01-01",
+            "global_used": 1,
+            "global_limit": 50,
+            "global_remaining": 49,
+            "modes": {},
+            "cooldown_active": False,
+            "cooldown_remaining": 0,
+        }
+    )
     return mock
 
 
@@ -276,19 +284,23 @@ def mock_auth_service():
     mock = MagicMock()
     mock.is_available = True
     mock.is_configured = True
-    mock.get_authorization_url.return_value = "https://github.com/login/oauth/authorize?client_id=test"
-    mock.authenticate = AsyncMock(return_value={
-        "access_token": "test_jwt_token",
-        "token_type": "bearer",
-        "user": {
-            "id": "12345",
-            "login": "testuser",
-            "name": "Test User",
-            "email": "test@example.com",
-            "avatar_url": "https://github.com/testuser.png",
-            "user_folder_id": "abc123",
+    mock.get_authorization_url.return_value = (
+        "https://github.com/login/oauth/authorize?client_id=test"
+    )
+    mock.authenticate = AsyncMock(
+        return_value={
+            "access_token": "test_jwt_token",
+            "token_type": "bearer",
+            "user": {
+                "id": "12345",
+                "login": "testuser",
+                "name": "Test User",
+                "email": "test@example.com",
+                "avatar_url": "https://github.com/testuser.png",
+                "user_folder_id": "abc123",
+            },
         }
-    })
+    )
     mock.get_user_from_token.return_value = GitHubUser(
         id="12345",
         login="testuser",
@@ -300,6 +312,7 @@ def mock_auth_service():
 
 
 # ============ Test Settings ============
+
 
 @pytest.fixture
 def test_settings(monkeypatch):
@@ -313,6 +326,7 @@ def test_settings(monkeypatch):
 
     # Clear cached settings
     from core.config import get_settings
+
     get_settings.cache_clear()
 
     yield
@@ -323,17 +337,14 @@ def test_settings(monkeypatch):
 
 # ============ Test Data Fixtures ============
 
+
 @pytest.fixture
 def sample_generate_request():
     """Sample image generation request."""
     return {
         "prompt": "A beautiful sunset over the ocean",
-        "settings": {
-            "aspect_ratio": "16:9",
-            "resolution": "1K",
-            "safety_level": "moderate"
-        },
-        "include_thinking": False
+        "settings": {"aspect_ratio": "16:9", "resolution": "1K", "safety_level": "moderate"},
+        "include_thinking": False,
     }
 
 
@@ -341,16 +352,8 @@ def sample_generate_request():
 def sample_batch_request():
     """Sample batch generation request."""
     return {
-        "prompts": [
-            "A red apple on a table",
-            "A blue sky with clouds",
-            "A green forest path"
-        ],
-        "settings": {
-            "aspect_ratio": "1:1",
-            "resolution": "1K",
-            "safety_level": "moderate"
-        }
+        "prompts": ["A red apple on a table", "A blue sky with clouds", "A green forest path"],
+        "settings": {"aspect_ratio": "1:1", "resolution": "1K", "safety_level": "moderate"},
     }
 
 
@@ -360,7 +363,7 @@ def sample_chat_request():
     return {
         "message": "Create an image of a cat",
         "aspect_ratio": "16:9",
-        "safety_level": "moderate"
+        "safety_level": "moderate",
     }
 
 

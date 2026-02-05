@@ -3,13 +3,12 @@ Image generation-related Pydantic schemas.
 """
 
 from datetime import datetime
-from enum import Enum
-from typing import Optional, List, Dict, Any
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator
 
 
-class AspectRatio(str, Enum):
+class AspectRatio(StrEnum):
     """Supported aspect ratios."""
 
     SQUARE = "1:1"
@@ -19,7 +18,7 @@ class AspectRatio(str, Enum):
     PORTRAIT_34 = "3:4"
 
 
-class Resolution(str, Enum):
+class Resolution(StrEnum):
     """Supported resolutions."""
 
     LOW = "1K"
@@ -27,7 +26,7 @@ class Resolution(str, Enum):
     HIGH = "4K"
 
 
-class SafetyLevel(str, Enum):
+class SafetyLevel(StrEnum):
     """Content safety filter levels."""
 
     STRICT = "strict"
@@ -36,7 +35,7 @@ class SafetyLevel(str, Enum):
     NONE = "none"
 
 
-class GenerationMode(str, Enum):
+class GenerationMode(StrEnum):
     """Image generation modes."""
 
     BASIC = "basic"
@@ -51,36 +50,22 @@ class GenerationSettings(BaseModel):
     """Common settings for image generation."""
 
     aspect_ratio: AspectRatio = Field(
-        default=AspectRatio.LANDSCAPE,
-        description="Image aspect ratio"
+        default=AspectRatio.LANDSCAPE, description="Image aspect ratio"
     )
-    resolution: Resolution = Field(
-        default=Resolution.LOW,
-        description="Image resolution"
-    )
+    resolution: Resolution = Field(default=Resolution.LOW, description="Image resolution")
     safety_level: SafetyLevel = Field(
-        default=SafetyLevel.MODERATE,
-        description="Content safety filter level"
+        default=SafetyLevel.MODERATE, description="Content safety filter level"
     )
 
 
 class GenerateImageRequest(BaseModel):
     """Request for basic image generation."""
 
-    prompt: str = Field(
-        ...,
-        min_length=1,
-        max_length=2000,
-        description="Image generation prompt"
-    )
+    prompt: str = Field(..., min_length=1, max_length=2000, description="Image generation prompt")
     settings: GenerationSettings = Field(
-        default_factory=GenerationSettings,
-        description="Generation settings"
+        default_factory=GenerationSettings, description="Generation settings"
     )
-    include_thinking: bool = Field(
-        default=False,
-        description="Include model's thinking process"
-    )
+    include_thinking: bool = Field(default=False, description="Include model's thinking process")
 
     @field_validator("prompt")
     @classmethod
@@ -94,9 +79,9 @@ class GeneratedImage(BaseModel):
 
     key: str = Field(..., description="Storage key/path of the image")
     filename: str = Field(..., description="Image filename")
-    url: Optional[str] = Field(None, description="Public URL if available")
-    width: Optional[int] = Field(None, description="Image width in pixels")
-    height: Optional[int] = Field(None, description="Image height in pixels")
+    url: str | None = Field(None, description="Public URL if available")
+    width: int | None = Field(None, description="Image width in pixels")
+    height: int | None = Field(None, description="Image height in pixels")
 
 
 class GenerateImageResponse(BaseModel):
@@ -104,26 +89,24 @@ class GenerateImageResponse(BaseModel):
 
     image: GeneratedImage = Field(..., description="Generated image info")
     prompt: str = Field(..., description="Original prompt")
-    thinking: Optional[str] = Field(None, description="Model's thinking process")
-    text_response: Optional[str] = Field(None, description="Text response from model")
+    thinking: str | None = Field(None, description="Model's thinking process")
+    text_response: str | None = Field(None, description="Text response from model")
     duration: float = Field(..., description="Generation time in seconds")
     mode: GenerationMode = Field(default=GenerationMode.BASIC)
     settings: GenerationSettings = Field(..., description="Settings used")
     created_at: datetime = Field(default_factory=datetime.now)
+    # Multi-provider support
+    provider: str | None = Field(None, description="Provider used (google, openai, bfl, etc)")
+    model: str | None = Field(None, description="Model ID used")
+    search_sources: str | None = Field(None, description="Search sources for grounded generation")
 
 
 class BatchGenerateRequest(BaseModel):
     """Request for batch image generation."""
 
-    prompts: List[str] = Field(
-        ...,
-        min_length=1,
-        max_length=10,
-        description="List of prompts"
-    )
+    prompts: list[str] = Field(..., min_length=1, max_length=10, description="List of prompts")
     settings: GenerationSettings = Field(
-        default_factory=GenerationSettings,
-        description="Generation settings"
+        default_factory=GenerationSettings, description="Generation settings"
     )
 
 
@@ -142,29 +125,22 @@ class TaskProgress(BaseModel):
     status: str = Field(..., description="Task status")
     progress: int = Field(..., description="Completed count")
     total: int = Field(..., description="Total count")
-    current_prompt: Optional[str] = Field(None, description="Currently processing prompt")
-    results: List[GeneratedImage] = Field(default_factory=list)
-    errors: List[str] = Field(default_factory=list)
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    current_prompt: str | None = Field(None, description="Currently processing prompt")
+    results: list[GeneratedImage] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 class BlendImagesRequest(BaseModel):
     """Request for image blending."""
 
-    image_keys: List[str] = Field(
-        ...,
-        min_length=2,
-        max_length=4,
-        description="List of image keys to blend"
+    image_keys: list[str] = Field(
+        ..., min_length=2, max_length=4, description="List of image keys to blend"
     )
-    blend_prompt: Optional[str] = Field(
-        None,
-        description="Additional prompt for blending"
-    )
+    blend_prompt: str | None = Field(None, description="Additional prompt for blending")
     settings: GenerationSettings = Field(
-        default_factory=GenerationSettings,
-        description="Generation settings"
+        default_factory=GenerationSettings, description="Generation settings"
     )
 
 
@@ -174,27 +150,17 @@ class StyleTransferRequest(BaseModel):
     content_image_key: str = Field(..., description="Key of content image")
     style_prompt: str = Field(..., description="Style description")
     settings: GenerationSettings = Field(
-        default_factory=GenerationSettings,
-        description="Generation settings"
+        default_factory=GenerationSettings, description="Generation settings"
     )
 
 
 class SearchGenerateRequest(BaseModel):
     """Request for search-grounded generation."""
 
-    prompt: str = Field(
-        ...,
-        min_length=1,
-        max_length=2000,
-        description="Generation prompt"
-    )
-    search_context: Optional[str] = Field(
-        None,
-        description="Additional search context"
-    )
+    prompt: str = Field(..., min_length=1, max_length=2000, description="Generation prompt")
+    search_context: str | None = Field(None, description="Additional search context")
     settings: GenerationSettings = Field(
-        default_factory=GenerationSettings,
-        description="Generation settings"
+        default_factory=GenerationSettings, description="Generation settings"
     )
 
 

@@ -4,18 +4,20 @@ Prevents generation of NSFW/violent/illegal content.
 
 Keywords are stored remotely in Cloudflare R2 to prevent user discovery.
 """
+
+import json
 import os
 import re
-import json
-from typing import List, Tuple, Optional
 from datetime import datetime, timedelta
-
 
 # Minimal fallback keywords (only used if R2 is unavailable)
 # Full keyword list is stored remotely in R2 to prevent user discovery
 # This is just a basic safety net - production MUST use R2 storage
 DEFAULT_BANNED_KEYWORDS = [
-    "nsfw", "porn", "xxx", "色情",
+    "nsfw",
+    "porn",
+    "xxx",
+    "色情",
 ]
 
 
@@ -44,17 +46,22 @@ class ContentFilter:
         self.banned_keywords = self._load_keywords()
 
         # Check if filter is enabled
-        self.enabled = get_config_value("CONTENT_FILTER_ENABLED", "true").lower() in ["true", "1", "yes"]
+        self.enabled = get_config_value("CONTENT_FILTER_ENABLED", "true").lower() in [
+            "true",
+            "1",
+            "yes",
+        ]
 
         # Initialize AI moderator (Layer 2)
         self.ai_moderator = None
         try:
             from .ai_content_moderator import get_ai_moderator
+
             self.ai_moderator = get_ai_moderator(api_key)
         except Exception as e:
             print(f"AI moderator not available: {e}")
 
-    def _load_keywords(self) -> List[str]:
+    def _load_keywords(self) -> list[str]:
         """
         Load banned keywords from remote R2 storage.
         Falls back to default list if remote unavailable.
@@ -76,10 +83,14 @@ class ContentFilter:
         print("⚠️ [ContentFilter] WARNING: R2 unavailable, using minimal fallback keywords")
         print("⚠️ [ContentFilter] Production deployment MUST have R2 configured for full protection")
         custom_keywords = get_config_value("BANNED_KEYWORDS", "")
-        custom_list = [k.strip().lower() for k in custom_keywords.split(",") if k.strip()] if custom_keywords else []
+        custom_list = (
+            [k.strip().lower() for k in custom_keywords.split(",") if k.strip()]
+            if custom_keywords
+            else []
+        )
         return list(set(DEFAULT_BANNED_KEYWORDS + custom_list))
 
-    def _load_from_r2(self) -> Optional[List[str]]:
+    def _load_from_r2(self) -> list[str] | None:
         """Load keyword list from R2 storage."""
         try:
             from .r2_storage import get_r2_storage
@@ -89,10 +100,7 @@ class ContentFilter:
                 return None
 
             # Download keywords JSON from R2
-            response = r2._client.get_object(
-                Bucket=r2.bucket_name,
-                Key=self.REMOTE_KEYWORDS_KEY
-            )
+            response = r2._client.get_object(Bucket=r2.bucket_name, Key=self.REMOTE_KEYWORDS_KEY)
             content = response["Body"].read().decode("utf-8")
             data = json.loads(content)
 
@@ -109,7 +117,7 @@ class ContentFilter:
         self._keywords_cache_time = None
         self.banned_keywords = self._load_keywords()
 
-    def is_safe(self, prompt: str, context: Optional[dict] = None) -> Tuple[bool, str]:
+    def is_safe(self, prompt: str, context: dict | None = None) -> tuple[bool, str]:
         """
         Two-layer safety check:
         1. Fast keyword blacklist (Layer 1)
@@ -144,7 +152,7 @@ class ContentFilter:
             "passed": keyword_safe,
             "matched_keywords": [] if keyword_safe else [keyword_reason],
             "execution_time_ms": round(layer1_time_ms, 2),
-            "total_keywords_count": len(self.banned_keywords)
+            "total_keywords_count": len(self.banned_keywords),
         }
 
         # === LAYER 2: AI Deep Analysis (Slower but Smart) ===
@@ -169,7 +177,7 @@ class ContentFilter:
                 "ai_raw_response": None,  # We don't store the full response
                 "execution_time_ms": round(layer2_time_ms, 2),
                 "model": "gemini-2.0-flash-exp",
-                "cache_hit": was_cached
+                "cache_hit": was_cached,
             }
 
         # === Final Decision ===
@@ -180,7 +188,7 @@ class ContentFilter:
                 "allowed": False,
                 "blocked_by": "keyword",
                 "blocked_reason": f"keyword:{keyword_reason}",
-                "total_time_ms": round(total_time_ms, 2)
+                "total_time_ms": round(total_time_ms, 2),
             }
             result = (False, f"keyword:{keyword_reason}")
         elif not ai_safe:
@@ -188,7 +196,7 @@ class ContentFilter:
                 "allowed": False,
                 "blocked_by": "ai",
                 "blocked_reason": f"ai:{ai_reason}",
-                "total_time_ms": round(total_time_ms, 2)
+                "total_time_ms": round(total_time_ms, 2),
             }
             result = (False, f"ai:{ai_reason}")
         else:
@@ -196,20 +204,21 @@ class ContentFilter:
                 "allowed": True,
                 "blocked_by": None,
                 "blocked_reason": None,
-                "total_time_ms": round(total_time_ms, 2)
+                "total_time_ms": round(total_time_ms, 2),
             }
             result = (True, "")
 
         # === Audit Logging ===
         try:
             from .audit_logger import get_audit_logger
+
             audit_logger = get_audit_logger()
             audit_logger.log_moderation_check(
                 prompt=prompt,
                 layer1_result=layer1_result,
                 layer2_result=layer2_result,
                 final_decision=final_decision,
-                context=context
+                context=context,
             )
         except Exception as e:
             # Don't fail on logging errors
@@ -217,34 +226,36 @@ class ContentFilter:
 
         return result
 
-    def _check_keywords(self, prompt: str) -> Tuple[bool, str]:
+    def _check_keywords(self, prompt: str) -> tuple[bool, str]:
         """Layer 1: Fast keyword blacklist checking with word boundary detection."""
         # Normalize prompt for checking
         normalized = prompt.lower()
 
         # Remove spaces and special chars for evasion detection
         # e.g., "n s f w" or "n-s-f-w" should still match "nsfw"
-        compact = re.sub(r'[\s\-_]+', '', normalized)
+        compact = re.sub(r"[\s\-_]+", "", normalized)
 
         # Check each banned keyword
         for keyword in self.banned_keywords:
             keyword_lower = keyword.lower()
 
             # For multi-word phrases, use substring match
-            if ' ' in keyword_lower:
+            if " " in keyword_lower:
                 if keyword_lower in normalized:
                     return False, keyword
 
             # For single words, use word boundary match (avoid "bra" in "embracing")
             else:
                 # Word boundary pattern: \b{keyword}\b
-                pattern = r'\b' + re.escape(keyword_lower) + r'\b'
+                pattern = r"\b" + re.escape(keyword_lower) + r"\b"
                 if re.search(pattern, normalized):
                     return False, keyword
 
             # Evasion detection for compact form (spaces removed)
-            keyword_compact = re.sub(r'[\s\-_]+', '', keyword_lower)
-            if keyword_compact in compact and len(keyword_compact) > 3:  # Avoid short false positives
+            keyword_compact = re.sub(r"[\s\-_]+", "", keyword_lower)
+            if (
+                keyword_compact in compact and len(keyword_compact) > 3
+            ):  # Avoid short false positives
                 return False, keyword
 
         return True, ""
@@ -259,7 +270,7 @@ class ContentFilter:
         # Otherwise use generic messages
         messages = {
             "en": "⚠️ Your prompt contains inappropriate content and cannot be processed.",
-            "zh": "⚠️ 您的提示词包含不当内容，无法处理。"
+            "zh": "⚠️ 您的提示词包含不当内容，无法处理。",
         }
         return messages.get(language, messages["en"])
 

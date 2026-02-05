@@ -2,8 +2,7 @@
 Integration tests for health check endpoints.
 """
 
-import pytest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
 
 class TestHealthEndpoints:

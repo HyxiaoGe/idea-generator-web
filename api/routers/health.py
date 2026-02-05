@@ -5,17 +5,17 @@ Provides basic and detailed health check functionality.
 """
 
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
 
 from api.schemas.common import (
-    HealthStatus,
-    HealthCheckResponse,
-    DetailedHealthCheckResponse,
     ComponentHealth,
+    DetailedHealthCheckResponse,
+    HealthCheckResponse,
+    HealthStatus,
 )
-from core.config import get_settings, Settings
+from core.config import Settings, get_settings
 from core.redis import RedisHealthCheck
 
 router = APIRouter(prefix="/health", tags=["health"])
@@ -39,7 +39,7 @@ async def health_check() -> HealthCheckResponse:
     """
     return HealthCheckResponse(
         status=HealthStatus.HEALTHY,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
 
 
@@ -66,7 +66,9 @@ async def detailed_health_check(
     # Check Redis
     redis_health = await RedisHealthCheck.check()
     components["redis"] = ComponentHealth(
-        status=HealthStatus.HEALTHY if redis_health["status"] == "healthy" else HealthStatus.UNHEALTHY,
+        status=HealthStatus.HEALTHY
+        if redis_health["status"] == "healthy"
+        else HealthStatus.UNHEALTHY,
         latency_ms=redis_health.get("latency_ms"),
         error=redis_health.get("error"),
         details={"version": redis_health.get("version")} if redis_health.get("version") else None,
@@ -105,7 +107,7 @@ async def detailed_health_check(
 
     return DetailedHealthCheckResponse(
         status=overall_status,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         version=settings.app_version,
         environment=settings.environment,
         uptime_seconds=round(uptime_seconds, 2),
@@ -130,12 +132,12 @@ async def readiness_check() -> HealthCheckResponse:
     if redis_health["status"] == "healthy":
         return HealthCheckResponse(
             status=HealthStatus.HEALTHY,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
     else:
         return HealthCheckResponse(
             status=HealthStatus.UNHEALTHY,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
 
 
@@ -153,5 +155,5 @@ async def liveness_check() -> HealthCheckResponse:
     """
     return HealthCheckResponse(
         status=HealthStatus.HEALTHY,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )

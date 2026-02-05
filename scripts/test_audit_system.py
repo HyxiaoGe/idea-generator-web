@@ -125,7 +125,7 @@ def test_audit_system():
     else:
         print("✅ R2 storage available - audit logs uploaded")
         print(f"   Check R2 bucket: {r2.bucket_name}")
-        print(f"   Path: logs/content_moderation/")
+        print("   Path: logs/content_moderation/")
 
     print()
 

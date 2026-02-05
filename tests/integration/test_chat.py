@@ -3,9 +3,8 @@ Integration tests for chat endpoints.
 """
 
 import json
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import datetime
+from unittest.mock import patch
 
 
 class TestChatEndpoints:
@@ -13,13 +12,12 @@ class TestChatEndpoints:
 
     def test_create_chat_session(self, client, mock_redis):
         """Test creating a new chat session."""
+
         async def mock_get_redis():
             return mock_redis
 
         with patch("api.routers.chat.get_redis", mock_get_redis):
-            response = client.post("/api/chat", json={
-                "aspect_ratio": "16:9"
-            })
+            response = client.post("/api/chat", json={"aspect_ratio": "16:9"})
 
             assert response.status_code == 200
             data = response.json()
@@ -28,6 +26,7 @@ class TestChatEndpoints:
 
     def test_create_chat_session_default_aspect(self, client, mock_redis):
         """Test creating chat session with default aspect ratio."""
+
         async def mock_get_redis():
             return mock_redis
 
@@ -40,6 +39,7 @@ class TestChatEndpoints:
 
     def test_list_chat_sessions_empty(self, client, mock_redis):
         """Test listing sessions when none exist."""
+
         async def mock_get_redis():
             return mock_redis
 
@@ -78,6 +78,7 @@ class TestChatEndpoints:
 
     def test_get_chat_history_not_found(self, client, mock_redis):
         """Test getting history for non-existent session."""
+
         async def mock_get_redis():
             return mock_redis
 
@@ -94,7 +95,11 @@ class TestChatEndpoints:
             "aspect_ratio": "16:9",
             "messages": [
                 {"role": "user", "content": "Hello", "timestamp": datetime.now().isoformat()},
-                {"role": "assistant", "content": "Hi there!", "timestamp": datetime.now().isoformat()},
+                {
+                    "role": "assistant",
+                    "content": "Hi there!",
+                    "timestamp": datetime.now().isoformat(),
+                },
             ],
             "created_at": datetime.now().isoformat(),
             "last_activity": datetime.now().isoformat(),
@@ -113,6 +118,7 @@ class TestChatEndpoints:
 
     def test_delete_chat_session_not_found(self, client, mock_redis):
         """Test deleting non-existent session."""
+
         async def mock_get_redis():
             return mock_redis
 

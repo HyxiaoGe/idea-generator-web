@@ -4,17 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Nano Banana Lab** is an AI Image Generation API powered by Google Gemini. It provides RESTful API endpoints for various image generation capabilities.
+**Nano Banana Lab** is an AI Image & Video Generation API with multi-provider support. It provides RESTful API endpoints for various generation capabilities.
 
 **Core Features:**
+- Multi-provider abstraction layer (Google Gemini, OpenAI, FLUX, Runway, Kling)
+- Intelligent provider routing with strategies (priority, cost, quality, speed)
 - Text-to-image generation with multiple resolution options (1K, 2K, 4K)
+- Text-to-video generation (provider-dependent)
 - Multi-turn chat-based iterative image refinement
 - Batch image generation with progress tracking
 - Search-grounded generation with real-time data integration
 - GitHub OAuth authentication with JWT tokens
 - Redis-based quota management for trial users
 - Cloudflare R2 cloud storage for images
-- AI-powered prompt library
+- AI-powered prompt library with content moderation
 
 ## Architecture
 
@@ -27,6 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   ├── health.py         │        ├── common.py              │
 │   ├── auth.py           │        ├── auth.py                │
 │   ├── generate.py       │        ├── generate.py            │
+│   ├── video.py          │        ├── video.py               │
 │   ├── quota.py          │        ├── quota.py               │
 │   ├── chat.py           │        ├── chat.py                │
 │   ├── history.py        │        ├── history.py             │
@@ -38,62 +42,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   ├── redis.py           - Redis connection                 │
 │   └── security.py        - JWT tokens                       │
 ├─────────────────────────────────────────────────────────────┤
-│                    services/ (Business Logic)                │
-│   ├── generator.py       - Core image generation            │
-│   ├── chat_session.py    - Multi-turn conversations         │
-│   ├── auth_service.py    - GitHub OAuth                     │
-│   ├── quota_service.py   - Redis quota management           │
-│   ├── image_storage.py   - Local storage                    │
-│   ├── r2_storage.py      - Cloudflare R2 storage            │
-│   ├── prompt_generator.py- AI prompt generation             │
-│   └── health_check.py    - API health monitoring            │
+│                    database/ (PostgreSQL - Optional)         │
+│   ├── __init__.py        - Connection management            │
+│   ├── models/            - SQLAlchemy ORM models            │
+│   │   ├── user.py        - User (GitHub OAuth)              │
+│   │   ├── image.py       - GeneratedImage (history)         │
+│   │   ├── chat.py        - ChatSession, ChatMessage         │
+│   │   ├── quota.py       - QuotaUsage                       │
+│   │   ├── prompt.py      - Prompt, UserFavoritePrompt       │
+│   │   └── audit.py       - AuditLog, ProviderHealthLog      │
+│   ├── repositories/      - Data access layer                │
+│   │   ├── user_repo.py   - User CRUD                        │
+│   │   ├── image_repo.py  - Image history CRUD               │
+│   │   ├── chat_repo.py   - Chat session CRUD                │
+│   │   └── ...                                               │
+│   └── migrations/        - Alembic migrations               │
 ├─────────────────────────────────────────────────────────────┤
-│              Google GenAI SDK (gemini-3-pro-image-preview)   │
+│                    services/ (Business Logic)                │
+│   ├── provider_router.py - Intelligent provider routing     │
+│   ├── providers/         - Multi-provider abstraction       │
+│   │   ├── base.py        - Base protocols & data classes    │
+│   │   ├── registry.py    - Provider registry                │
+│   │   ├── google.py      - Google Gemini provider           │
+│   │   ├── openai.py      - OpenAI/OpenRouter provider       │
+│   │   ├── flux.py        - FLUX (Black Forest Labs)         │
+│   │   ├── runway.py      - Runway ML (video)                │
+│   │   └── kling.py       - Kling AI (video)                 │
+│   ├── generator.py       - Legacy image generation          │
+│   ├── chat_session.py    - Multi-turn conversations         │
+│   ├── quota_service.py   - Redis quota management           │
+│   ├── r2_storage.py      - Cloudflare R2 storage            │
+│   ├── content_filter.py  - Content moderation               │
+│   └── ai_content_moderator.py - AI-based moderation         │
 └─────────────────────────────────────────────────────────────┘
-```
-
-## Directory Structure
-
-```
-nano-banana-lab/
-├── api/                   # FastAPI application
-│   ├── main.py            # Application entry point
-│   ├── routers/           # API route handlers
-│   │   ├── auth.py        # Authentication endpoints
-│   │   ├── generate.py    # Image generation endpoints
-│   │   ├── quota.py       # Quota management
-│   │   ├── chat.py        # Chat sessions
-│   │   ├── history.py     # Image history
-│   │   ├── prompts.py     # Prompt library
-│   │   └── health.py      # Health checks
-│   ├── schemas/           # Pydantic models
-│   └── middleware/        # Error handlers
-├── core/                  # Core configuration
-│   ├── config.py          # Settings management
-│   ├── exceptions.py      # Custom exceptions
-│   ├── redis.py           # Redis client
-│   └── security.py        # JWT handling
-├── services/              # Business logic
-│   ├── generator.py       # ImageGenerator class
-│   ├── chat_session.py    # ChatSession class
-│   ├── auth_service.py    # AuthService class
-│   ├── quota_service.py   # QuotaService class
-│   ├── image_storage.py   # Local storage
-│   ├── r2_storage.py      # R2 cloud storage
-│   ├── prompt_generator.py# AI prompt generation
-│   ├── prompt_storage.py  # Prompt library storage
-│   └── health_check.py    # Health checks
-├── tests/                 # Test suite
-│   ├── conftest.py        # Pytest fixtures
-│   ├── unit/              # Unit tests
-│   └── integration/       # API tests
-├── i18n/                  # Internationalization
-├── experiments/           # Standalone experiment scripts
-├── docs/                  # Documentation
-├── pyproject.toml         # Project configuration
-├── Dockerfile             # Container configuration
-├── docker-compose.yml     # Docker Compose
-└── .env.example           # Environment template
 ```
 
 ## Quick Reference Commands
@@ -102,262 +83,226 @@ nano-banana-lab/
 # Development server
 uvicorn api.main:app --reload
 
-# Run with specific port
-uvicorn api.main:app --host 0.0.0.0 --port 8000
-
 # Run tests
 pytest
 
-# Run tests with coverage
+# Run single test file
+pytest tests/unit/test_core.py -v
+
+# Run specific test
+pytest tests/integration/test_generate.py::test_generate_image -v
+
+# Run with coverage
 pytest --cov=api --cov=services --cov-report=html
 
-# Docker local development
-docker-compose up -d
+# Linting
+ruff check .
+ruff format .
 
-# Docker build
-docker build -t nano-banana-lab .
-docker run -p 8000:8000 -e GOOGLE_API_KEY=your_key nano-banana-lab
+# Type checking
+mypy api services core database
 
 # Install dependencies
-pip install -e .
-
-# Install with dev dependencies
 pip install -e ".[dev]"
+
+# Docker
+docker-compose up -d
+
+# Database migrations (requires DATABASE_URL)
+alembic upgrade head           # Apply all migrations
+alembic downgrade -1           # Rollback one migration
+alembic revision --autogenerate -m "description"  # Create new migration
 ```
-
-## Key Technologies
-
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| Python | 3.11+ | Runtime |
-| FastAPI | >=0.115.0 | Web framework |
-| Pydantic | >=2.0.0 | Data validation |
-| Redis | >=5.0.0 | Cache & sessions |
-| google-genai | >=1.0.0 | Gemini API SDK |
-| Pillow | >=10.0.0 | Image processing |
-| boto3 | >=1.34.0 | R2 storage (S3) |
-| python-jose | >=3.3.0 | JWT tokens |
-| httpx | >=0.27.0 | Async HTTP |
-| pytest | >=8.0.0 | Testing |
-
-**AI Models:**
-- `gemini-3-pro-image-preview` - Image generation
-- `gemini-2.0-flash` - Health checks and prompt generation
 
 ## Environment Variables
 
 Required:
 ```
-GOOGLE_API_KEY              # Google Gemini API key
 SECRET_KEY                  # JWT signing key (32+ chars)
 REDIS_URL                   # Redis connection URL
 ```
 
-Optional - Server:
+At least one provider API key is required:
 ```
-HOST                        # Server host (default: 0.0.0.0)
-PORT                        # Server port (default: 8000)
-ENVIRONMENT                 # development/production
-DEBUG                       # Enable debug mode
-```
-
-Optional - Cloudflare R2:
-```
-R2_ENABLED                  # Enable cloud storage (true/false)
-R2_ACCOUNT_ID               # Cloudflare account ID
-R2_ACCESS_KEY_ID            # R2 access key
-R2_SECRET_ACCESS_KEY        # R2 secret key
-R2_BUCKET_NAME              # Bucket name
-R2_PUBLIC_URL               # Public URL for images
+GOOGLE_API_KEY              # Google Gemini API key
+PROVIDER_OPENAI_API_KEY     # OpenAI API key (or OpenRouter)
+PROVIDER_BFL_API_KEY        # FLUX (Black Forest Labs) API key
 ```
 
-Optional - GitHub OAuth:
+Optional - Provider Configuration:
 ```
-AUTH_ENABLED                # Enable OAuth (true/false)
-GITHUB_CLIENT_ID            # GitHub OAuth app client ID
-GITHUB_CLIENT_SECRET        # GitHub OAuth app client secret
-GITHUB_REDIRECT_URI         # OAuth callback URL
+PROVIDER_GOOGLE_ENABLED     # Enable Google provider (default: true)
+PROVIDER_GOOGLE_PRIORITY    # Priority (lower = higher priority)
+PROVIDER_OPENAI_ENABLED     # Enable OpenAI provider
+PROVIDER_OPENAI_BASE_URL    # Custom base URL (for OpenRouter, etc.)
+PROVIDER_BFL_ENABLED        # Enable FLUX provider
+DEFAULT_ROUTING_STRATEGY    # priority|cost|quality|speed|round_robin
+ENABLE_FALLBACK             # Enable automatic provider failover
 ```
 
-Optional - Trial Mode:
+Optional - Storage & Auth:
 ```
-TRIAL_ENABLED               # Enable trial mode (true/false)
-TRIAL_GLOBAL_QUOTA          # Global daily quota (default: 50)
-TRIAL_COOLDOWN_SECONDS      # Cooldown between generations
+R2_ENABLED                  # Enable Cloudflare R2 cloud storage
+AUTH_ENABLED                # Enable GitHub OAuth
+TRIAL_ENABLED               # Enable trial mode quotas
+```
+
+Optional - PostgreSQL Database:
+```
+DATABASE_ENABLED            # Enable PostgreSQL (default: false)
+DATABASE_URL                # postgresql+asyncpg://user:pass@host:port/db
+DB_POOL_SIZE                # Connection pool size (default: 5)
+DB_MAX_OVERFLOW             # Max overflow connections (default: 10)
 ```
 
 ## API Endpoints
 
-### Health
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/health` | Basic health check |
-| GET | `/api/health/detailed` | Detailed status |
-| GET | `/api/health/ready` | Readiness probe |
-| GET | `/api/health/live` | Liveness probe |
-
-### Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/auth/login` | Get OAuth URL |
-| POST | `/api/auth/callback` | OAuth callback |
-| GET | `/api/auth/me` | Current user |
-| POST | `/api/auth/logout` | Logout |
-
-### Image Generation
+### Core Generation
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/generate` | Generate image |
 | POST | `/api/generate/batch` | Batch generation |
-| GET | `/api/generate/task/{id}` | Task progress |
 | POST | `/api/generate/search` | Search-grounded |
-
-### Quota
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/quota` | Quota status |
-| POST | `/api/quota/check` | Check availability |
-| GET | `/api/quota/config` | Configuration |
+| POST | `/api/video/generate` | Generate video |
 
 ### Chat
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/chat` | Create session |
-| GET | `/api/chat` | List sessions |
 | POST | `/api/chat/{id}/message` | Send message |
 | GET | `/api/chat/{id}` | Get history |
-| DELETE | `/api/chat/{id}` | Delete session |
 
-### History
+### Authentication & API Keys
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/history` | List history |
-| GET | `/api/history/stats` | Statistics |
-| GET | `/api/history/{id}` | Get detail |
-| GET | `/api/history/{id}/image` | Get image |
-| DELETE | `/api/history/{id}` | Delete item |
+| GET | `/api/auth/login` | Get GitHub authorization URL |
+| POST | `/api/auth/callback` | Handle OAuth callback |
+| GET | `/api/auth/me` | Get current user |
+| POST | `/api/auth/logout` | Logout user |
+| POST | `/api/auth/refresh` | Refresh JWT token |
+| GET | `/api/auth/api-keys` | List API keys |
+| POST | `/api/auth/api-keys` | Create API key |
+| DELETE | `/api/auth/api-keys/{id}` | Delete API key |
 
-### Prompts
+### User Settings
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/prompts` | List prompts |
-| POST | `/api/prompts` | Save custom |
-| GET | `/api/prompts/categories` | Categories |
-| POST | `/api/prompts/generate` | AI generate |
-| POST | `/api/prompts/{id}/favorite` | Toggle favorite |
-| DELETE | `/api/prompts/{id}` | Delete prompt |
+| GET | `/api/settings` | Get user settings |
+| PUT | `/api/settings` | Update user settings |
+| GET | `/api/settings/providers` | Get provider preferences |
+| PUT | `/api/settings/providers` | Update provider preferences |
 
-## Code Conventions
+### Favorites
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/favorites` | List favorites |
+| POST | `/api/favorites` | Add favorite |
+| DELETE | `/api/favorites/{id}` | Remove favorite |
+| POST | `/api/favorites/bulk` | Bulk operations |
+| GET | `/api/favorites/folders` | List folders |
+| POST | `/api/favorites/folders` | Create folder |
 
-### Naming Conventions
-- **Classes:** PascalCase (`ImageGenerator`, `QuotaService`)
-- **Functions:** snake_case (`generate_image()`, `check_quota()`)
-- **Constants:** UPPER_SNAKE_CASE (`MAX_RETRIES`, `MODEL_ID`)
-- **API paths:** kebab-case (`/api/health/ready`)
+### Templates
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/templates` | List templates |
+| POST | `/api/templates` | Create template |
+| GET | `/api/templates/{id}` | Get template |
+| PUT | `/api/templates/{id}` | Update template |
+| DELETE | `/api/templates/{id}` | Delete template |
+| POST | `/api/templates/{id}/use` | Use template |
+| GET | `/api/templates/public` | Public templates |
 
-### Patterns Used
+### Projects
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/projects` | List projects |
+| POST | `/api/projects` | Create project |
+| GET | `/api/projects/{id}` | Get project |
+| PUT | `/api/projects/{id}` | Update project |
+| DELETE | `/api/projects/{id}` | Delete project |
+| GET | `/api/projects/{id}/images` | List project images |
+| POST | `/api/projects/{id}/images` | Add image to project |
 
-**1. Service Layer Pattern**
-Services in `services/` contain business logic separated from API handlers:
+### Notifications
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/notifications` | List notifications |
+| GET | `/api/notifications/unread-count` | Get unread count |
+| POST | `/api/notifications/mark-read` | Mark as read |
+| POST | `/api/notifications/mark-all-read` | Mark all as read |
+| DELETE | `/api/notifications/{id}` | Delete notification |
+
+### Analytics
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/analytics/overview` | Overall statistics |
+| GET | `/api/analytics/usage` | Usage statistics |
+| GET | `/api/analytics/costs` | Cost analysis |
+| GET | `/api/analytics/providers` | Provider stats |
+| GET | `/api/analytics/trends` | Trend analysis |
+
+### Search
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/search` | Global search |
+| GET | `/api/search/images` | Search images |
+| GET | `/api/search/prompts` | Search prompts |
+| GET | `/api/search/suggestions` | Search suggestions |
+
+### WebSocket
+| Protocol | Endpoint | Description |
+|----------|----------|-------------|
+| WS | `/api/ws` | Real-time updates |
+
+### Admin (Requires admin privileges)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/users` | List users |
+| GET | `/api/admin/users/{id}` | Get user details |
+| PUT | `/api/admin/users/{id}/tier` | Update user tier |
+| PUT | `/api/admin/users/{id}/quota` | Adjust quota |
+| GET | `/api/admin/providers` | List providers |
+| POST | `/api/admin/providers/{name}/enable` | Enable provider |
+| GET | `/api/admin/system/status` | System status |
+| GET | `/api/admin/system/metrics` | System metrics |
+| POST | `/api/admin/quota/reset/{user_id}` | Reset user quota |
+| POST | `/api/admin/announcements` | Create announcement |
+
+### Supporting Endpoints
+- `/api/health` - Health checks (basic, detailed, ready, live)
+- `/api/quota` - Quota management (status, check, config)
+- `/api/history` - Generation history
+- `/api/prompts` - Prompt library
+
+## Code Patterns
+
+### Service Layer with Singleton Pattern
+Services are accessed via getter functions that return singleton instances:
 ```python
-from services import ImageGenerator, get_quota_service
+from services import get_quota_service, get_provider_router
+
+quota = get_quota_service()
+router = get_provider_router()
 ```
 
-**2. Dependency Injection**
-FastAPI dependencies for authentication and services:
+### Multi-Provider System
+New generation requests should use the `ProviderRouter` for intelligent routing:
 ```python
-async def get_current_user(authorization: str = Header(None)) -> GitHubUser:
-    ...
+from services import get_provider_router, GenerationRequest
+
+router = get_provider_router()
+request = GenerationRequest(prompt="...", resolution="1K")
+decision = await router.route(request)
+result = await router.execute_with_fallback(request, decision)
 ```
 
-**3. Pydantic Schemas**
-Request/response validation with Pydantic models:
-```python
-class GenerateImageRequest(BaseModel):
-    prompt: str = Field(..., min_length=1)
-    settings: GenerationSettings
-```
+Routing strategies: `priority`, `cost`, `quality`, `speed`, `round_robin`
 
-**4. Error Handling**
-Custom exceptions with global handlers:
-```python
-raise QuotaExceededError(message="Daily quota exceeded")
-```
-
-**5. Error Handling with Retry**
-Network operations use retry logic with exponential backoff:
-- Max attempts: 3
-- Backoff delays: [2s, 4s, 8s]
-- Retryable errors: Connection issues, timeout, 502/503/504 errors
-
-### Important Files
-
-| File | Purpose |
-|------|---------|
-| `api/main.py` | FastAPI app entry, lifespan, routers |
-| `core/config.py` | Pydantic Settings configuration |
-| `core/security.py` | JWT token creation/verification |
-| `services/generator.py` | Core `ImageGenerator` class |
-| `services/chat_session.py` | `ChatSession` for multi-turn |
-| `services/auth_service.py` | GitHub OAuth with httpx |
-| `services/quota_service.py` | Redis-based quota management |
-| `services/r2_storage.py` | Cloudflare R2 integration |
-
-## Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run with verbose output
-pytest -v
-
-# Run specific test file
-pytest tests/unit/test_core.py
-
-# Run with coverage
-pytest --cov=api --cov=services
-
-# Generate HTML coverage report
-pytest --cov-report=html
-```
-
-## Deployment
-
-**Supported Platforms:**
-- Docker (any container platform)
-- Railway (`railway.json`)
-- Render (`render.yaml`)
-- Google Cloud Run
-- AWS ECS/Fargate
-
-**Required Services:**
-- Redis (for sessions and quota tracking)
-
-**Startup command:**
-```bash
-uvicorn api.main:app --host 0.0.0.0 --port $PORT
-```
-
-**Health check endpoint:**
-```
-GET /api/health
-```
-
-**Docker health check:**
-```
-curl --fail http://localhost:8000/api/health
-```
-
-## Security Notes
-
-- JWT tokens for authentication (32+ char secret key)
-- API keys can be passed via `X-API-Key` header
-- CORS configured via environment variables
-- Redis for secure session storage
-- `.env` files excluded from git
-
-## Common Tasks
+### Adding a New Provider
+1. Create provider class in `services/providers/` implementing `ImageProvider` or `VideoProvider`
+2. Add registration logic in `ProviderRouter._register_providers()`
+3. Add config settings in `core/config.py`
 
 ### Adding a New API Endpoint
 1. Create schema in `api/schemas/`
@@ -366,26 +311,69 @@ curl --fail http://localhost:8000/api/health
 4. Register router in `api/main.py`
 5. Add tests in `tests/integration/`
 
-### Adding New Service
-1. Create file in `services/`
-2. Implement service class with singleton getter
-3. Export from `services/__init__.py`
+### Error Handling with Retry
+Network operations use automatic retry with exponential backoff:
+- Max attempts: 3
+- Backoff delays: [2s, 4s, 8s]
+- Retryable: Connection errors, timeout, 502/503/504
 
-### Modifying Image Generation
-Core generation logic is in `services/generator.py`:
-- `generate()` - Basic text-to-image
-- `blend_images()` - Multi-image blending
-- `generate_with_search()` - Search-grounded generation
+### Database Access Pattern
+When PostgreSQL is enabled, use repository pattern via dependency injection:
+```python
+from api.dependencies import get_image_repository
+from database.repositories import ImageRepository
 
-## Error Handling
+@router.get("/history")
+async def list_history(
+    image_repo: Optional[ImageRepository] = Depends(get_image_repository),
+):
+    if image_repo:
+        # Use database
+        images = await image_repo.list_by_user(user_id, limit=20)
+    else:
+        # Fallback to file storage
+        storage = get_storage_manager()
+        images = await storage.get_history(limit=20)
+```
 
-**Retryable errors (automatic retry):**
-- Connection errors
-- Timeout errors
-- HTTP 502/503/504 (server overloaded)
+Database is optional - when not configured, services fall back to file-based storage.
 
-**Non-retryable errors (immediate failure):**
-- Invalid API key (401)
-- Quota exceeded (429)
-- Safety content blocked
-- Invalid request parameters
+## Testing
+
+Tests use pytest with async support. Fixtures in `tests/conftest.py` provide:
+- `client` / `async_client` - Test clients
+- `mock_redis` - In-memory Redis mock
+- `mock_image_generator`, `mock_r2_storage`, etc.
+
+```bash
+# Run all tests
+pytest
+
+# Run specific test
+pytest tests/integration/test_generate.py::test_generate_image -v
+
+# With coverage report
+pytest --cov=api --cov=services --cov-report=html
+```
+
+## Deployment
+
+**Required:** Redis (for sessions and quota tracking)
+
+**Optional:** PostgreSQL (for persistent history, chat sessions, analytics)
+
+**Startup:**
+```bash
+uvicorn api.main:app --host 0.0.0.0 --port $PORT
+```
+
+**Database Setup (if using PostgreSQL):**
+```bash
+# Create database
+createdb idea_generator
+
+# Run migrations
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/idea_generator alembic upgrade head
+```
+
+**Health check:** `GET /api/health`

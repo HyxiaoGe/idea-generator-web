@@ -3,17 +3,16 @@ GitHub OAuth authentication service for FastAPI.
 Uses httpx for OAuth flow and JWT for token management.
 """
 
-import os
-import hashlib
 import logging
+import os
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Any
 from urllib.parse import urlencode
 
 import httpx
 
-from core.security import create_access_token, verify_token, generate_user_folder_id
 from core.exceptions import AuthenticationError
+from core.security import create_access_token, generate_user_folder_id, verify_token
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +25,12 @@ def get_config_value(key: str, default: str = "") -> str:
 @dataclass
 class GitHubUser:
     """Represents an authenticated GitHub user."""
+
     id: str
     login: str
-    name: Optional[str]
-    email: Optional[str]
-    avatar_url: Optional[str]
+    name: str | None
+    email: str | None
+    avatar_url: str | None
 
     @property
     def display_name(self) -> str:
@@ -42,7 +42,7 @@ class GitHubUser:
         """Get a safe folder identifier for the user."""
         return generate_user_folder_id(self.id, "github")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "id": self.id,
@@ -54,7 +54,7 @@ class GitHubUser:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "GitHubUser":
+    def from_dict(cls, data: dict[str, Any]) -> "GitHubUser":
         """Create from dictionary."""
         return cls(
             id=str(data.get("id", "")),
@@ -89,7 +89,9 @@ class AuthService:
         """Check if authentication is available and configured."""
         return self.enabled and self.is_configured
 
-    def get_authorization_url(self, state: Optional[str] = None, redirect_uri: Optional[str] = None) -> str:
+    def get_authorization_url(
+        self, state: str | None = None, redirect_uri: str | None = None
+    ) -> str:
         """
         Get the GitHub authorization URL.
 
@@ -110,7 +112,7 @@ class AuthService:
 
         return f"{self.GITHUB_AUTHORIZE_URL}?{urlencode(params)}"
 
-    async def exchange_code_for_token(self, code: str) -> Dict[str, Any]:
+    async def exchange_code_for_token(self, code: str) -> dict[str, Any]:
         """
         Exchange authorization code for access token.
 
@@ -139,7 +141,7 @@ class AuthService:
                 logger.error(f"Token exchange failed: {response.status_code} {response.text}")
                 raise AuthenticationError(
                     message="Failed to exchange authorization code",
-                    details={"status_code": response.status_code}
+                    details={"status_code": response.status_code},
                 )
 
             data = response.json()
@@ -148,7 +150,7 @@ class AuthService:
                 logger.error(f"Token exchange error: {data}")
                 raise AuthenticationError(
                     message=data.get("error_description", data.get("error")),
-                    error_code="oauth_error"
+                    error_code="oauth_error",
                 )
 
             return data
@@ -181,13 +183,13 @@ class AuthService:
                 logger.error(f"Failed to fetch user info: {response.status_code}")
                 raise AuthenticationError(
                     message="Failed to fetch user information",
-                    details={"status_code": response.status_code}
+                    details={"status_code": response.status_code},
                 )
 
             data = response.json()
             return GitHubUser.from_dict(data)
 
-    async def authenticate(self, code: str) -> Dict[str, Any]:
+    async def authenticate(self, code: str) -> dict[str, Any]:
         """
         Complete the OAuth authentication flow.
 
@@ -208,11 +210,13 @@ class AuthService:
         user = await self.get_user_info(github_access_token)
 
         # Create JWT token
-        jwt_token = create_access_token(data={
-            "sub": user.id,
-            "login": user.login,
-            "provider": "github",
-        })
+        jwt_token = create_access_token(
+            data={
+                "sub": user.id,
+                "login": user.login,
+                "provider": "github",
+            }
+        )
 
         return {
             "access_token": jwt_token,
@@ -220,7 +224,7 @@ class AuthService:
             "user": user.to_dict(),
         }
 
-    def get_user_from_token(self, token: str) -> Optional[GitHubUser]:
+    def get_user_from_token(self, token: str) -> GitHubUser | None:
         """
         Get user info from JWT token.
 
@@ -244,7 +248,7 @@ class AuthService:
 
 
 # Singleton instance
-_auth_service: Optional[AuthService] = None
+_auth_service: AuthService | None = None
 
 
 def get_auth_service() -> AuthService:

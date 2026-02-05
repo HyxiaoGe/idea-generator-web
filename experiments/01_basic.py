@@ -1,11 +1,13 @@
 """
 Experiment 01: Basic Image Generation
 """
+
 import os
 import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from config import client, PRO_MODEL_ID, OUTPUT_DIR
+from config import OUTPUT_DIR, PRO_MODEL_ID, client
 from google.genai import types
 
 
@@ -17,10 +19,8 @@ def generate_basic_image(prompt: str, aspect_ratio: str = "16:9"):
         contents=prompt,
         config=types.GenerateContentConfig(
             response_modalities=["Text", "Image"],
-            image_config=types.ImageConfig(
-                aspect_ratio=aspect_ratio
-            )
-        )
+            image_config=types.ImageConfig(aspect_ratio=aspect_ratio),
+        ),
     )
 
     # Save image and print text
@@ -35,15 +35,16 @@ def generate_basic_image(prompt: str, aspect_ratio: str = "16:9"):
 
     return None
 
+
 if __name__ == "__main__":
     # Try your own prompt here
     prompt = "A cute corgi wearing sunglasses, sitting on a beach at sunset, photorealistic"
-    
+
     print(f"Prompt: {prompt}")
     print("Generating...")
-    
+
     result = generate_basic_image(prompt, aspect_ratio="16:9")
-    
+
     if result:
         print("Done!")
     else:

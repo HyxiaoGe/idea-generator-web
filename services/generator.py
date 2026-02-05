@@ -1,17 +1,19 @@
 """
 Image Generator Service using Google GenAI.
 """
+
+import logging
 import os
 import time
-import logging
-from typing import Optional, Tuple, List, Callable, Any
+from collections.abc import Callable
 from dataclasses import dataclass
-from PIL import Image
 from io import BytesIO
+from typing import Any
 
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-from dotenv import load_dotenv
+from PIL import Image
 
 load_dotenv()
 
@@ -135,7 +137,7 @@ def get_friendly_error_message(error_msg: str, translator=None) -> str:
     return error_msg[:200] if len(error_msg) > 200 else error_msg
 
 
-def build_safety_settings(level: str = "moderate") -> List[types.SafetySetting]:
+def build_safety_settings(level: str = "moderate") -> list[types.SafetySetting]:
     """
     Build safety settings based on the specified level.
 
@@ -147,22 +149,22 @@ def build_safety_settings(level: str = "moderate") -> List[types.SafetySetting]:
     """
     threshold = SAFETY_LEVELS.get(level, types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE)
     return [
-        types.SafetySetting(category=category, threshold=threshold)
-        for category in HARM_CATEGORIES
+        types.SafetySetting(category=category, threshold=threshold) for category in HARM_CATEGORIES
     ]
 
 
 @dataclass
 class GenerationResult:
     """Result of an image generation."""
-    image: Optional[Image.Image] = None
-    text: Optional[str] = None
-    thinking: Optional[str] = None
-    search_sources: Optional[str] = None
+
+    image: Image.Image | None = None
+    text: str | None = None
+    thinking: str | None = None
+    search_sources: str | None = None
     duration: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None
     safety_blocked: bool = False
-    safety_ratings: Optional[List] = None
+    safety_ratings: list | None = None
 
 
 class ImageGenerator:
@@ -173,7 +175,7 @@ class ImageGenerator:
     ASPECT_RATIOS = ["1:1", "16:9", "9:16", "4:3", "3:4"]
     RESOLUTIONS = ["1K", "2K", "4K"]
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """
         Initialize the image generator.
 
@@ -213,7 +215,7 @@ class ImageGenerator:
             client = genai.Client(api_key=api_key)
             # Try to list models as a simple validation
             # This is a lightweight call that verifies the key works
-            models = list(client.models.list())
+            list(client.models.list())
             return True, "API key is valid"
         except Exception as e:
             error_msg = str(e)
@@ -229,7 +231,7 @@ class ImageGenerator:
         api_call: Callable[[], Any],
         result: GenerationResult,
         start_time: float,
-    ) -> Tuple[Any, Optional[str]]:
+    ) -> tuple[Any, str | None]:
         """
         Execute an API call with retry logic.
 
@@ -297,43 +299,44 @@ class ImageGenerator:
         candidate = response.candidates[0]
 
         # Extract safety ratings
-        if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
+        if hasattr(candidate, "safety_ratings") and candidate.safety_ratings:
             result.safety_ratings = [
                 {"category": str(r.category), "probability": str(r.probability)}
                 for r in candidate.safety_ratings
             ]
 
         # Check if blocked by safety filter
-        if hasattr(candidate, 'finish_reason') and str(candidate.finish_reason) == "SAFETY":
+        if hasattr(candidate, "finish_reason") and str(candidate.finish_reason) == "SAFETY":
             result.safety_blocked = True
             result.error = "Content blocked by safety filter"
             return False
 
         # Process response parts
-        if hasattr(candidate, 'content') and candidate.content:
+        if hasattr(candidate, "content") and candidate.content:
             for part in candidate.content.parts:
-                if hasattr(part, 'thought') and part.thought:
+                if hasattr(part, "thought") and part.thought:
                     result.thinking = part.text
-                elif hasattr(part, 'text') and part.text:
+                elif hasattr(part, "text") and part.text:
                     result.text = part.text
-                elif hasattr(part, 'inline_data') and part.inline_data:
+                elif hasattr(part, "inline_data") and part.inline_data:
                     image_data = part.inline_data.data
                     result.image = Image.open(BytesIO(image_data))
 
         # Extract search sources if requested
-        if extract_search and hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
+        if (
+            extract_search
+            and hasattr(candidate, "grounding_metadata")
+            and candidate.grounding_metadata
+        ):
             metadata = candidate.grounding_metadata
-            if hasattr(metadata, 'search_entry_point') and metadata.search_entry_point:
+            if hasattr(metadata, "search_entry_point") and metadata.search_entry_point:
                 result.search_sources = metadata.search_entry_point.rendered_content
 
         return True
 
     def _record_stats(self, duration: float):
         """Record generation statistics."""
-        self.stats.append({
-            "duration": duration,
-            "timestamp": time.time()
-        })
+        self.stats.append({"duration": duration, "timestamp": time.time()})
 
     def get_stats_summary(self) -> str:
         """Get summary of generation statistics."""
@@ -417,7 +420,7 @@ class ImageGenerator:
     def blend_images(
         self,
         prompt: str,
-        images: List[Image.Image],
+        images: list[Image.Image],
         aspect_ratio: str = "1:1",
         safety_level: str = "moderate",
     ) -> GenerationResult:
@@ -444,9 +447,7 @@ class ImageGenerator:
         contents = [prompt] + images
         config = types.GenerateContentConfig(
             response_modalities=["Text", "Image"],
-            image_config=types.ImageConfig(
-                aspect_ratio=aspect_ratio
-            ),
+            image_config=types.ImageConfig(aspect_ratio=aspect_ratio),
             safety_settings=build_safety_settings(safety_level),
         )
 
@@ -498,9 +499,7 @@ class ImageGenerator:
 
         config = types.GenerateContentConfig(
             response_modalities=["Text", "Image"],
-            image_config=types.ImageConfig(
-                aspect_ratio=aspect_ratio
-            ),
+            image_config=types.ImageConfig(aspect_ratio=aspect_ratio),
             tools=[{"google_search": {}}],
             safety_settings=build_safety_settings(safety_level),
         )

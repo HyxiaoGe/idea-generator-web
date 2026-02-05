@@ -3,13 +3,11 @@ Trial quota management service using Redis storage.
 Manages shared daily quota for trial users without API keys.
 """
 
-import os
-import json
-import time
 import logging
-from datetime import datetime, timezone
-from typing import Optional, Dict, Tuple
+import os
+import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +20,7 @@ def get_config_value(key: str, default: str = "") -> str:
 @dataclass
 class QuotaConfig:
     """Configuration for quota limits per generation mode."""
+
     cost: int  # Cost in quota points (1 point = 1 standard 1K/2K image)
     daily_limit: int  # Maximum count per day for this specific mode
     display_name: str  # Display name for UI
@@ -48,52 +47,61 @@ MANUAL_QUOTA_CONFIGS = {
     "basic_1k": QuotaConfig(
         cost=int(get_config_value("TRIAL_BASIC_1K_COST", "1")),
         daily_limit=int(get_config_value("TRIAL_BASIC_1K_LIMIT", "30")),
-        display_name="Basic (1K/2K)"
+        display_name="Basic (1K/2K)",
     ),
     "basic_4k": QuotaConfig(
         cost=int(get_config_value("TRIAL_BASIC_4K_COST", "3")),
         daily_limit=int(get_config_value("TRIAL_BASIC_4K_LIMIT", "10")),
-        display_name="Basic (4K)"
+        display_name="Basic (4K)",
     ),
     "chat": QuotaConfig(
         cost=int(get_config_value("TRIAL_CHAT_COST", "1")),
         daily_limit=int(get_config_value("TRIAL_CHAT_LIMIT", "20")),
-        display_name="Chat"
+        display_name="Chat",
     ),
     "batch_1k": QuotaConfig(
         cost=int(get_config_value("TRIAL_BATCH_1K_COST", "1")),
         daily_limit=int(get_config_value("TRIAL_BATCH_1K_LIMIT", "15")),
-        display_name="Batch (1K/2K)"
+        display_name="Batch (1K/2K)",
     ),
     "batch_4k": QuotaConfig(
         cost=int(get_config_value("TRIAL_BATCH_4K_COST", "3")),
         daily_limit=int(get_config_value("TRIAL_BATCH_4K_LIMIT", "5")),
-        display_name="Batch (4K)"
+        display_name="Batch (4K)",
     ),
     "search": QuotaConfig(
         cost=int(get_config_value("TRIAL_SEARCH_COST", "2")),
         daily_limit=int(get_config_value("TRIAL_SEARCH_LIMIT", "15")),
-        display_name="Search"
+        display_name="Search",
     ),
     "blend": QuotaConfig(
         cost=int(get_config_value("TRIAL_BLEND_COST", "2")),
         daily_limit=int(get_config_value("TRIAL_BLEND_LIMIT", "10")),
-        display_name="Blend/Style"
+        display_name="Blend/Style",
     ),
 }
 
 
-def _calculate_auto_quota_configs() -> Dict[str, QuotaConfig]:
+def _calculate_auto_quota_configs() -> dict[str, QuotaConfig]:
     """Calculate quota configs automatically based on global quota and ratios."""
     configs = {}
     costs = {
-        "basic_1k": 1, "basic_4k": 3, "chat": 1,
-        "batch_1k": 1, "batch_4k": 3, "search": 2, "blend": 2,
+        "basic_1k": 1,
+        "basic_4k": 3,
+        "chat": 1,
+        "batch_1k": 1,
+        "batch_4k": 3,
+        "search": 2,
+        "blend": 2,
     }
     display_names = {
-        "basic_1k": "Basic (1K/2K)", "basic_4k": "Basic (4K)", "chat": "Chat",
-        "batch_1k": "Batch (1K/2K)", "batch_4k": "Batch (4K)",
-        "search": "Search", "blend": "Blend/Style",
+        "basic_1k": "Basic (1K/2K)",
+        "basic_4k": "Basic (4K)",
+        "chat": "Chat",
+        "batch_1k": "Batch (1K/2K)",
+        "batch_4k": "Batch (4K)",
+        "search": "Search",
+        "blend": "Blend/Style",
     }
 
     for mode_key, ratio in BASE_QUOTA_RATIOS.items():
@@ -101,9 +109,7 @@ def _calculate_auto_quota_configs() -> Dict[str, QuotaConfig]:
         allocated_points = GLOBAL_DAILY_QUOTA * ratio
         daily_limit = int(allocated_points / cost)
         configs[mode_key] = QuotaConfig(
-            cost=cost,
-            daily_limit=max(1, daily_limit),
-            display_name=display_names[mode_key]
+            cost=cost, daily_limit=max(1, daily_limit), display_name=display_names[mode_key]
         )
     return configs
 
@@ -141,7 +147,7 @@ class QuotaService:
 
     def _get_current_date(self) -> str:
         """Get current date in UTC as string (YYYY-MM-DD)."""
-        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return datetime.now(UTC).strftime("%Y-%m-%d")
 
     def _get_global_key(self) -> str:
         """Get Redis key for global quota."""
@@ -163,12 +169,8 @@ class QuotaService:
             return mode  # chat, search
 
     async def check_quota(
-        self,
-        user_id: str,
-        mode: str,
-        resolution: str = "1K",
-        count: int = 1
-    ) -> Tuple[bool, str, Dict]:
+        self, user_id: str, mode: str, resolution: str = "1K", count: int = 1
+    ) -> tuple[bool, str, dict]:
         """
         Check if quota is available for a generation request.
 
@@ -202,9 +204,11 @@ class QuotaService:
         last_gen = float(user_data.get("last_generation", 0))
         if current_time - last_gen < GENERATION_COOLDOWN:
             remaining = int(GENERATION_COOLDOWN - (current_time - last_gen))
-            return False, f"Please wait {remaining}s before next generation", {
-                "cooldown_remaining": remaining
-            }
+            return (
+                False,
+                f"Please wait {remaining}s before next generation",
+                {"cooldown_remaining": remaining},
+            )
 
         # Check global quota
         global_key = self._get_global_key()
@@ -212,23 +216,31 @@ class QuotaService:
         global_remaining = GLOBAL_DAILY_QUOTA - global_used
 
         if total_cost > global_remaining:
-            return False, f"Daily global quota exceeded ({global_used}/{GLOBAL_DAILY_QUOTA} used)", {
-                "global_used": global_used,
-                "global_limit": GLOBAL_DAILY_QUOTA,
-                "global_remaining": global_remaining,
-            }
+            return (
+                False,
+                f"Daily global quota exceeded ({global_used}/{GLOBAL_DAILY_QUOTA} used)",
+                {
+                    "global_used": global_used,
+                    "global_limit": GLOBAL_DAILY_QUOTA,
+                    "global_remaining": global_remaining,
+                },
+            )
 
         # Check mode-specific quota
         mode_used = int(user_data.get(f"mode:{mode_key}", 0))
         mode_remaining = config.daily_limit - mode_used
 
         if count > mode_remaining:
-            return False, f"{config.display_name} daily limit exceeded ({mode_used}/{config.daily_limit} used)", {
-                "mode": config.display_name,
-                "mode_used": mode_used,
-                "mode_limit": config.daily_limit,
-                "mode_remaining": mode_remaining,
-            }
+            return (
+                False,
+                f"{config.display_name} daily limit exceeded ({mode_used}/{config.daily_limit} used)",
+                {
+                    "mode": config.display_name,
+                    "mode_used": mode_used,
+                    "mode_limit": config.daily_limit,
+                    "mode_remaining": mode_remaining,
+                },
+            )
 
         # All checks passed
         quota_info = {
@@ -245,11 +257,7 @@ class QuotaService:
         return True, "OK", quota_info
 
     async def consume_quota(
-        self,
-        user_id: str,
-        mode: str,
-        resolution: str = "1K",
-        count: int = 1
+        self, user_id: str, mode: str, resolution: str = "1K", count: int = 1
     ) -> bool:
         """
         Consume quota for a generation.
@@ -292,7 +300,7 @@ class QuotaService:
         logger.debug(f"Consumed quota: user={user_id}, mode={mode_key}, cost={total_cost}")
         return True
 
-    async def get_quota_status(self, user_id: str) -> Dict:
+    async def get_quota_status(self, user_id: str) -> dict:
         """
         Get current quota status for display.
 
@@ -303,10 +311,7 @@ class QuotaService:
             Dictionary with quota information
         """
         if not self._redis:
-            return {
-                "is_trial_mode": False,
-                "message": "Quota tracking not available"
-            }
+            return {"is_trial_mode": False, "message": "Quota tracking not available"}
 
         global_key = self._get_global_key()
         user_key = self._get_user_key(user_id)
@@ -365,7 +370,7 @@ class QuotaService:
 
 
 # Singleton instance
-_quota_service: Optional[QuotaService] = None
+_quota_service: QuotaService | None = None
 
 
 def get_quota_service(redis_client=None) -> QuotaService:
@@ -378,7 +383,7 @@ def get_quota_service(redis_client=None) -> QuotaService:
     return _quota_service
 
 
-def is_trial_mode(user_api_key: Optional[str] = None) -> bool:
+def is_trial_mode(user_api_key: str | None = None) -> bool:
     """
     Check if current user is in trial mode.
 

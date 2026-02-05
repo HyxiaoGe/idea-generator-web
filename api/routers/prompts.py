@@ -10,27 +10,25 @@ Endpoints:
 - DELETE /api/prompts/{prompt_id} - Delete a custom prompt
 """
 
-import uuid
 import logging
+import uuid
 from datetime import datetime
-from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Depends, Query, Header
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
-from core.config import get_settings
-from services import PromptGenerator, get_prompt_generator, PromptStorage, get_prompt_storage
+from api.routers.auth import get_current_user
 from api.schemas.prompts import (
-    PromptTemplate,
-    PromptCategory,
-    ListPromptsResponse,
     GeneratePromptsRequest,
     GeneratePromptsResponse,
-    ToggleFavoriteRequest,
-    ToggleFavoriteResponse,
+    ListPromptsResponse,
+    PromptCategory,
+    PromptTemplate,
     SavePromptRequest,
     SavePromptResponse,
+    ToggleFavoriteResponse,
 )
-from api.routers.auth import get_current_user
+from core.config import get_settings
+from services import PromptGenerator, PromptStorage, get_prompt_storage
 from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
@@ -40,29 +38,62 @@ router = APIRouter(prefix="/prompts", tags=["prompts"])
 
 # Available categories with metadata
 PROMPT_CATEGORIES = [
-    PromptCategory(name="portrait", display_name="Portrait", description="People and character portraits", icon="👤"),
-    PromptCategory(name="landscape", display_name="Landscape", description="Nature and scenic views", icon="🏞️"),
-    PromptCategory(name="food", display_name="Food", description="Culinary and food photography", icon="🍽️"),
-    PromptCategory(name="abstract", display_name="Abstract", description="Abstract and artistic concepts", icon="🎨"),
-    PromptCategory(name="architecture", display_name="Architecture", description="Buildings and structures", icon="🏛️"),
-    PromptCategory(name="animals", display_name="Animals", description="Wildlife and pets", icon="🐾"),
-    PromptCategory(name="fantasy", display_name="Fantasy", description="Magical and fantastical scenes", icon="🧙"),
-    PromptCategory(name="scifi", display_name="Sci-Fi", description="Futuristic and sci-fi themes", icon="🚀"),
-    PromptCategory(name="fashion", display_name="Fashion", description="Clothing and style", icon="👗"),
-    PromptCategory(name="custom", display_name="Custom", description="User-created prompts", icon="✏️"),
+    PromptCategory(
+        name="portrait",
+        display_name="Portrait",
+        description="People and character portraits",
+        icon="👤",
+    ),
+    PromptCategory(
+        name="landscape", display_name="Landscape", description="Nature and scenic views", icon="🏞️"
+    ),
+    PromptCategory(
+        name="food", display_name="Food", description="Culinary and food photography", icon="🍽️"
+    ),
+    PromptCategory(
+        name="abstract",
+        display_name="Abstract",
+        description="Abstract and artistic concepts",
+        icon="🎨",
+    ),
+    PromptCategory(
+        name="architecture",
+        display_name="Architecture",
+        description="Buildings and structures",
+        icon="🏛️",
+    ),
+    PromptCategory(
+        name="animals", display_name="Animals", description="Wildlife and pets", icon="🐾"
+    ),
+    PromptCategory(
+        name="fantasy",
+        display_name="Fantasy",
+        description="Magical and fantastical scenes",
+        icon="🧙",
+    ),
+    PromptCategory(
+        name="scifi", display_name="Sci-Fi", description="Futuristic and sci-fi themes", icon="🚀"
+    ),
+    PromptCategory(
+        name="fashion", display_name="Fashion", description="Clothing and style", icon="👗"
+    ),
+    PromptCategory(
+        name="custom", display_name="Custom", description="User-created prompts", icon="✏️"
+    ),
 ]
 
 
 # ============ Helpers ============
 
-def get_user_id_from_user(user: Optional[GitHubUser]) -> Optional[str]:
+
+def get_user_id_from_user(user: GitHubUser | None) -> str | None:
     """Get user ID for storage access."""
     if user:
         return user.user_folder_id
     return None
 
 
-def get_user_prompt_storage(user: Optional[GitHubUser]) -> PromptStorage:
+def get_user_prompt_storage(user: GitHubUser | None) -> PromptStorage:
     """Get prompt storage instance for user."""
     user_id = get_user_id_from_user(user)
     return get_prompt_storage(user_id=user_id)
@@ -70,15 +101,16 @@ def get_user_prompt_storage(user: Optional[GitHubUser]) -> PromptStorage:
 
 # ============ Endpoints ============
 
+
 @router.get("", response_model=ListPromptsResponse)
 async def list_prompts(
-    category: Optional[str] = Query(default=None),
-    search: Optional[str] = Query(default=None),
+    category: str | None = Query(default=None),
+    search: str | None = Query(default=None),
     favorites_only: bool = Query(default=False),
     language: str = Query(default="en"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    user: Optional[GitHubUser] = Depends(get_current_user),
+    user: GitHubUser | None = Depends(get_current_user),
 ):
     """
     List prompts from the library with optional filtering.
@@ -129,14 +161,15 @@ async def list_prompts(
     if search:
         search_lower = search.lower()
         all_prompts = [
-            p for p in all_prompts
-            if search_lower in p.text.lower() or
-               (p.description and search_lower in p.description.lower())
+            p
+            for p in all_prompts
+            if search_lower in p.text.lower()
+            or (p.description and search_lower in p.description.lower())
         ]
 
     # Apply pagination
     total = len(all_prompts)
-    prompts_page = all_prompts[offset:offset + limit]
+    prompts_page = all_prompts[offset : offset + limit]
 
     return ListPromptsResponse(
         prompts=prompts_page,
@@ -145,10 +178,10 @@ async def list_prompts(
     )
 
 
-@router.get("/categories", response_model=List[PromptCategory])
+@router.get("/categories", response_model=list[PromptCategory])
 async def list_categories(
     language: str = Query(default="en"),
-    user: Optional[GitHubUser] = Depends(get_current_user),
+    user: GitHubUser | None = Depends(get_current_user),
 ):
     """
     List available prompt categories with counts.
@@ -173,8 +206,8 @@ async def list_categories(
 @router.post("/generate", response_model=GeneratePromptsResponse)
 async def generate_prompts(
     request: GeneratePromptsRequest,
-    user: Optional[GitHubUser] = Depends(get_current_user),
-    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    user: GitHubUser | None = Depends(get_current_user),
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
 ):
     """
     Generate new prompts using AI.
@@ -239,7 +272,7 @@ async def generate_prompts(
 @router.post("", response_model=SavePromptResponse)
 async def save_custom_prompt(
     request: SavePromptRequest,
-    user: Optional[GitHubUser] = Depends(get_current_user),
+    user: GitHubUser | None = Depends(get_current_user),
 ):
     """
     Save a custom prompt to the library.
@@ -290,7 +323,7 @@ async def save_custom_prompt(
 @router.post("/{prompt_id}/favorite", response_model=ToggleFavoriteResponse)
 async def toggle_favorite(
     prompt_id: str,
-    user: Optional[GitHubUser] = Depends(get_current_user),
+    user: GitHubUser | None = Depends(get_current_user),
 ):
     """
     Toggle favorite status for a prompt.
@@ -316,7 +349,7 @@ async def delete_prompt(
     prompt_id: str,
     category: str = Query(default="custom"),
     language: str = Query(default="en"),
-    user: Optional[GitHubUser] = Depends(get_current_user),
+    user: GitHubUser | None = Depends(get_current_user),
 ):
     """
     Delete a custom prompt from the library.
@@ -324,10 +357,7 @@ async def delete_prompt(
     Only custom prompts can be deleted.
     """
     if category != "custom":
-        raise HTTPException(
-            status_code=400,
-            detail="Only custom prompts can be deleted"
-        )
+        raise HTTPException(status_code=400, detail="Only custom prompts can be deleted")
 
     storage = get_user_prompt_storage(user)
 

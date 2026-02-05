@@ -2,8 +2,6 @@
 Quota-related Pydantic schemas.
 """
 
-from typing import Dict, Optional, Any
-
 from pydantic import BaseModel, Field
 
 
@@ -21,17 +19,14 @@ class QuotaStatusResponse(BaseModel):
     """Full quota status response."""
 
     is_trial_mode: bool = Field(..., description="Whether user is in trial mode")
-    date: Optional[str] = Field(None, description="Current date (UTC)")
+    date: str | None = Field(None, description="Current date (UTC)")
     global_used: int = Field(default=0, description="Global quota used")
     global_limit: int = Field(default=0, description="Global quota limit")
     global_remaining: int = Field(default=0, description="Global quota remaining")
-    modes: Dict[str, ModeQuota] = Field(
-        default_factory=dict,
-        description="Per-mode quota status"
-    )
+    modes: dict[str, ModeQuota] = Field(default_factory=dict, description="Per-mode quota status")
     cooldown_active: bool = Field(default=False, description="Whether cooldown is active")
     cooldown_remaining: int = Field(default=0, description="Seconds until cooldown ends")
-    resets_at: Optional[str] = Field(None, description="When quota resets (ISO timestamp)")
+    resets_at: str | None = Field(None, description="When quota resets (ISO timestamp)")
 
 
 class QuotaCheckRequest(BaseModel):
@@ -56,4 +51,4 @@ class QuotaConfigResponse(BaseModel):
 
     global_daily_quota: int = Field(..., description="Total daily quota pool")
     cooldown_seconds: int = Field(..., description="Cooldown between generations")
-    modes: Dict[str, ModeQuota] = Field(..., description="Per-mode limits and costs")
+    modes: dict[str, ModeQuota] = Field(..., description="Per-mode limits and costs")

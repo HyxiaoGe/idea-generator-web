@@ -2,16 +2,17 @@
 Initialize prompt library with AI-generated prompts.
 Run this script to populate the prompt library for the first time.
 """
-import sys
 import os
+import sys
 from pathlib import Path
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from dotenv import load_dotenv
+
 from services.prompt_generator import get_prompt_generator
 from services.prompt_storage import get_prompt_storage
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -65,7 +66,7 @@ def init_prompt_library():
     success_count = 0
     task_num = 0
 
-    for idx, (category, config) in enumerate(categories.items(), 1):
+    for _idx, (category, config) in enumerate(categories.items(), 1):
         # Generate English prompts
         task_num += 1
         print(f"[{task_num}/{total_tasks}] Generating English prompts for: {category}")
@@ -86,7 +87,7 @@ def init_prompt_library():
                 print(f"  ✅ Saved {len(all_prompts_en[:config['count']])} English prompts")
                 success_count += 1
             else:
-                print(f"  ❌ Failed to save English prompts")
+                print("  ❌ Failed to save English prompts")
 
         except Exception as e:
             print(f"  ❌ Error: {e}")
@@ -113,14 +114,14 @@ def init_prompt_library():
                 print(f"  ✅ 已保存 {len(all_prompts_zh[:config['count']])} 条中文提示词")
                 success_count += 1
             else:
-                print(f"  ❌ 保存中文提示词失败")
+                print("  ❌ 保存中文提示词失败")
 
         except Exception as e:
             print(f"  ❌ 错误: {e}")
 
         print()
 
-    print(f"✨ Initialization complete!")
+    print("✨ Initialization complete!")
     print(f"   Successfully generated: {success_count}/{total_tasks} tasks")
     print(f"   Categories: {total_categories} (English + Chinese)")
     print(f"   Storage location: {storage.base_dir}")

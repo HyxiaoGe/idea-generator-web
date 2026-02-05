@@ -5,19 +5,18 @@ Provides async Redis client with connection pooling.
 """
 
 import logging
-from typing import Optional
 from contextlib import asynccontextmanager
 
 import redis.asyncio as redis
-from redis.asyncio import Redis, ConnectionPool
+from redis.asyncio import ConnectionPool, Redis
 
 from .config import get_settings
 
 logger = logging.getLogger(__name__)
 
 # Global connection pool
-_pool: Optional[ConnectionPool] = None
-_client: Optional[Redis] = None
+_pool: ConnectionPool | None = None
+_client: Redis | None = None
 
 
 async def init_redis() -> Redis:

@@ -3,18 +3,18 @@ Security utilities for JWT token handling and authentication.
 """
 
 import hashlib
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from jose import jwt, JWTError
+from jose import JWTError, jwt
 
 from .config import get_settings
 from .exceptions import AuthenticationError
 
 
 def create_access_token(
-    data: Dict[str, Any],
-    expires_delta: Optional[timedelta] = None,
+    data: dict[str, Any],
+    expires_delta: timedelta | None = None,
 ) -> str:
     """
     Create a JWT access token.
@@ -31,14 +31,16 @@ def create_access_token(
     to_encode = data.copy()
 
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = datetime.now(UTC) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(days=settings.jwt_expire_days)
+        expire = datetime.now(UTC) + timedelta(days=settings.jwt_expire_days)
 
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.now(timezone.utc),
-    })
+    to_encode.update(
+        {
+            "exp": expire,
+            "iat": datetime.now(UTC),
+        }
+    )
 
     return jwt.encode(
         to_encode,
@@ -47,7 +49,7 @@ def create_access_token(
     )
 
 
-def verify_token(token: str) -> Dict[str, Any]:
+def verify_token(token: str) -> dict[str, Any]:
     """
     Verify and decode a JWT token.
 
@@ -92,7 +94,7 @@ def generate_user_folder_id(user_id: str, provider: str = "github") -> str:
     return hashlib.md5(f"{provider}_{user_id}".encode()).hexdigest()[:16]
 
 
-def extract_token_from_header(authorization: Optional[str]) -> Optional[str]:
+def extract_token_from_header(authorization: str | None) -> str | None:
     """
     Extract JWT token from Authorization header.
 

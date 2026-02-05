@@ -2,8 +2,7 @@
 Integration tests for prompts endpoints.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 
 class TestPromptsEndpoints:
@@ -79,10 +78,9 @@ class TestPromptsEndpoints:
         with patch("api.routers.prompts.get_settings") as mock_settings:
             mock_settings.return_value.google_api_key = None
 
-            response = client.post("/api/prompts/generate", json={
-                "category": "portrait",
-                "count": 5
-            })
+            response = client.post(
+                "/api/prompts/generate", json={"category": "portrait", "count": 5}
+            )
 
             assert response.status_code == 400
 
@@ -102,7 +100,7 @@ class TestPromptsEndpoints:
                 response = client.post(
                     "/api/prompts/generate",
                     json={"category": "portrait", "count": 2},
-                    headers={"X-API-Key": "test-api-key"}
+                    headers={"X-API-Key": "test-api-key"},
                 )
 
                 assert response.status_code == 200
@@ -117,11 +115,14 @@ class TestPromptsEndpoints:
         mock_storage.save_category_prompts.return_value = True
 
         with patch("api.routers.prompts.get_user_prompt_storage", return_value=mock_storage):
-            response = client.post("/api/prompts", json={
-                "text": "A beautiful sunset over the ocean",
-                "description": "Landscape prompt",
-                "tags": ["sunset", "ocean", "landscape"]
-            })
+            response = client.post(
+                "/api/prompts",
+                json={
+                    "text": "A beautiful sunset over the ocean",
+                    "description": "Landscape prompt",
+                    "tags": ["sunset", "ocean", "landscape"],
+                },
+            )
 
             assert response.status_code == 200
             data = response.json()
@@ -130,10 +131,7 @@ class TestPromptsEndpoints:
 
     def test_save_custom_prompt_empty_text(self, client):
         """Test saving prompt with empty text."""
-        response = client.post("/api/prompts", json={
-            "text": "",
-            "description": "Test"
-        })
+        response = client.post("/api/prompts", json={"text": "", "description": "Test"})
 
         assert response.status_code == 422
 

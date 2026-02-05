@@ -3,11 +3,10 @@ Global exception handlers for the API.
 """
 
 import logging
-from typing import Callable
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError as PydanticValidationError
 
 from core.exceptions import AppException
@@ -28,7 +27,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
         """Handle custom application exceptions."""
         logger.warning(
             f"AppException: {exc.error_code} - {exc.message}",
-            extra={"path": request.url.path, "details": exc.details}
+            extra={"path": request.url.path, "details": exc.details},
         )
         return JSONResponse(
             status_code=exc.status_code,
@@ -40,23 +39,21 @@ def setup_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
-        request: Request,
-        exc: RequestValidationError
+        request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         """Handle request validation errors."""
         errors = []
         for error in exc.errors():
             loc = " -> ".join(str(x) for x in error["loc"])
-            errors.append({
-                "field": loc,
-                "message": error["msg"],
-                "type": error["type"],
-            })
+            errors.append(
+                {
+                    "field": loc,
+                    "message": error["msg"],
+                    "type": error["type"],
+                }
+            )
 
-        logger.warning(
-            f"Validation error on {request.url.path}",
-            extra={"errors": errors}
-        )
+        logger.warning(f"Validation error on {request.url.path}", extra={"errors": errors})
 
         return JSONResponse(
             status_code=422,
@@ -72,8 +69,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(PydanticValidationError)
     async def pydantic_exception_handler(
-        request: Request,
-        exc: PydanticValidationError
+        request: Request, exc: PydanticValidationError
     ) -> JSONResponse:
         """Handle Pydantic validation errors."""
         return JSONResponse(
@@ -97,6 +93,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
 
         # In production, hide internal error details
         from core.config import get_settings
+
         settings = get_settings()
 
         if settings.is_production:
