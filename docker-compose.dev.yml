@@ -1,6 +1,5 @@
-version: '3.8'
-
 # Development configuration with hot-reload
+# Reuses Redis, PostgreSQL, MinIO from ai-audio-assistant
 # Usage: docker-compose -f docker-compose.dev.yml up
 
 services:
@@ -9,24 +8,21 @@ services:
     build: .
     container_name: nano-banana-api-dev
     ports:
-      - "8000:8000"
+      - "8001:8000"
+    env_file:
+      - .env
     environment:
       - ENVIRONMENT=development
       - DEBUG=true
-      - REDIS_URL=redis://redis:6379/0
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      # Reuse existing infrastructure (Docker host network)
+      - REDIS_URL=redis://host.docker.internal:6379/1
+      - DATABASE_ENABLED=true
+      - DATABASE_URL=postgresql+asyncpg://user:pass@host.docker.internal:5432/idea_generator
+      - MINIO_ENDPOINT=host.docker.internal:9000
+      - STORAGE_BACKEND=minio
+      - STORAGE_PUBLIC_URL=http://localhost:9000/idea-generator
     volumes:
       - .:/app
       - ./outputs:/app/outputs
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
-    depends_on:
-      - redis
-    restart: unless-stopped
-
-  # ============ Redis ============
-  redis:
-    image: redis:7-alpine
-    container_name: nano-banana-redis-dev
-    ports:
-      - "6379:6379"
     restart: unless-stopped

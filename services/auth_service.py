@@ -104,9 +104,12 @@ class AuthService:
         """
         params = {
             "client_id": self.client_id,
-            "redirect_uri": redirect_uri or self.redirect_uri,
             "scope": "read:user user:email",
         }
+        # Only include redirect_uri if explicitly set
+        effective_redirect = redirect_uri or self.redirect_uri
+        if effective_redirect:
+            params["redirect_uri"] = effective_redirect
         if state:
             params["state"] = state
 
