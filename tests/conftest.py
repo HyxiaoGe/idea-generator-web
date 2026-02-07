@@ -258,12 +258,10 @@ def mock_r2_storage():
 def mock_quota_service():
     """Mock QuotaService."""
     mock = MagicMock()
-    mock.is_trial_enabled = True
     mock.check_quota = AsyncMock(return_value=(True, "OK", {"cost": 1, "global_remaining": 49}))
     mock.consume_quota = AsyncMock(return_value=True)
     mock.get_quota_status = AsyncMock(
         return_value={
-            "is_trial_mode": True,
             "date": "2024-01-01",
             "global_used": 1,
             "global_limit": 50,
@@ -322,7 +320,6 @@ def test_settings(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/15")
     monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-testing-only-32chars!")
     monkeypatch.setenv("GOOGLE_API_KEY", "test-api-key")
-    monkeypatch.setenv("TRIAL_ENABLED", "true")
 
     # Clear cached settings
     from core.config import get_settings

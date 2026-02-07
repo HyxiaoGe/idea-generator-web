@@ -44,7 +44,6 @@ from services import (
     get_friendly_error_message,
     get_provider_router,
     get_quota_service,
-    is_trial_mode,
 )
 from services.auth_service import GitHubUser
 from services.storage import get_storage_manager
@@ -69,7 +68,6 @@ async def check_quota_and_consume(
     mode: str,
     resolution: str,
     count: int = 1,
-    api_key: str | None = None,
 ) -> bool:
     """
     Check quota and consume if available.
@@ -77,15 +75,8 @@ async def check_quota_and_consume(
     Raises:
         QuotaExceededError: If quota exceeded
     """
-    # Skip quota check if user has own API key
-    if api_key and not is_trial_mode(api_key):
-        return True
-
     redis = await get_redis()
     quota_service = get_quota_service(redis)
-
-    if not quota_service.is_trial_enabled:
-        return True
 
     can_generate, reason, info = await quota_service.check_quota(
         user_id=user_id,
@@ -178,7 +169,6 @@ async def generate_image(
         user_id=user_id,
         mode="basic",
         resolution=request.settings.resolution.value,
-        api_key=x_api_key,
     )
 
     # Build provider request
@@ -323,7 +313,6 @@ async def batch_generate(
         mode="batch",
         resolution=request.settings.resolution.value,
         count=count,
-        api_key=x_api_key,
     )
 
     # Create task ID
@@ -496,7 +485,6 @@ async def search_grounded_generate(
         user_id=user_id,
         mode="search",
         resolution=request.settings.resolution.value,
-        api_key=x_api_key,
     )
 
     # Build provider request with search enabled

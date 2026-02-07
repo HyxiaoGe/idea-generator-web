@@ -16,7 +16,6 @@ class TestQuotaService:
         from services.quota_service import QuotaService
 
         service = QuotaService(redis_client=mock_redis)
-        service._trial_enabled = True
 
         can_generate, reason, info = await service.check_quota(
             user_id="test_user", mode="basic", resolution="1K", count=1
@@ -31,7 +30,6 @@ class TestQuotaService:
         from services.quota_service import QuotaService
 
         service = QuotaService(redis_client=mock_redis)
-        service._trial_enabled = True
 
         result = await service.consume_quota(
             user_id="test_user", mode="basic", resolution="1K", count=1
@@ -45,11 +43,9 @@ class TestQuotaService:
         from services.quota_service import QuotaService
 
         service = QuotaService(redis_client=mock_redis)
-        service._trial_enabled = True
 
         status = await service.get_quota_status("test_user")
 
-        assert status["is_trial_mode"] is True
         assert "global_limit" in status
         assert "modes" in status
 
@@ -70,17 +66,6 @@ class TestQuotaService:
 
         assert service.get_mode_key("batch", "1K") == "batch_1k"
         assert service.get_mode_key("batch", "4K") == "batch_4k"
-
-    def test_is_trial_mode(self):
-        """Test trial mode detection."""
-        from services.quota_service import is_trial_mode
-
-        # With API key, not trial mode
-        assert is_trial_mode("valid-api-key") is False
-
-        # Without API key, check env
-        with patch.dict("os.environ", {"GOOGLE_API_KEY": ""}, clear=False):
-            assert is_trial_mode(None) is True
 
 
 class TestAuthService:

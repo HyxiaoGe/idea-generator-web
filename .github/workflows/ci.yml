@@ -120,7 +120,6 @@ jobs:
       SECRET_KEY: test-secret-key-for-ci-pipeline-only
       ENVIRONMENT: test
       AUTH_ENABLED: "false"
-      TRIAL_ENABLED: "false"
       DATABASE_ENABLED: "false"
 
     steps:
@@ -196,7 +195,6 @@ jobs:
       SECRET_KEY: test-secret-key-for-ci-pipeline-only
       ENVIRONMENT: test
       AUTH_ENABLED: "false"
-      TRIAL_ENABLED: "false"
 
     steps:
       - name: Checkout code

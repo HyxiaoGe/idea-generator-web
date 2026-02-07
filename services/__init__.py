@@ -73,7 +73,6 @@ from .quota_service import (
     QuotaConfig,
     QuotaService,
     get_quota_service,
-    is_trial_mode,
 )
 from .r2_storage import R2Storage, get_r2_storage
 
@@ -125,7 +124,6 @@ __all__ = [
     "QuotaService",
     "QuotaConfig",
     "get_quota_service",
-    "is_trial_mode",
     "QUOTA_CONFIGS",
     "GLOBAL_DAILY_QUOTA",
     "GENERATION_COOLDOWN",

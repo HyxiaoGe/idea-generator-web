@@ -18,7 +18,6 @@ class ModeQuota(BaseModel):
 class QuotaStatusResponse(BaseModel):
     """Full quota status response."""
 
-    is_trial_mode: bool = Field(..., description="Whether user is in trial mode")
     date: str | None = Field(None, description="Current date (UTC)")
     global_used: int = Field(default=0, description="Global quota used")
     global_limit: int = Field(default=0, description="Global quota limit")

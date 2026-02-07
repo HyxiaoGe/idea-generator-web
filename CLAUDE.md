@@ -144,7 +144,6 @@ Optional - Storage & Auth:
 ```
 R2_ENABLED                  # Enable Cloudflare R2 cloud storage
 AUTH_ENABLED                # Enable GitHub OAuth
-TRIAL_ENABLED               # Enable trial mode quotas
 ```
 
 Optional - PostgreSQL Database:

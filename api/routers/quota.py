@@ -9,7 +9,7 @@ Endpoints:
 
 import logging
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 
 from api.routers.auth import get_current_user
 from api.schemas.quota import (
@@ -25,7 +25,6 @@ from services import (
     GLOBAL_DAILY_QUOTA,
     QUOTA_CONFIGS,
     get_quota_service,
-    is_trial_mode,
 )
 from services.auth_service import GitHubUser
 
@@ -50,38 +49,16 @@ def get_user_id_from_user(user: GitHubUser | None) -> str:
 @router.get("", response_model=QuotaStatusResponse)
 async def get_quota_status(
     user: GitHubUser | None = Depends(get_current_user),
-    x_api_key: str | None = Header(None, alias="X-API-Key"),
 ):
     """
     Get current quota status for the user.
 
     Returns quota usage, limits, and cooldown status.
     """
-    # If user has own API key, they're not in trial mode
-    if x_api_key and not is_trial_mode(x_api_key):
-        return QuotaStatusResponse(
-            is_trial_mode=False,
-            global_used=0,
-            global_limit=0,
-            global_remaining=0,
-            modes={},
-            cooldown_active=False,
-            cooldown_remaining=0,
-        )
-
     user_id = get_user_id_from_user(user)
 
     redis = await get_redis()
     quota_service = get_quota_service(redis)
-
-    if not quota_service.is_trial_enabled:
-        return QuotaStatusResponse(
-            is_trial_mode=False,
-            global_used=0,
-            global_limit=0,
-            global_remaining=0,
-            modes={},
-        )
 
     status = await quota_service.get_quota_status(user_id)
 
@@ -89,7 +66,6 @@ async def get_quota_status(
     modes = {key: ModeQuota(**mode_data) for key, mode_data in status.get("modes", {}).items()}
 
     return QuotaStatusResponse(
-        is_trial_mode=status.get("is_trial_mode", False),
         date=status.get("date"),
         global_used=status.get("global_used", 0),
         global_limit=status.get("global_limit", 0),
@@ -105,34 +81,16 @@ async def get_quota_status(
 async def check_quota(
     request: QuotaCheckRequest,
     user: GitHubUser | None = Depends(get_current_user),
-    x_api_key: str | None = Header(None, alias="X-API-Key"),
 ):
     """
     Check if quota is available for a generation request.
 
     Does NOT consume quota, only checks availability.
     """
-    # If user has own API key, always allow
-    if x_api_key and not is_trial_mode(x_api_key):
-        return QuotaCheckResponse(
-            can_generate=True,
-            reason="OK",
-            cost=0,
-            remaining_after=0,
-        )
-
     user_id = get_user_id_from_user(user)
 
     redis = await get_redis()
     quota_service = get_quota_service(redis)
-
-    if not quota_service.is_trial_enabled:
-        return QuotaCheckResponse(
-            can_generate=True,
-            reason="Trial mode disabled",
-            cost=0,
-            remaining_after=0,
-        )
 
     can_generate, reason, info = await quota_service.check_quota(
         user_id=user_id,

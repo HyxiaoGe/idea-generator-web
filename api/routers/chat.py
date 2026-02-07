@@ -36,7 +36,6 @@ from services import (
     get_friendly_error_message,
     get_quota_service,
     get_r2_storage,
-    is_trial_mode,
 )
 from services.auth_service import GitHubUser
 
@@ -68,16 +67,10 @@ def get_user_sessions_key(user_id: str) -> str:
     return f"chat_sessions:{user_id}"
 
 
-async def check_quota(user_id: str, api_key: str | None = None):
+async def check_quota(user_id: str):
     """Check and consume quota for chat generation."""
-    if api_key and not is_trial_mode(api_key):
-        return
-
     redis = await get_redis()
     quota_service = get_quota_service(redis)
-
-    if not quota_service.is_trial_enabled:
-        return
 
     can_generate, reason, info = await quota_service.check_quota(
         user_id=user_id,
@@ -162,7 +155,7 @@ async def send_message(
     session_data = json.loads(session_json)
 
     # Check quota
-    await check_quota(user_id, x_api_key)
+    await check_quota(user_id)
 
     # Create ChatSession and restore state
     # Note: Chat sessions currently only support Google Gemini for multi-turn context

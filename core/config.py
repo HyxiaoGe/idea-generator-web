@@ -151,21 +151,6 @@ class Settings(BaseSettings):
     github_redirect_uri: str | None = None
     auth_enabled: bool = False
 
-    # ============ Trial Mode ============
-    trial_enabled: bool = False
-    trial_global_quota: int = 50
-    trial_quota_mode: str = "manual"  # auto or manual
-    trial_cooldown_seconds: int = 3
-
-    # Trial quota limits (manual mode)
-    trial_basic_1k_limit: int = 30
-    trial_basic_4k_limit: int = 10
-    trial_chat_limit: int = 20
-    trial_batch_1k_limit: int = 15
-    trial_batch_4k_limit: int = 5
-    trial_search_limit: int = 15
-    trial_blend_limit: int = 10
-
     # ============ PostgreSQL Database ============
     database_enabled: bool = False
     database_url: str | None = None  # postgresql+asyncpg://user:pass@host:port/db

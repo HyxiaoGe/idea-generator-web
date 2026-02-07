@@ -27,9 +27,6 @@ services:
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
       - GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI}
-      # Trial Mode (optional)
-      - TRIAL_ENABLED=${TRIAL_ENABLED:-false}
-      - TRIAL_GLOBAL_QUOTA=${TRIAL_GLOBAL_QUOTA:-50}
     volumes:
       - ./outputs:/app/outputs
     restart: unless-stopped

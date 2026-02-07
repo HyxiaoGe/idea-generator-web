@@ -1,20 +1,15 @@
 """
-Trial quota management service using Redis storage.
-Manages shared daily quota for trial users without API keys.
+Quota management service using Redis storage.
+Tracks usage quotas for all users. Quota configuration will be
+moved to database in a future iteration.
 """
 
 import logging
-import os
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
-
-
-def get_config_value(key: str, default: str = "") -> str:
-    """Get configuration value from environment variables."""
-    return os.getenv(key, default)
 
 
 @dataclass
@@ -26,99 +21,19 @@ class QuotaConfig:
     display_name: str  # Display name for UI
 
 
-# ============ Load Configuration from Environment ============
-GLOBAL_DAILY_QUOTA = int(get_config_value("TRIAL_GLOBAL_QUOTA", "50"))
-QUOTA_CONFIG_MODE = get_config_value("TRIAL_QUOTA_MODE", "manual")
-GENERATION_COOLDOWN = int(get_config_value("TRIAL_COOLDOWN_SECONDS", "3"))
+# ============ Hardcoded defaults (will be moved to database) ============
+GLOBAL_DAILY_QUOTA = 50
+GENERATION_COOLDOWN = 3  # seconds
 
-# Base ratios for auto-scaling
-BASE_QUOTA_RATIOS = {
-    "basic_1k": 0.60,
-    "basic_4k": 0.20,
-    "chat": 0.40,
-    "batch_1k": 0.30,
-    "batch_4k": 0.10,
-    "search": 0.30,
-    "blend": 0.20,
+QUOTA_CONFIGS: dict[str, QuotaConfig] = {
+    "basic_1k": QuotaConfig(cost=1, daily_limit=30, display_name="Basic (1K/2K)"),
+    "basic_4k": QuotaConfig(cost=3, daily_limit=10, display_name="Basic (4K)"),
+    "chat": QuotaConfig(cost=1, daily_limit=20, display_name="Chat"),
+    "batch_1k": QuotaConfig(cost=1, daily_limit=15, display_name="Batch (1K/2K)"),
+    "batch_4k": QuotaConfig(cost=3, daily_limit=5, display_name="Batch (4K)"),
+    "search": QuotaConfig(cost=2, daily_limit=15, display_name="Search"),
+    "blend": QuotaConfig(cost=2, daily_limit=10, display_name="Blend/Style"),
 }
-
-# Manual configuration
-MANUAL_QUOTA_CONFIGS = {
-    "basic_1k": QuotaConfig(
-        cost=int(get_config_value("TRIAL_BASIC_1K_COST", "1")),
-        daily_limit=int(get_config_value("TRIAL_BASIC_1K_LIMIT", "30")),
-        display_name="Basic (1K/2K)",
-    ),
-    "basic_4k": QuotaConfig(
-        cost=int(get_config_value("TRIAL_BASIC_4K_COST", "3")),
-        daily_limit=int(get_config_value("TRIAL_BASIC_4K_LIMIT", "10")),
-        display_name="Basic (4K)",
-    ),
-    "chat": QuotaConfig(
-        cost=int(get_config_value("TRIAL_CHAT_COST", "1")),
-        daily_limit=int(get_config_value("TRIAL_CHAT_LIMIT", "20")),
-        display_name="Chat",
-    ),
-    "batch_1k": QuotaConfig(
-        cost=int(get_config_value("TRIAL_BATCH_1K_COST", "1")),
-        daily_limit=int(get_config_value("TRIAL_BATCH_1K_LIMIT", "15")),
-        display_name="Batch (1K/2K)",
-    ),
-    "batch_4k": QuotaConfig(
-        cost=int(get_config_value("TRIAL_BATCH_4K_COST", "3")),
-        daily_limit=int(get_config_value("TRIAL_BATCH_4K_LIMIT", "5")),
-        display_name="Batch (4K)",
-    ),
-    "search": QuotaConfig(
-        cost=int(get_config_value("TRIAL_SEARCH_COST", "2")),
-        daily_limit=int(get_config_value("TRIAL_SEARCH_LIMIT", "15")),
-        display_name="Search",
-    ),
-    "blend": QuotaConfig(
-        cost=int(get_config_value("TRIAL_BLEND_COST", "2")),
-        daily_limit=int(get_config_value("TRIAL_BLEND_LIMIT", "10")),
-        display_name="Blend/Style",
-    ),
-}
-
-
-def _calculate_auto_quota_configs() -> dict[str, QuotaConfig]:
-    """Calculate quota configs automatically based on global quota and ratios."""
-    configs = {}
-    costs = {
-        "basic_1k": 1,
-        "basic_4k": 3,
-        "chat": 1,
-        "batch_1k": 1,
-        "batch_4k": 3,
-        "search": 2,
-        "blend": 2,
-    }
-    display_names = {
-        "basic_1k": "Basic (1K/2K)",
-        "basic_4k": "Basic (4K)",
-        "chat": "Chat",
-        "batch_1k": "Batch (1K/2K)",
-        "batch_4k": "Batch (4K)",
-        "search": "Search",
-        "blend": "Blend/Style",
-    }
-
-    for mode_key, ratio in BASE_QUOTA_RATIOS.items():
-        cost = costs[mode_key]
-        allocated_points = GLOBAL_DAILY_QUOTA * ratio
-        daily_limit = int(allocated_points / cost)
-        configs[mode_key] = QuotaConfig(
-            cost=cost, daily_limit=max(1, daily_limit), display_name=display_names[mode_key]
-        )
-    return configs
-
-
-# Select configuration based on mode
-if QUOTA_CONFIG_MODE == "auto":
-    QUOTA_CONFIGS = _calculate_auto_quota_configs()
-else:
-    QUOTA_CONFIGS = MANUAL_QUOTA_CONFIGS
 
 
 class QuotaService:
@@ -138,12 +53,6 @@ class QuotaService:
             redis_client: Async Redis client instance
         """
         self._redis = redis_client
-        self._trial_enabled = get_config_value("TRIAL_ENABLED", "false").lower() == "true"
-
-    @property
-    def is_trial_enabled(self) -> bool:
-        """Check if trial mode is enabled."""
-        return self._trial_enabled
 
     def _get_current_date(self) -> str:
         """Get current date in UTC as string (YYYY-MM-DD)."""
@@ -311,7 +220,7 @@ class QuotaService:
             Dictionary with quota information
         """
         if not self._redis:
-            return {"is_trial_mode": False, "message": "Quota tracking not available"}
+            return {"message": "Quota tracking not available"}
 
         global_key = self._get_global_key()
         user_key = self._get_user_key(user_id)
@@ -339,7 +248,6 @@ class QuotaService:
         cooldown_remaining = max(0, int(GENERATION_COOLDOWN - (current_time - last_gen)))
 
         return {
-            "is_trial_mode": True,
             "date": self._get_current_date(),
             "global_used": global_used,
             "global_limit": GLOBAL_DAILY_QUOTA,
@@ -381,21 +289,3 @@ def get_quota_service(redis_client=None) -> QuotaService:
     elif redis_client and _quota_service._redis is None:
         _quota_service._redis = redis_client
     return _quota_service
-
-
-def is_trial_mode(user_api_key: str | None = None) -> bool:
-    """
-    Check if current user is in trial mode.
-
-    Args:
-        user_api_key: User's API key (if any)
-
-    Returns:
-        True if user is using trial mode
-    """
-    force_trial = get_config_value("FORCE_TRIAL_MODE", "false").lower() == "true"
-    if force_trial:
-        return True
-
-    env_api_key = get_config_value("GOOGLE_API_KEY", "")
-    return not (user_api_key or env_api_key)
