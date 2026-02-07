@@ -145,7 +145,6 @@ from .prompts import (
     ToggleFavoriteResponse,
 )
 from .quota import (
-    ModeQuota,
     QuotaCheckRequest,
     QuotaCheckResponse,
     QuotaConfigResponse,
@@ -273,7 +272,6 @@ __all__ = [
     "SearchGenerateRequest",
     "CostEstimate",
     # Quota
-    "ModeQuota",
     "QuotaStatusResponse",
     "QuotaCheckRequest",
     "QuotaCheckResponse",

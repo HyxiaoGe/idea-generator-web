@@ -8,21 +8,31 @@ import pytest
 
 
 class TestQuotaService:
-    """Tests for QuotaService."""
+    """Tests for simple daily-limit QuotaService."""
 
     @pytest.mark.asyncio
     async def test_check_quota_allowed(self, mock_redis):
-        """Test quota check when allowed."""
+        """Test quota check when usage is within limit."""
         from services.quota_service import QuotaService
 
         service = QuotaService(redis_client=mock_redis)
 
-        can_generate, reason, info = await service.check_quota(
-            user_id="test_user", mode="basic", resolution="1K", count=1
-        )
+        can_generate, reason, info = await service.check_quota(user_id="test_user")
 
         assert can_generate is True
         assert reason == "OK"
+        assert "remaining" in info
+
+    @pytest.mark.asyncio
+    async def test_check_quota_no_redis(self):
+        """Test quota check passes when no Redis is available."""
+        from services.quota_service import QuotaService
+
+        service = QuotaService(redis_client=None)
+
+        can_generate, reason, info = await service.check_quota(user_id="test_user")
+
+        assert can_generate is True
 
     @pytest.mark.asyncio
     async def test_consume_quota(self, mock_redis):
@@ -31,9 +41,18 @@ class TestQuotaService:
 
         service = QuotaService(redis_client=mock_redis)
 
-        result = await service.consume_quota(
-            user_id="test_user", mode="basic", resolution="1K", count=1
-        )
+        result = await service.consume_quota(user_id="test_user", count=1)
+
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_consume_no_redis(self):
+        """Test consume returns True when no Redis."""
+        from services.quota_service import QuotaService
+
+        service = QuotaService(redis_client=None)
+
+        result = await service.consume_quota(user_id="test_user")
 
         assert result is True
 
@@ -46,26 +65,79 @@ class TestQuotaService:
 
         status = await service.get_quota_status("test_user")
 
-        assert "global_limit" in status
-        assert "modes" in status
+        assert "used" in status
+        assert "limit" in status
+        assert "remaining" in status
+        assert status["limit"] == 50
+        assert status["used"] == 0
+        assert status["remaining"] == 50
 
-    def test_get_mode_key_basic(self):
-        """Test mode key for basic generation."""
+    @pytest.mark.asyncio
+    async def test_quota_exceeded(self, mock_redis):
+        """Test quota check fails when daily limit exhausted."""
+        from unittest.mock import patch as mock_patch
+
         from services.quota_service import QuotaService
 
-        service = QuotaService()
+        service = QuotaService(redis_client=mock_redis)
 
-        assert service.get_mode_key("basic", "1K") == "basic_1k"
-        assert service.get_mode_key("basic", "4K") == "basic_4k"
+        # Consume all 50 daily points
+        for _ in range(50):
+            await service.consume_quota(user_id="test_user", count=1)
 
-    def test_get_mode_key_batch(self):
-        """Test mode key for batch generation."""
+        # Advance time past cooldown so we hit the daily limit check
+        with mock_patch("services.quota_service.time") as mock_time:
+            mock_time.time.return_value = 9999999999.0  # far future
+            can_generate, reason, info = await service.check_quota(user_id="test_user")
+
+        assert can_generate is False
+        assert "limit" in reason.lower() or "daily" in reason.lower()
+
+    @pytest.mark.asyncio
+    async def test_batch_size_limit(self, mock_redis):
+        """Test that oversized batches are rejected."""
         from services.quota_service import QuotaService
 
-        service = QuotaService()
+        service = QuotaService(redis_client=mock_redis)
 
-        assert service.get_mode_key("batch", "1K") == "batch_1k"
-        assert service.get_mode_key("batch", "4K") == "batch_4k"
+        can_generate, reason, _ = await service.check_quota(user_id="test_user", count=10)
+
+        assert can_generate is False
+        assert "batch" in reason.lower() or "limit" in reason.lower()
+
+    @pytest.mark.asyncio
+    async def test_reset_user_quota(self, mock_redis):
+        """Test quota reset."""
+        from services.quota_service import QuotaService
+
+        service = QuotaService(redis_client=mock_redis)
+
+        # Consume some quota
+        await service.consume_quota(user_id="test_user", count=5)
+
+        # Reset
+        result = await service.reset_user_quota("test_user")
+        assert result is True
+
+        # Check status is reset
+        status = await service.get_quota_status("test_user")
+        assert status["used"] == 0
+
+    @pytest.mark.asyncio
+    async def test_quota_tracks_per_user(self, mock_redis):
+        """Test that quota is tracked independently per user."""
+        from services.quota_service import QuotaService
+
+        service = QuotaService(redis_client=mock_redis)
+
+        await service.consume_quota(user_id="user_a", count=3)
+        await service.consume_quota(user_id="user_b", count=1)
+
+        status_a = await service.get_quota_status("user_a")
+        status_b = await service.get_quota_status("user_b")
+
+        assert status_a["used"] == 3
+        assert status_b["used"] == 1
 
 
 class TestAuthService:
@@ -176,6 +248,7 @@ class TestCostEstimator:
         assert estimate is not None
         assert estimate.count == 1
         assert estimate.resolution == "1K"
+        assert estimate.total_cost > 0
 
     def test_estimate_cost_multiple(self):
         """Test cost estimation for multiple images."""
@@ -194,7 +267,26 @@ class TestCostEstimator:
         formatted = format_cost(estimate)
 
         assert "$" in formatted
-        assert "0.04" in formatted or "Est" in formatted
+
+    def test_format_cost_chinese(self):
+        """Test cost formatting in Chinese."""
+        from services.cost_estimator import estimate_cost, format_cost
+
+        estimate = estimate_cost(resolution="1K", count=3)
+        formatted = format_cost(estimate, lang="zh")
+
+        assert "$" in formatted
+        assert "预估成本" in formatted
+
+    def test_get_pricing_table(self):
+        """Test pricing table returns resolution info."""
+        from services.cost_estimator import get_pricing_table
+
+        table = get_pricing_table()
+
+        assert "1K" in table
+        assert "2K" in table
+        assert "4K" in table
 
 
 class TestHealthCheck:

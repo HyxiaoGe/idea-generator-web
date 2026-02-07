@@ -60,6 +60,11 @@ class MockRedis:
             self._expiry[key] = ex
         return True
 
+    async def setex(self, key: str, seconds: int, value: str) -> bool:
+        self._data[key] = value
+        self._expiry[key] = seconds
+        return True
+
     async def delete(self, key: str) -> int:
         if key in self._data:
             del self._data[key]
@@ -256,19 +261,30 @@ def mock_r2_storage():
 
 @pytest.fixture
 def mock_quota_service():
-    """Mock QuotaService."""
+    """Mock QuotaService (simple daily limit)."""
     mock = MagicMock()
-    mock.check_quota = AsyncMock(return_value=(True, "OK", {"cost": 1, "global_remaining": 49}))
+    mock.check_quota = AsyncMock(
+        return_value=(
+            True,
+            "OK",
+            {
+                "used": 5,
+                "limit": 50,
+                "remaining": 45,
+                "cost": 1,
+            },
+        )
+    )
     mock.consume_quota = AsyncMock(return_value=True)
     mock.get_quota_status = AsyncMock(
         return_value={
             "date": "2024-01-01",
-            "global_used": 1,
-            "global_limit": 50,
-            "global_remaining": 49,
-            "modes": {},
+            "used": 5,
+            "limit": 50,
+            "remaining": 45,
             "cooldown_active": False,
             "cooldown_remaining": 0,
+            "resets_at": "2024-01-01T00:00:00Z",
         }
     )
     return mock

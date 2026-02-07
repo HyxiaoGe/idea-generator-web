@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Batch image generation with progress tracking
 - Search-grounded generation with real-time data integration
 - GitHub OAuth authentication with JWT tokens
-- Redis-based quota management for trial users
+- Redis-based per-user daily quota with cooldown (abuse prevention)
 - Cloudflare R2 cloud storage for images
 - AI-powered prompt library with content moderation
 
@@ -70,7 +70,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   │   └── kling.py       - Kling AI (video)                 │
 │   ├── generator.py       - Legacy image generation          │
 │   ├── chat_session.py    - Multi-turn conversations         │
-│   ├── quota_service.py   - Redis quota management           │
+│   ├── quota_service.py   - Per-user daily quota + cooldown   │
 │   ├── r2_storage.py      - Cloudflare R2 storage            │
 │   ├── content_filter.py  - Content moderation               │
 │   └── ai_content_moderator.py - AI-based moderation         │
@@ -376,3 +376,18 @@ DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/idea_generator alembi
 ```
 
 **Health check:** `GET /api/health`
+
+## Skills Documentation
+
+Claude Code skills 文档，代码变更时需同步更新：
+
+| Skill | 路径 | 内容 |
+|-------|------|------|
+| 项目概览 | `~/.claude/skills/ig-project-overview/SKILL.md` | 项目介绍、功能列表、技术栈 |
+| 系统架构 | `~/.claude/skills/ig-backend-architecture/SKILL.md` | 架构图、多提供商系统、数据流 |
+| 代码导航 | `~/.claude/skills/ig-backend-codebase-guide/SKILL.md` | 目录结构、按功能查找、命名约定 |
+| API 参考 | `~/.claude/skills/ig-backend-api-reference/SKILL.md` | 所有端点列表、请求头、状态码 |
+| 前端对接 | `~/.claude/skills/ig-frontend-api-guide/SKILL.md` | TypeScript 类型、调用示例、SDK |
+| 添加端点 | `~/.claude/skills/ig-backend-add-endpoint/SKILL.md` | 新建 API 端点步骤模板 |
+| 添加模型 | `~/.claude/skills/ig-backend-add-model/SKILL.md` | 新建数据库模型步骤模板 |
+| 添加提供商 | `~/.claude/skills/ig-backend-add-provider/SKILL.md` | 新建 AI 提供商步骤模板 |

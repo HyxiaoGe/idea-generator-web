@@ -13,19 +13,13 @@ from fastapi import APIRouter, Depends
 
 from api.routers.auth import get_current_user
 from api.schemas.quota import (
-    ModeQuota,
     QuotaCheckRequest,
     QuotaCheckResponse,
     QuotaConfigResponse,
     QuotaStatusResponse,
 )
 from core.redis import get_redis
-from services import (
-    GENERATION_COOLDOWN,
-    GLOBAL_DAILY_QUOTA,
-    QUOTA_CONFIGS,
-    get_quota_service,
-)
+from services import COOLDOWN_SECONDS, DAILY_LIMIT, MAX_BATCH_SIZE, get_quota_service
 from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
@@ -50,11 +44,7 @@ def get_user_id_from_user(user: GitHubUser | None) -> str:
 async def get_quota_status(
     user: GitHubUser | None = Depends(get_current_user),
 ):
-    """
-    Get current quota status for the user.
-
-    Returns quota usage, limits, and cooldown status.
-    """
+    """Get current quota status for the user."""
     user_id = get_user_id_from_user(user)
 
     redis = await get_redis()
@@ -62,15 +52,11 @@ async def get_quota_status(
 
     status = await quota_service.get_quota_status(user_id)
 
-    # Convert modes to ModeQuota objects
-    modes = {key: ModeQuota(**mode_data) for key, mode_data in status.get("modes", {}).items()}
-
     return QuotaStatusResponse(
         date=status.get("date"),
-        global_used=status.get("global_used", 0),
-        global_limit=status.get("global_limit", 0),
-        global_remaining=status.get("global_remaining", 0),
-        modes=modes,
+        used=status.get("used", 0),
+        limit=status.get("limit", 0),
+        remaining=status.get("remaining", 0),
         cooldown_active=status.get("cooldown_active", False),
         cooldown_remaining=status.get("cooldown_remaining", 0),
         resets_at=status.get("resets_at"),
@@ -82,11 +68,7 @@ async def check_quota(
     request: QuotaCheckRequest,
     user: GitHubUser | None = Depends(get_current_user),
 ):
-    """
-    Check if quota is available for a generation request.
-
-    Does NOT consume quota, only checks availability.
-    """
+    """Check if quota is available. Does NOT consume quota."""
     user_id = get_user_id_from_user(user)
 
     redis = await get_redis()
@@ -94,15 +76,11 @@ async def check_quota(
 
     can_generate, reason, info = await quota_service.check_quota(
         user_id=user_id,
-        mode=request.mode,
-        resolution=request.resolution,
         count=request.count,
     )
 
     cost = info.get("cost", 0)
-    remaining = (
-        info.get("global_remaining", 0) - cost if can_generate else info.get("global_remaining", 0)
-    )
+    remaining = info.get("remaining", 0) - cost if can_generate else info.get("remaining", 0)
 
     return QuotaCheckResponse(
         can_generate=can_generate,
@@ -114,24 +92,9 @@ async def check_quota(
 
 @router.get("/config", response_model=QuotaConfigResponse)
 async def get_quota_config():
-    """
-    Get quota configuration.
-
-    Returns global limits and per-mode configurations.
-    """
-    modes = {
-        key: ModeQuota(
-            name=config.display_name,
-            used=0,
-            limit=config.daily_limit,
-            remaining=config.daily_limit,
-            cost=config.cost,
-        )
-        for key, config in QUOTA_CONFIGS.items()
-    }
-
+    """Get quota configuration."""
     return QuotaConfigResponse(
-        global_daily_quota=GLOBAL_DAILY_QUOTA,
-        cooldown_seconds=GENERATION_COOLDOWN,
-        modes=modes,
+        daily_limit=DAILY_LIMIT,
+        cooldown_seconds=COOLDOWN_SECONDS,
+        max_batch_size=MAX_BATCH_SIZE,
     )

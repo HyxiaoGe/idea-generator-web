@@ -15,7 +15,7 @@ class UserTier(StrEnum):
     """User tier levels."""
 
     FREE = "free"
-    TRIAL = "trial"
+    STARTER = "starter"
     PRO = "pro"
     ENTERPRISE = "enterprise"
 

@@ -63,43 +63,25 @@ def get_user_id_from_user(user: GitHubUser | None) -> str:
     return "anonymous"
 
 
-async def check_quota_and_consume(
-    user_id: str,
-    mode: str,
-    resolution: str,
-    count: int = 1,
-) -> bool:
+async def check_quota_and_consume(user_id: str, count: int = 1) -> None:
     """
-    Check quota and consume if available.
+    Check daily quota and consume if available.
 
     Raises:
-        QuotaExceededError: If quota exceeded
+        QuotaExceededError: If quota exceeded or cooldown active
     """
     redis = await get_redis()
     quota_service = get_quota_service(redis)
 
     can_generate, reason, info = await quota_service.check_quota(
         user_id=user_id,
-        mode=mode,
-        resolution=resolution,
         count=count,
     )
 
     if not can_generate:
-        raise QuotaExceededError(
-            message=reason,
-            details=info,
-        )
+        raise QuotaExceededError(message=reason, details=info)
 
-    # Consume quota
-    await quota_service.consume_quota(
-        user_id=user_id,
-        mode=mode,
-        resolution=resolution,
-        count=count,
-    )
-
-    return True
+    await quota_service.consume_quota(user_id=user_id, count=count)
 
 
 def create_generator(api_key: str | None = None) -> ImageGenerator:
@@ -165,11 +147,7 @@ async def generate_image(
     user_id = get_user_id_from_user(user)
 
     # Check quota
-    await check_quota_and_consume(
-        user_id=user_id,
-        mode="basic",
-        resolution=request.settings.resolution.value,
-    )
+    await check_quota_and_consume(user_id)
 
     # Build provider request
     provider_request = build_provider_request(
@@ -308,12 +286,7 @@ async def batch_generate(
     count = len(request.prompts)
 
     # Check quota for entire batch
-    await check_quota_and_consume(
-        user_id=user_id,
-        mode="batch",
-        resolution=request.settings.resolution.value,
-        count=count,
-    )
+    await check_quota_and_consume(user_id, count=count)
 
     # Create task ID
     task_id = f"batch_{uuid.uuid4().hex[:16]}"
@@ -481,11 +454,7 @@ async def search_grounded_generate(
     user_id = get_user_id_from_user(user)
 
     # Check quota
-    await check_quota_and_consume(
-        user_id=user_id,
-        mode="search",
-        resolution=request.settings.resolution.value,
-    )
+    await check_quota_and_consume(user_id)
 
     # Build provider request with search enabled
     provider_request = build_provider_request(

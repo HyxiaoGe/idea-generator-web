@@ -1,5 +1,5 @@
 """
-Quota repository for quota usage tracking.
+Quota repository for usage tracking.
 """
 
 from datetime import datetime, timedelta
@@ -23,12 +23,20 @@ class QuotaRepository:
         points_used: int,
         user_id: UUID | None = None,
         image_id: UUID | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+        resolution: str | None = None,
+        media_type: str = "image",
     ) -> QuotaUsage:
-        """Record a quota usage event."""
+        """Record a usage event."""
         usage = QuotaUsage(
             user_id=user_id,
             mode=mode,
             points_used=points_used,
+            provider=provider,
+            model=model,
+            resolution=resolution,
+            media_type=media_type,
             image_id=image_id,
         )
         self.session.add(usage)
@@ -47,8 +55,7 @@ class QuotaRepository:
         start_of_day = date.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_day = start_of_day + timedelta(days=1)
 
-        query = select(func.coalesce(func.sum(QuotaUsage.points_used), 0))
-        query = query.where(
+        query = select(func.coalesce(func.sum(QuotaUsage.points_used), 0)).where(
             and_(
                 QuotaUsage.user_id == user_id,
                 QuotaUsage.created_at >= start_of_day,
@@ -72,13 +79,16 @@ class QuotaRepository:
         start_of_day = date.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_day = start_of_day + timedelta(days=1)
 
-        query = select(func.count()).select_from(QuotaUsage)
-        query = query.where(
-            and_(
-                QuotaUsage.user_id == user_id,
-                QuotaUsage.mode == mode,
-                QuotaUsage.created_at >= start_of_day,
-                QuotaUsage.created_at < end_of_day,
+        query = (
+            select(func.count())
+            .select_from(QuotaUsage)
+            .where(
+                and_(
+                    QuotaUsage.user_id == user_id,
+                    QuotaUsage.mode == mode,
+                    QuotaUsage.created_at >= start_of_day,
+                    QuotaUsage.created_at < end_of_day,
+                )
             )
         )
 
@@ -90,12 +100,7 @@ class QuotaRepository:
         user_id: UUID | None,
         date: datetime | None = None,
     ) -> dict:
-        """
-        Get daily usage statistics.
-
-        Returns:
-            Dict with total_points, request_count, and usage_by_mode
-        """
+        """Get daily usage statistics."""
         if date is None:
             date = datetime.now()
 

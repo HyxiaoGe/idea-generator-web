@@ -27,8 +27,9 @@ from api.schemas.video import (
     VideoTaskStatus,
 )
 from core.config import get_settings
-from core.exceptions import GenerationError
+from core.exceptions import GenerationError, QuotaExceededError
 from core.redis import get_redis
+from services import get_quota_service
 from services.auth_service import GitHubUser
 from services.providers import (
     GenerationRequest as ProviderRequest,
@@ -180,6 +181,24 @@ async def generate_video(
 
     logger.info(f"[{request_id}] Video generation request from user {user_id}")
 
+    # Check and consume quota
+    try:
+        redis = await get_redis()
+        quota_service = get_quota_service(redis)
+
+        can_generate, reason, info = await quota_service.check_quota(
+            user_id=user_id,
+            count=1,
+        )
+        if not can_generate:
+            raise QuotaExceededError(message=reason, details=info)
+
+        await quota_service.consume_quota(user_id=user_id, count=1)
+    except QuotaExceededError:
+        raise
+    except Exception as e:
+        logger.warning(f"Quota check failed, allowing generation: {e}")
+
     try:
         # Get provider
         provider = get_video_provider(x_provider)
@@ -239,6 +258,8 @@ async def generate_video(
 
     except HTTPException:
         raise
+    except QuotaExceededError as e:
+        raise HTTPException(status_code=429, detail=e.message)
     except GenerationError as e:
         logger.error(f"[{request_id}] Generation error: {e.message}")
         raise HTTPException(status_code=500, detail=e.message)

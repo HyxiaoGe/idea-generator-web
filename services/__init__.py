@@ -65,12 +65,11 @@ from .providers import (
     GenerationResult as ProviderGenerationResult,
 )
 
-# Quota management (Redis-based)
+# Quota management (simple per-user daily limit)
 from .quota_service import (
-    GENERATION_COOLDOWN,
-    GLOBAL_DAILY_QUOTA,
-    QUOTA_CONFIGS,
-    QuotaConfig,
+    COOLDOWN_SECONDS,
+    DAILY_LIMIT,
+    MAX_BATCH_SIZE,
     QuotaService,
     get_quota_service,
 )
@@ -122,11 +121,10 @@ __all__ = [
     "get_auth_service",
     # Quota
     "QuotaService",
-    "QuotaConfig",
     "get_quota_service",
-    "QUOTA_CONFIGS",
-    "GLOBAL_DAILY_QUOTA",
-    "GENERATION_COOLDOWN",
+    "DAILY_LIMIT",
+    "COOLDOWN_SECONDS",
+    "MAX_BATCH_SIZE",
     # Prompts
     "PromptGenerator",
     "get_prompt_generator",

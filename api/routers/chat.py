@@ -67,27 +67,20 @@ def get_user_sessions_key(user_id: str) -> str:
     return f"chat_sessions:{user_id}"
 
 
-async def check_quota(user_id: str):
+async def check_chat_quota(user_id: str):
     """Check and consume quota for chat generation."""
     redis = await get_redis()
     quota_service = get_quota_service(redis)
 
     can_generate, reason, info = await quota_service.check_quota(
         user_id=user_id,
-        mode="chat",
-        resolution="1K",
         count=1,
     )
 
     if not can_generate:
         raise QuotaExceededError(message=reason, details=info)
 
-    await quota_service.consume_quota(
-        user_id=user_id,
-        mode="chat",
-        resolution="1K",
-        count=1,
-    )
+    await quota_service.consume_quota(user_id=user_id, count=1)
 
 
 # ============ Endpoints ============
@@ -155,7 +148,7 @@ async def send_message(
     session_data = json.loads(session_json)
 
     # Check quota
-    await check_quota(user_id)
+    await check_chat_quota(user_id)
 
     # Create ChatSession and restore state
     # Note: Chat sessions currently only support Google Gemini for multi-turn context

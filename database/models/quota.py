@@ -1,5 +1,5 @@
 """
-Quota usage model for tracking generation quota consumption.
+Quota usage tracking model.
 """
 
 from datetime import datetime
@@ -19,10 +19,9 @@ if TYPE_CHECKING:
 
 class QuotaUsage(Base):
     """
-    Model for tracking quota usage history.
+    Model for tracking per-user generation usage.
 
-    Supplements Redis real-time quota tracking with persistent records
-    for analytics and historical queries.
+    Each row represents a single generation event.
     """
 
     __tablename__ = "quota_usage"
@@ -34,7 +33,7 @@ class QuotaUsage(Base):
         default=uuid4,
     )
 
-    # User relationship (nullable for anonymous/trial users)
+    # User relationship (nullable for anonymous users)
     user_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -51,6 +50,26 @@ class QuotaUsage(Base):
     points_used: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
+    )
+
+    # Optional metadata for analytics
+    provider: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        index=True,
+    )
+    model: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+    resolution: Mapped[str | None] = mapped_column(
+        String(10),
+        nullable=True,
+    )
+    media_type: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="image",
     )
 
     # Associated image
@@ -79,10 +98,13 @@ class QuotaUsage(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<QuotaUsage(id={self.id}, mode={self.mode}, points={self.points_used})>"
+        return (
+            f"<QuotaUsage(id={self.id}, mode={self.mode}, "
+            f"points={self.points_used}, provider={self.provider})>"
+        )
 
 
 # Indexes for analytics queries
-Index("idx_quota_usage_user_id", QuotaUsage.user_id)
-Index("idx_quota_usage_created", QuotaUsage.created_at)
-Index("idx_quota_usage_mode", QuotaUsage.mode)
+Index("idx_quota_usage_user_date", QuotaUsage.user_id, QuotaUsage.created_at)
+Index("idx_quota_usage_provider", QuotaUsage.provider)
+Index("idx_quota_usage_media_type", QuotaUsage.media_type)

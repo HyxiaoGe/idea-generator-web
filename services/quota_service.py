@@ -1,283 +1,189 @@
 """
-Quota management service using Redis storage.
-Tracks usage quotas for all users. Quota configuration will be
-moved to database in a future iteration.
+Simple per-user daily quota service using Redis.
+
+Tracks usage count per user per day with cooldown for abuse prevention.
+
+Redis keys:
+- usage:{user_id}:{YYYY-MM-DD}  → int (generation count today)
+- usage:{user_id}:last_gen      → float (timestamp of last generation)
 """
 
 import logging
 import time
-from dataclasses import dataclass
 from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
+# ============ Configuration ============
 
-@dataclass
-class QuotaConfig:
-    """Configuration for quota limits per generation mode."""
-
-    cost: int  # Cost in quota points (1 point = 1 standard 1K/2K image)
-    daily_limit: int  # Maximum count per day for this specific mode
-    display_name: str  # Display name for UI
-
-
-# ============ Hardcoded defaults (will be moved to database) ============
-GLOBAL_DAILY_QUOTA = 50
-GENERATION_COOLDOWN = 3  # seconds
-
-QUOTA_CONFIGS: dict[str, QuotaConfig] = {
-    "basic_1k": QuotaConfig(cost=1, daily_limit=30, display_name="Basic (1K/2K)"),
-    "basic_4k": QuotaConfig(cost=3, daily_limit=10, display_name="Basic (4K)"),
-    "chat": QuotaConfig(cost=1, daily_limit=20, display_name="Chat"),
-    "batch_1k": QuotaConfig(cost=1, daily_limit=15, display_name="Batch (1K/2K)"),
-    "batch_4k": QuotaConfig(cost=3, daily_limit=5, display_name="Batch (4K)"),
-    "search": QuotaConfig(cost=2, daily_limit=15, display_name="Search"),
-    "blend": QuotaConfig(cost=2, daily_limit=10, display_name="Blend/Style"),
-}
+DAILY_LIMIT = 50  # Max generations per user per day
+COOLDOWN_SECONDS = 3  # Min seconds between generations
+MAX_BATCH_SIZE = 5  # Max images per batch request
 
 
 class QuotaService:
     """
-    Service for managing trial user quotas using Redis.
+    Simple per-user daily quota with cooldown.
 
-    Redis keys:
-    - quota:{date}:global -> int (total points used today)
-    - quota:{date}:user:{user_id} -> hash {global_used, mode_usage, last_generation}
+    Each generation (image, video, chat) costs 1 point.
+    Batch generation costs N points (one per image).
     """
 
     def __init__(self, redis_client=None):
-        """
-        Initialize the quota service.
-
-        Args:
-            redis_client: Async Redis client instance
-        """
         self._redis = redis_client
 
-    def _get_current_date(self) -> str:
-        """Get current date in UTC as string (YYYY-MM-DD)."""
+    @staticmethod
+    def _today() -> str:
         return datetime.now(UTC).strftime("%Y-%m-%d")
 
-    def _get_global_key(self) -> str:
-        """Get Redis key for global quota."""
-        return f"quota:{self._get_current_date()}:global"
+    def _usage_key(self, user_id: str) -> str:
+        return f"usage:{user_id}:{self._today()}"
 
-    def _get_user_key(self, user_id: str) -> str:
-        """Get Redis key for user quota."""
-        return f"quota:{self._get_current_date()}:user:{user_id}"
-
-    def get_mode_key(self, mode: str, resolution: str = "1K") -> str:
-        """Get the quota config key for a generation mode."""
-        if mode == "basic":
-            return "basic_4k" if resolution == "4K" else "basic_1k"
-        elif mode == "batch":
-            return "batch_4k" if resolution == "4K" else "batch_1k"
-        elif mode in ["blend", "style"]:
-            return "blend"
-        else:
-            return mode  # chat, search
+    @staticmethod
+    def _cooldown_key(user_id: str) -> str:
+        return f"usage:{user_id}:last_gen"
 
     async def check_quota(
-        self, user_id: str, mode: str, resolution: str = "1K", count: int = 1
+        self,
+        user_id: str,
+        count: int = 1,
     ) -> tuple[bool, str, dict]:
         """
-        Check if quota is available for a generation request.
-
-        Args:
-            user_id: User identifier (or "anonymous" for trial users)
-            mode: Generation mode
-            resolution: Image resolution
-            count: Number of images to generate
-
-        Returns:
-            Tuple of (can_generate, reason, quota_info)
-        """
-        if not self._redis:
-            return True, "OK", {}  # No Redis = no quota enforcement
-
-        mode_key = self.get_mode_key(mode, resolution)
-        config = QUOTA_CONFIGS.get(mode_key)
-
-        if not config:
-            return False, "Invalid generation mode", {}
-
-        # Calculate cost
-        total_cost = config.cost * count
-
-        # Get user data
-        user_key = self._get_user_key(user_id)
-        user_data = await self._redis.hgetall(user_key)
-
-        # Check cooldown
-        current_time = time.time()
-        last_gen = float(user_data.get("last_generation", 0))
-        if current_time - last_gen < GENERATION_COOLDOWN:
-            remaining = int(GENERATION_COOLDOWN - (current_time - last_gen))
-            return (
-                False,
-                f"Please wait {remaining}s before next generation",
-                {"cooldown_remaining": remaining},
-            )
-
-        # Check global quota
-        global_key = self._get_global_key()
-        global_used = int(await self._redis.get(global_key) or 0)
-        global_remaining = GLOBAL_DAILY_QUOTA - global_used
-
-        if total_cost > global_remaining:
-            return (
-                False,
-                f"Daily global quota exceeded ({global_used}/{GLOBAL_DAILY_QUOTA} used)",
-                {
-                    "global_used": global_used,
-                    "global_limit": GLOBAL_DAILY_QUOTA,
-                    "global_remaining": global_remaining,
-                },
-            )
-
-        # Check mode-specific quota
-        mode_used = int(user_data.get(f"mode:{mode_key}", 0))
-        mode_remaining = config.daily_limit - mode_used
-
-        if count > mode_remaining:
-            return (
-                False,
-                f"{config.display_name} daily limit exceeded ({mode_used}/{config.daily_limit} used)",
-                {
-                    "mode": config.display_name,
-                    "mode_used": mode_used,
-                    "mode_limit": config.daily_limit,
-                    "mode_remaining": mode_remaining,
-                },
-            )
-
-        # All checks passed
-        quota_info = {
-            "global_used": global_used,
-            "global_limit": GLOBAL_DAILY_QUOTA,
-            "global_remaining": global_remaining,
-            "mode": config.display_name,
-            "mode_used": mode_used,
-            "mode_limit": config.daily_limit,
-            "mode_remaining": mode_remaining,
-            "cost": total_cost,
-        }
-
-        return True, "OK", quota_info
-
-    async def consume_quota(
-        self, user_id: str, mode: str, resolution: str = "1K", count: int = 1
-    ) -> bool:
-        """
-        Consume quota for a generation.
+        Check if user can generate.
 
         Args:
             user_id: User identifier
-            mode: Generation mode
-            resolution: Image resolution
-            count: Number of images generated
+            count: Number of generations (batch size)
 
         Returns:
-            True if quota was consumed successfully
+            Tuple of (allowed, reason, info)
+        """
+        if not self._redis:
+            return True, "OK", {}
+
+        # Check batch size
+        if count > MAX_BATCH_SIZE:
+            return (
+                False,
+                f"Batch size exceeds limit ({count}/{MAX_BATCH_SIZE})",
+                {"max_batch_size": MAX_BATCH_SIZE},
+            )
+
+        # Check cooldown
+        cooldown_key = self._cooldown_key(user_id)
+        last_gen = await self._redis.hget(cooldown_key, "ts")
+        if last_gen:
+            elapsed = time.time() - float(last_gen)
+            if elapsed < COOLDOWN_SECONDS:
+                remaining = int(COOLDOWN_SECONDS - elapsed) + 1
+                return (
+                    False,
+                    f"Please wait {remaining}s before next generation",
+                    {"cooldown_remaining": remaining},
+                )
+
+        # Check daily limit
+        usage_key = self._usage_key(user_id)
+        used = int(await self._redis.get(usage_key) or 0)
+        remaining = DAILY_LIMIT - used
+
+        if count > remaining:
+            return (
+                False,
+                f"Daily limit reached ({used}/{DAILY_LIMIT})",
+                {
+                    "used": used,
+                    "limit": DAILY_LIMIT,
+                    "remaining": remaining,
+                },
+            )
+
+        return (
+            True,
+            "OK",
+            {
+                "used": used,
+                "limit": DAILY_LIMIT,
+                "remaining": remaining,
+                "cost": count,
+            },
+        )
+
+    async def consume_quota(
+        self,
+        user_id: str,
+        count: int = 1,
+    ) -> bool:
+        """
+        Record a generation against the user's daily limit.
+
+        Args:
+            user_id: User identifier
+            count: Number of generations
+
+        Returns:
+            True if recorded successfully
         """
         if not self._redis:
             return True
 
-        mode_key = self.get_mode_key(mode, resolution)
-        config = QUOTA_CONFIGS.get(mode_key)
+        usage_key = self._usage_key(user_id)
+        cooldown_key = self._cooldown_key(user_id)
 
-        if not config:
-            return False
-
-        total_cost = config.cost * count
-        global_key = self._get_global_key()
-        user_key = self._get_user_key(user_id)
-
-        # Atomic update with pipeline
         async with self._redis.pipeline() as pipe:
-            # Increment global quota
-            pipe.incrby(global_key, total_cost)
-            # Update user data
-            pipe.hincrby(user_key, "global_used", total_cost)
-            pipe.hincrby(user_key, f"mode:{mode_key}", count)
-            pipe.hset(user_key, "last_generation", str(time.time()))
-            # Set TTL (2 days)
-            pipe.expire(global_key, 86400 * 2)
-            pipe.expire(user_key, 86400 * 2)
+            pipe.incrby(usage_key, count)
+            pipe.expire(usage_key, 86400 * 2)  # 48h TTL
+            pipe.hset(cooldown_key, "ts", str(time.time()))
+            pipe.expire(cooldown_key, COOLDOWN_SECONDS + 10)
             await pipe.execute()
 
-        logger.debug(f"Consumed quota: user={user_id}, mode={mode_key}, cost={total_cost}")
+        logger.debug(f"Quota consumed: user={user_id}, count={count}")
         return True
 
     async def get_quota_status(self, user_id: str) -> dict:
         """
         Get current quota status for display.
 
-        Args:
-            user_id: User identifier
-
         Returns:
-            Dictionary with quota information
+            Dict with used/limit/remaining and cooldown info
         """
         if not self._redis:
             return {"message": "Quota tracking not available"}
 
-        global_key = self._get_global_key()
-        user_key = self._get_user_key(user_id)
-
-        global_used = int(await self._redis.get(global_key) or 0)
-        user_data = await self._redis.hgetall(user_key)
-
-        global_remaining = GLOBAL_DAILY_QUOTA - global_used
-
-        # Build mode status
-        mode_status = {}
-        for mode_key, config in QUOTA_CONFIGS.items():
-            used = int(user_data.get(f"mode:{mode_key}", 0))
-            mode_status[mode_key] = {
-                "name": config.display_name,
-                "used": used,
-                "limit": config.daily_limit,
-                "remaining": config.daily_limit - used,
-                "cost": config.cost,
-            }
+        usage_key = self._usage_key(user_id)
+        used = int(await self._redis.get(usage_key) or 0)
+        remaining = max(0, DAILY_LIMIT - used)
 
         # Check cooldown
-        current_time = time.time()
-        last_gen = float(user_data.get("last_generation", 0))
-        cooldown_remaining = max(0, int(GENERATION_COOLDOWN - (current_time - last_gen)))
+        cooldown_remaining = 0
+        cooldown_key = self._cooldown_key(user_id)
+        last_gen_str = await self._redis.hget(cooldown_key, "ts")
+        if last_gen_str:
+            elapsed = time.time() - float(last_gen_str)
+            cooldown_remaining = max(0, int(COOLDOWN_SECONDS - elapsed))
 
         return {
-            "date": self._get_current_date(),
-            "global_used": global_used,
-            "global_limit": GLOBAL_DAILY_QUOTA,
-            "global_remaining": global_remaining,
-            "modes": mode_status,
+            "date": self._today(),
+            "used": used,
+            "limit": DAILY_LIMIT,
+            "remaining": remaining,
             "cooldown_active": cooldown_remaining > 0,
             "cooldown_remaining": cooldown_remaining,
-            "resets_at": f"{self._get_current_date()}T00:00:00Z",
+            "resets_at": f"{self._today()}T00:00:00Z",
         }
 
     async def reset_user_quota(self, user_id: str) -> bool:
-        """
-        Reset quota for a specific user (admin function).
-
-        Args:
-            user_id: User identifier
-
-        Returns:
-            True if reset successful
-        """
+        """Reset quota for a specific user (admin function)."""
         if not self._redis:
             return False
 
-        user_key = self._get_user_key(user_id)
-        await self._redis.delete(user_key)
+        usage_key = self._usage_key(user_id)
+        await self._redis.delete(usage_key)
         logger.info(f"Reset quota for user: {user_id}")
         return True
 
 
-# Singleton instance
+# Singleton
 _quota_service: QuotaService | None = None
 
 
