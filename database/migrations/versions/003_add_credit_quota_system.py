@@ -3,8 +3,8 @@
 Adds provider, model, resolution, and media_type columns
 for usage analytics tracking.
 
-Revision ID: 003_credit_quota
-Revises: 002_add_frontend_api_tables
+Revision ID: 003
+Revises: 002
 Create Date: 2026-02-07
 """
 
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers
-revision = "003_credit_quota"
-down_revision = "002_add_frontend_api_tables"
+revision = "003"
+down_revision = "002"
 branch_labels = None
 depends_on = None
 
