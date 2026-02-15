@@ -13,7 +13,6 @@ from .history import router as history_router
 from .images import router as images_router
 from .notifications import router as notifications_router
 from .projects import router as projects_router
-from .prompts import router as prompts_router
 from .quota import router as quota_router
 from .search import router as search_router
 from .settings import router as settings_router
@@ -28,7 +27,6 @@ __all__ = [
     "quota_router",
     "chat_router",
     "history_router",
-    "prompts_router",
     "video_router",
     "images_router",
     "settings_router",

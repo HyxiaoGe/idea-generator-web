@@ -15,7 +15,6 @@ from fastapi import APIRouter, Depends, Query
 
 from api.dependencies import (
     get_image_repository,
-    get_prompt_repository,
     get_template_repository,
     get_user_repository,
 )
@@ -24,7 +23,6 @@ from api.schemas.search import (
     GlobalSearchResponse,
     ImageSearchResponse,
     ImageSearchResult,
-    PromptSearchResponse,
     SearchResult,
     SearchResultType,
     SearchSuggestion,
@@ -32,7 +30,6 @@ from api.schemas.search import (
 )
 from database.repositories import (
     ImageRepository,
-    PromptRepository,
     TemplateRepository,
     UserRepository,
 )
@@ -234,39 +231,6 @@ async def search_images(
         limit=limit,
         offset=offset,
         has_more=has_more,
-    )
-
-
-@router.get("/prompts", response_model=PromptSearchResponse)
-async def search_prompts(
-    q: str = Query(..., min_length=1, description="Search query"),
-    category: str | None = Query(default=None, description="Filter by category"),
-    limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
-    user: GitHubUser | None = Depends(get_current_user),
-    prompt_repo: PromptRepository | None = Depends(get_prompt_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
-):
-    """Search prompts in the prompt library."""
-    if not prompt_repo:
-        return PromptSearchResponse(
-            query=q,
-            results=[],
-            total=0,
-            limit=limit,
-            offset=offset,
-            has_more=False,
-        )
-
-    # TODO: Add search method to PromptRepository
-    # For now, return empty results
-    return PromptSearchResponse(
-        query=q,
-        results=[],
-        total=0,
-        limit=limit,
-        offset=offset,
-        has_more=False,
     )
 
 

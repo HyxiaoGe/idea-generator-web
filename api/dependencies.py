@@ -16,7 +16,6 @@ from database.repositories import (
     ImageRepository,
     NotificationRepository,
     ProjectRepository,
-    PromptRepository,
     QuotaRepository,
     SettingsRepository,
     TemplateRepository,
@@ -72,15 +71,6 @@ async def get_quota_repository(
     if session is None:
         return None
     return QuotaRepository(session)
-
-
-async def get_prompt_repository(
-    session: AsyncSession | None = Depends(get_db_session),
-) -> PromptRepository | None:
-    """Get PromptRepository dependency."""
-    if session is None:
-        return None
-    return PromptRepository(session)
 
 
 async def get_audit_repository(

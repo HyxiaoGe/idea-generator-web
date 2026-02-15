@@ -10,7 +10,6 @@ from .favorite import Favorite, FavoriteFolder
 from .image import GeneratedImage
 from .notification import Notification
 from .project import Project, ProjectImage
-from .prompt import Prompt, UserFavoritePrompt
 from .quota import QuotaUsage
 from .settings import UserSettings
 from .template import Template
@@ -29,8 +28,6 @@ __all__ = [
     "ChatSession",
     "ChatMessage",
     "QuotaUsage",
-    "Prompt",
-    "UserFavoritePrompt",
     "AuditLog",
     "ProviderHealthLog",
     "Favorite",

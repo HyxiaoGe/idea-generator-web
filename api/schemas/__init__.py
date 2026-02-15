@@ -134,16 +134,6 @@ from .projects import (
     UpdateProjectRequest,
     UpdateProjectResponse,
 )
-from .prompts import (
-    GeneratePromptsRequest,
-    GeneratePromptsResponse,
-    ListPromptsResponse,
-    PromptCategory,
-    PromptTemplate,
-    SavePromptRequest,
-    SavePromptResponse,
-    ToggleFavoriteResponse,
-)
 from .quota import (
     QuotaCheckRequest,
     QuotaCheckResponse,
@@ -154,8 +144,6 @@ from .search import (
     GlobalSearchResponse,
     ImageSearchResponse,
     ImageSearchResult,
-    PromptSearchResponse,
-    PromptSearchResult,
     SearchResult,
     SearchResultType,
     SearchSuggestion,
@@ -292,15 +280,6 @@ __all__ = [
     "HistoryDetailResponse",
     "HistoryDeleteResponse",
     "HistoryStatsResponse",
-    # Prompts
-    "PromptTemplate",
-    "PromptCategory",
-    "ListPromptsResponse",
-    "GeneratePromptsRequest",
-    "GeneratePromptsResponse",
-    "ToggleFavoriteResponse",
-    "SavePromptRequest",
-    "SavePromptResponse",
     # Video
     "VideoResolution",
     "VideoAspectRatio",
@@ -414,11 +393,9 @@ __all__ = [
     "SearchResultType",
     "SearchResult",
     "ImageSearchResult",
-    "PromptSearchResult",
     "SearchSuggestion",
     "GlobalSearchResponse",
     "ImageSearchResponse",
-    "PromptSearchResponse",
     "SuggestionsResponse",
     # WebSocket
     "WSMessageType",

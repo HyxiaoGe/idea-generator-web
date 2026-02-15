@@ -11,7 +11,6 @@ from .favorite_repo import FavoriteRepository
 from .image_repo import ImageRepository
 from .notification_repo import NotificationRepository
 from .project_repo import ProjectRepository
-from .prompt_repo import PromptRepository
 from .quota_repo import QuotaRepository
 from .settings_repo import SettingsRepository
 from .template_repo import TemplateRepository
@@ -22,7 +21,6 @@ __all__ = [
     "ImageRepository",
     "ChatRepository",
     "QuotaRepository",
-    "PromptRepository",
     "AuditRepository",
     "SettingsRepository",
     "APIKeyRepository",

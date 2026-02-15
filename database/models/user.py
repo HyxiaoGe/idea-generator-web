@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .image import GeneratedImage
     from .notification import Notification
     from .project import Project
-    from .prompt import UserFavoritePrompt
     from .quota import QuotaUsage
     from .settings import UserSettings
     from .template import Template
@@ -99,11 +98,6 @@ class User(Base, TimestampMixin):
     )
     quota_usage: Mapped[list["QuotaUsage"]] = relationship(
         "QuotaUsage",
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
-    favorite_prompts: Mapped[list["UserFavoritePrompt"]] = relationship(
-        "UserFavoritePrompt",
         back_populates="user",
         cascade="all, delete-orphan",
     )

@@ -33,10 +33,6 @@ from .health_check import (
 # Storage services (legacy)
 from .image_storage import ImageStorage, get_storage
 
-# Prompt services
-from .prompt_generator import PromptGenerator, get_prompt_generator
-from .prompt_storage import PromptStorage, get_prompt_storage
-
 # Provider Router
 from .provider_router import (
     ProviderRouter,
@@ -125,11 +121,6 @@ __all__ = [
     "DAILY_LIMIT",
     "COOLDOWN_SECONDS",
     "MAX_BATCH_SIZE",
-    # Prompts
-    "PromptGenerator",
-    "get_prompt_generator",
-    "PromptStorage",
-    "get_prompt_storage",
     # Content moderation
     "ContentFilter",
     "get_content_filter",

@@ -51,20 +51,6 @@ class ImageSearchResult(BaseModel):
     )
 
 
-class PromptSearchResult(BaseModel):
-    """Prompt-specific search result."""
-
-    id: str = Field(..., description="Prompt ID")
-    content: str = Field(..., description="Prompt content")
-    category: str | None = Field(None, description="Prompt category")
-    is_favorite: bool = Field(default=False, description="Whether favorited")
-    created_at: datetime = Field(..., description="Creation timestamp")
-    highlight: str | None = Field(
-        None,
-        description="Highlighted matching text",
-    )
-
-
 class SearchSuggestion(BaseModel):
     """Search suggestion/autocomplete item."""
 
@@ -107,20 +93,6 @@ class ImageSearchResponse(BaseModel):
     results: list[ImageSearchResult] = Field(
         default_factory=list,
         description="Image search results",
-    )
-    total: int = Field(..., description="Total matching results")
-    limit: int = Field(..., description="Items returned")
-    offset: int = Field(..., description="Current offset")
-    has_more: bool = Field(..., description="Whether more results exist")
-
-
-class PromptSearchResponse(BaseModel):
-    """Response for GET /api/search/prompts."""
-
-    query: str = Field(..., description="Search query")
-    results: list[PromptSearchResult] = Field(
-        default_factory=list,
-        description="Prompt search results",
     )
     total: int = Field(..., description="Total matching results")
     limit: int = Field(..., description="Items returned")

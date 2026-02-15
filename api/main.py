@@ -23,7 +23,6 @@ from api.routers import (
     images_router,
     notifications_router,
     projects_router,
-    prompts_router,
     quota_router,
     search_router,
     settings_router,
@@ -143,9 +142,6 @@ def create_app() -> FastAPI:
 
     # History management
     app.include_router(history_router, prefix="/api")
-
-    # Prompt library
-    app.include_router(prompts_router, prefix="/api")
 
     # Video generation
     app.include_router(video_router, prefix="/api")
