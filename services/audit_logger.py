@@ -1,6 +1,8 @@
 """
 Content moderation audit logging service.
 Records all moderation checks for analysis, review, and optimization.
+
+Logs are written to local filesystem under outputs/logs/content_moderation/.
 """
 
 import hashlib
@@ -8,6 +10,7 @@ import json
 import os
 import threading
 from datetime import UTC, datetime
+from pathlib import Path
 from queue import Queue
 from typing import Any
 
@@ -20,7 +23,7 @@ def get_config_value(key: str, default: str = "") -> str:
 class AuditLogger:
     """
     Audit logger for content moderation events.
-    Logs all checks to R2 for analysis and review.
+    Logs all checks to local filesystem for analysis and review.
     """
 
     def __init__(self):
@@ -30,38 +33,38 @@ class AuditLogger:
             "1",
             "yes",
         ]
-        self.async_upload = get_config_value("AUDIT_ASYNC_UPLOAD", "true").lower() in [
+        self.async_write = get_config_value("AUDIT_ASYNC_UPLOAD", "true").lower() in [
             "true",
             "1",
             "yes",
         ]
 
-        # R2 storage paths
-        self.base_path = "logs/content_moderation"
+        # Local storage base path
+        self.base_path = Path("outputs/logs/content_moderation")
 
-        # Async upload queue
-        self._upload_queue: Queue = Queue()
-        self._upload_thread: threading.Thread | None = None
+        # Async write queue
+        self._write_queue: Queue = Queue()
+        self._write_thread: threading.Thread | None = None
 
-        if self.enabled and self.async_upload:
-            self._start_upload_worker()
+        if self.enabled and self.async_write:
+            self._start_write_worker()
 
-    def _start_upload_worker(self):
-        """Start background thread for async uploads."""
+    def _start_write_worker(self):
+        """Start background thread for async writes."""
 
         def worker():
             while True:
                 try:
-                    log_data = self._upload_queue.get(timeout=5)
+                    log_data = self._write_queue.get(timeout=5)
                     if log_data is None:  # Shutdown signal
                         break
-                    self._upload_to_r2(log_data)
+                    self._write_to_local(log_data)
                 except Exception:
                     # Empty queue or error, continue
                     pass
 
-        self._upload_thread = threading.Thread(target=worker, daemon=True)
-        self._upload_thread.start()
+        self._write_thread = threading.Thread(target=worker, daemon=True)
+        self._write_thread.start()
 
     def log_moderation_check(
         self,
@@ -90,11 +93,11 @@ class AuditLogger:
                 prompt, layer1_result, layer2_result, final_decision, context
             )
 
-            # Upload (async or sync)
-            if self.async_upload:
-                self._upload_queue.put(log_entry)
+            # Write (async or sync)
+            if self.async_write:
+                self._write_queue.put(log_entry)
             else:
-                self._upload_to_r2(log_entry)
+                self._write_to_local(log_entry)
 
         except Exception as e:
             # Don't block user flow on logging errors
@@ -186,23 +189,13 @@ class AuditLogger:
                 flags["review_reason"].append("long_prompt_keyword_block")
                 flags["confidence"] = "medium"
 
-        # Flag 4: Repeated similar prompts (detected via session context)
-        # This would require session tracking - placeholder for now
-
         return flags
 
-    def _upload_to_r2(self, log_entry: dict[str, Any]):
-        """Upload log entry to R2 storage."""
+    def _write_to_local(self, log_entry: dict[str, Any]):
+        """Write log entry to local filesystem."""
         try:
-            from .r2_storage import get_r2_storage
-
-            r2 = get_r2_storage()
-            if not r2.is_available:
-                return
-
             # Determine path based on decision
             timestamp = datetime.fromisoformat(log_entry["timestamp"])
-            date_str = timestamp.strftime("%Y-%m-%d")
             year = timestamp.strftime("%Y")
             month = timestamp.strftime("%m")
             day = timestamp.strftime("%d")
@@ -218,26 +211,18 @@ class AuditLogger:
             else:
                 category = "blocked"
 
-            # Build S3 key
+            # Build local path
             filename = f"{timestamp.strftime('%Y%m%d_%H%M%S')}_{log_entry['log_id']}.json"
-            key = f"{self.base_path}/{year}/{month}/{day}/{category}/{filename}"
+            log_dir = self.base_path / year / month / day / category
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_file = log_dir / filename
 
-            # Upload to R2
-            r2._client.put_object(
-                Bucket=r2.bucket_name,
-                Key=key,
-                Body=json.dumps(log_entry, ensure_ascii=False, indent=2).encode("utf-8"),
-                ContentType="application/json",
-                Metadata={
-                    "log_id": log_entry["log_id"],
-                    "allowed": str(allowed).lower(),
-                    "needs_review": str(needs_review).lower(),
-                    "date": date_str,
-                },
-            )
+            # Write to file
+            with open(log_file, "w", encoding="utf-8") as f:
+                json.dump(log_entry, f, ensure_ascii=False, indent=2)
 
         except Exception as e:
-            print(f"[AuditLogger] Failed to upload to R2: {e}")
+            print(f"[AuditLogger] Failed to write log: {e}")
 
     def generate_daily_summary(self, date: str) -> dict[str, Any]:
         """
@@ -250,25 +235,17 @@ class AuditLogger:
             Summary statistics dictionary
         """
         try:
-            from .r2_storage import get_r2_storage
-
-            r2 = get_r2_storage()
-            if not r2.is_available:
-                return {}
-
             # Parse date
             dt = datetime.strptime(date, "%Y-%m-%d")
             year, month, day = dt.strftime("%Y"), dt.strftime("%m"), dt.strftime("%d")
 
             # List all logs for the day
-            prefix = f"{self.base_path}/{year}/{month}/{day}/"
+            day_dir = self.base_path / year / month / day
 
-            response = r2._client.list_objects_v2(Bucket=r2.bucket_name, Prefix=prefix)
-
-            if "Contents" not in response:
+            if not day_dir.exists():
                 return {"date": date, "total_checks": 0}
 
-            # Download and analyze all logs
+            # Read and analyze all log files
             total_checks = 0
             blocked_count = 0
             allowed_count = 0
@@ -283,48 +260,50 @@ class AuditLogger:
             total_layer1_time = 0
             total_layer2_time = 0
 
-            for obj in response.get("Contents", []):
-                try:
-                    # Download log
-                    log_response = r2._client.get_object(Bucket=r2.bucket_name, Key=obj["Key"])
-                    log_data = json.loads(log_response["Body"].read().decode("utf-8"))
-
-                    total_checks += 1
-
-                    # Count decisions
-                    if log_data["final_decision"]["allowed"]:
-                        allowed_count += 1
-                    else:
-                        blocked_count += 1
-
-                    if log_data["analysis_flags"]["needs_review"]:
-                        flagged_count += 1
-
-                    # Count block reasons
-                    blocked_by = log_data["final_decision"].get("blocked_by")
-                    if blocked_by == "keyword":
-                        layer1_blocks += 1
-                        # Track keyword frequencies
-                        reason = log_data["final_decision"].get("blocked_reason", "")
-                        if reason.startswith("keyword:"):
-                            keyword = reason.split(":", 1)[1]
-                            keyword_counter[keyword] = keyword_counter.get(keyword, 0) + 1
-
-                    elif blocked_by == "ai":
-                        layer2_blocks += 1
-                        # Track AI categories
-                        reason = log_data["final_decision"].get("blocked_reason", "")
-                        if reason.startswith("ai:"):
-                            category = reason.split(":", 1)[1]
-                            ai_category_counter[category] = ai_category_counter.get(category, 0) + 1
-
-                    # Timing stats
-                    total_layer1_time += log_data["layer1_keyword"].get("execution_time_ms", 0)
-                    total_layer2_time += log_data["layer2_ai"].get("execution_time_ms", 0)
-
-                except Exception as e:
-                    print(f"[AuditLogger] Error processing log {obj['Key']}: {e}")
+            for category_dir in day_dir.iterdir():
+                if not category_dir.is_dir():
                     continue
+                for log_file in category_dir.glob("*.json"):
+                    try:
+                        with open(log_file, encoding="utf-8") as f:
+                            log_data = json.load(f)
+
+                        total_checks += 1
+
+                        # Count decisions
+                        if log_data["final_decision"]["allowed"]:
+                            allowed_count += 1
+                        else:
+                            blocked_count += 1
+
+                        if log_data["analysis_flags"]["needs_review"]:
+                            flagged_count += 1
+
+                        # Count block reasons
+                        blocked_by = log_data["final_decision"].get("blocked_by")
+                        if blocked_by == "keyword":
+                            layer1_blocks += 1
+                            reason = log_data["final_decision"].get("blocked_reason", "")
+                            if reason.startswith("keyword:"):
+                                keyword = reason.split(":", 1)[1]
+                                keyword_counter[keyword] = keyword_counter.get(keyword, 0) + 1
+
+                        elif blocked_by == "ai":
+                            layer2_blocks += 1
+                            reason = log_data["final_decision"].get("blocked_reason", "")
+                            if reason.startswith("ai:"):
+                                category = reason.split(":", 1)[1]
+                                ai_category_counter[category] = (
+                                    ai_category_counter.get(category, 0) + 1
+                                )
+
+                        # Timing stats
+                        total_layer1_time += log_data["layer1_keyword"].get("execution_time_ms", 0)
+                        total_layer2_time += log_data["layer2_ai"].get("execution_time_ms", 0)
+
+                    except Exception as e:
+                        print(f"[AuditLogger] Error processing log {log_file}: {e}")
+                        continue
 
             # Build summary
             summary = {
@@ -357,14 +336,12 @@ class AuditLogger:
                 },
             }
 
-            # Save summary to R2
-            summary_key = f"{self.base_path}/summary/{date}_summary.json"
-            r2._client.put_object(
-                Bucket=r2.bucket_name,
-                Key=summary_key,
-                Body=json.dumps(summary, ensure_ascii=False, indent=2).encode("utf-8"),
-                ContentType="application/json",
-            )
+            # Save summary locally
+            summary_dir = self.base_path / "summary"
+            summary_dir.mkdir(parents=True, exist_ok=True)
+            summary_file = summary_dir / f"{date}_summary.json"
+            with open(summary_file, "w", encoding="utf-8") as f:
+                json.dump(summary, f, ensure_ascii=False, indent=2)
 
             return summary
 
@@ -374,9 +351,9 @@ class AuditLogger:
 
     def shutdown(self):
         """Shutdown audit logger and flush queue."""
-        if self._upload_thread and self._upload_thread.is_alive():
-            self._upload_queue.put(None)  # Shutdown signal
-            self._upload_thread.join(timeout=5)
+        if self._write_thread and self._write_thread.is_alive():
+            self._write_queue.put(None)  # Shutdown signal
+            self._write_thread.join(timeout=5)
 
 
 # Global singleton instance

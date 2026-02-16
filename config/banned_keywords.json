@@ -1,0 +1,31 @@
+{
+  "version": "1.0",
+  "description": "Banned keywords for content safety filtering",
+  "keywords": [
+    "nsfw", "nude", "naked", "sex", "porn", "xxx", "rape", "hentai", "erotic", "sexual",
+    "vagina", "penis", "breast", "nipple", "genitals", "intercourse",
+    "fuck", "orgasm", "masturbat", "blowjob", "handjob",
+    "making love", "make love", "erotic photography", "sensual photography",
+    "裸", "裸体", "色情", "性", "性交", "强奸", "淫", "做爱", "阴道", "阴茎", "乳房", "生殖器",
+
+    "lingerie", "underwear", "panties", "bra", "thong", "topless", "bottomless",
+    "内衣", "内裤", "胸罩", "半裸", "露点",
+
+    "playboy", "pornstar", "stripper", "escort", "prostitute", "brothel", "onlyfans",
+    "色情明星", "脱衣舞", "妓女", "援交", "卖淫",
+
+    "gore", "bloody", "violence", "violent", "kill", "murder", "torture",
+    "decapitate", "dismember", "mutilate", "corpse", "dead body",
+    "死亡", "暴力", "血腥", "杀", "谋杀", "酷刑", "尸体", "斩首",
+
+    "child porn", "minor sex", "underage", "loli", "shota",
+    "school girl sex", "young girl naked", "young boy naked", "preteen",
+    "儿童色情", "未成年性", "萝莉", "正太",
+
+    "cocaine use", "heroin inject", "meth lab", "snorting cocaine", "shooting heroin",
+    "吸毒", "海洛因注射", "冰毒实验室",
+
+    "bomb making", "explosive device", "suicide method", "how to kill",
+    "制作炸弹", "爆炸装置", "自杀方法", "如何杀人"
+  ]
+}

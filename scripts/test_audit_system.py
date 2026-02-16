@@ -116,35 +116,17 @@ def test_audit_system():
     print("="*60)
     print()
 
-    from services.r2_storage import get_r2_storage
-    r2 = get_r2_storage()
-
-    if not r2.is_available:
-        print("⚠️ R2 storage not available - audit logs not uploaded")
-        print("   Logs were queued but not persisted to cloud")
+    from pathlib import Path
+    log_dir = Path("outputs/logs/content_moderation")
+    if log_dir.exists():
+        log_files = list(log_dir.rglob("*.json"))
+        print(f"✅ Audit logs written to local filesystem")
+        print(f"   Path: {log_dir}")
+        print(f"   Log files found: {len(log_files)}")
     else:
-        print("✅ R2 storage available - audit logs uploaded")
-        print(f"   Check R2 bucket: {r2.bucket_name}")
-        print("   Path: logs/content_moderation/")
+        print("⚠️ No audit log directory found yet")
+        print(f"   Expected at: {log_dir}")
 
-    print()
-
-    # Next steps
-    print("="*60)
-    print("  Next Steps")
-    print("="*60)
-    print()
-    print("1. Analyze logs:")
-    print("   python scripts/analyze_moderation_logs.py summary --date $(date +%Y-%m-%d)")
-    print()
-    print("2. Find false positives:")
-    print("   python scripts/analyze_moderation_logs.py false-positives")
-    print()
-    print("3. Check unused keywords:")
-    print("   python scripts/analyze_moderation_logs.py unused-keywords --days 30")
-    print()
-    print("4. View flagged logs:")
-    print("   python scripts/analyze_moderation_logs.py flagged")
     print()
 
     return passed_count == total_count

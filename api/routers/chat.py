@@ -35,7 +35,7 @@ from services import (
     ChatSession,
     get_friendly_error_message,
     get_quota_service,
-    get_r2_storage,
+    get_storage_manager,
 )
 from services.auth_service import GitHubUser
 
@@ -182,8 +182,8 @@ async def send_message(
     # Save image if generated
     image_data = None
     if response.image:
-        r2_storage = get_r2_storage(user_id=user_id if user else None)
-        image_key = r2_storage.save_image(
+        storage = get_storage_manager(user_id=user_id if user else None)
+        result = await storage.save_image(
             image=response.image,
             prompt=request.message,
             settings={"aspect_ratio": aspect_ratio or session_data["aspect_ratio"]},
@@ -193,11 +193,11 @@ async def send_message(
             thinking=response.thinking,
         )
 
-        if image_key:
+        if result:
             image_data = GeneratedImage(
-                key=image_key,
-                filename=image_key.split("/")[-1],
-                url=r2_storage.get_public_url(image_key),
+                key=result.key,
+                filename=result.filename,
+                url=result.public_url,
                 width=response.image.width,
                 height=response.image.height,
             )
@@ -258,11 +258,11 @@ async def get_chat_history(
     for msg in session_data["messages"]:
         image = None
         if msg.get("image_key"):
-            r2_storage = get_r2_storage(user_id=user_id if user_id != "anonymous" else None)
+            storage = get_storage_manager(user_id=user_id if user_id != "anonymous" else None)
             image = GeneratedImage(
                 key=msg["image_key"],
                 filename=msg["image_key"].split("/")[-1],
-                url=r2_storage.get_public_url(msg["image_key"]),
+                url=storage.get_public_url(msg["image_key"]),
             )
 
         messages.append(

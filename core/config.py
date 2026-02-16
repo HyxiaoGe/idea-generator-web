@@ -137,14 +137,6 @@ class Settings(BaseSettings):
     oss_access_key: str | None = None
     oss_secret_key: str | None = None
 
-    # ============ Cloudflare R2 Storage (Legacy) ============
-    r2_enabled: bool = True
-    r2_account_id: str | None = None
-    r2_access_key_id: str | None = None
-    r2_secret_access_key: str | None = None
-    r2_bucket_name: str = "nano-banana-images"
-    r2_public_url: str | None = None
-
     # ============ GitHub OAuth ============
     github_client_id: str | None = None
     github_client_secret: str | None = None
@@ -194,18 +186,6 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """Check if running in production environment."""
         return self.environment == "production"
-
-    @property
-    def is_r2_configured(self) -> bool:
-        """Check if R2 storage is properly configured."""
-        return all(
-            [
-                self.r2_enabled,
-                self.r2_account_id,
-                self.r2_access_key_id,
-                self.r2_secret_access_key,
-            ]
-        )
 
     @property
     def is_storage_configured(self) -> bool:

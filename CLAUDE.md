@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Search-grounded generation with real-time data integration
 - GitHub OAuth authentication with JWT tokens
 - Redis-based per-user daily quota with cooldown (abuse prevention)
-- Cloudflare R2 cloud storage for images
+- Pluggable storage system (local/MinIO/Alibaba OSS)
 - AI-powered prompt library with content moderation
 
 ## Architecture
@@ -71,7 +71,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   ├── generator.py       - Legacy image generation          │
 │   ├── chat_session.py    - Multi-turn conversations         │
 │   ├── quota_service.py   - Per-user daily quota + cooldown   │
-│   ├── r2_storage.py      - Cloudflare R2 storage            │
 │   ├── content_filter.py  - Content moderation               │
 │   └── ai_content_moderator.py - AI-based moderation         │
 └─────────────────────────────────────────────────────────────┘
@@ -140,9 +139,8 @@ DEFAULT_ROUTING_STRATEGY    # priority|cost|quality|speed|round_robin
 ENABLE_FALLBACK             # Enable automatic provider failover
 ```
 
-Optional - Storage & Auth:
+Optional - Auth:
 ```
-R2_ENABLED                  # Enable Cloudflare R2 cloud storage
 AUTH_ENABLED                # Enable GitHub OAuth
 ```
 
@@ -342,7 +340,7 @@ Database is optional - when not configured, services fall back to file-based sto
 Tests use pytest with async support. Fixtures in `tests/conftest.py` provide:
 - `client` / `async_client` - Test clients
 - `mock_redis` - In-memory Redis mock
-- `mock_image_generator`, `mock_r2_storage`, etc.
+- `mock_image_generator`, `mock_quota_service`, etc.
 
 ```bash
 # Run all tests

@@ -4,7 +4,6 @@ Pytest configuration and fixtures.
 
 import os
 from collections.abc import AsyncGenerator
-from datetime import datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -235,27 +234,6 @@ def mock_image_generator():
         error=None,
         safety_blocked=False,
     )
-    return mock
-
-
-@pytest.fixture
-def mock_r2_storage():
-    """Mock R2Storage service."""
-    mock = MagicMock()
-    mock.is_available = True
-    mock.save_image.return_value = "2024/01/01/test_image.png"
-    mock.get_public_url.return_value = "https://example.com/images/test_image.png"
-    mock.get_history.return_value = [
-        {
-            "key": "2024/01/01/test_image.png",
-            "filename": "test_image.png",
-            "prompt": "test prompt",
-            "mode": "basic",
-            "settings": {"aspect_ratio": "16:9"},
-            "duration": 1.5,
-            "created_at": datetime.now().isoformat(),
-        }
-    ]
     return mock
 
 

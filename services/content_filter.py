@@ -2,17 +2,15 @@
 Content filter service for prompt safety checking.
 Prevents generation of NSFW/violent/illegal content.
 
-Keywords are stored remotely in Cloudflare R2 to prevent user discovery.
+Keywords are loaded from local config/banned_keywords.json.
 """
 
 import json
 import os
 import re
-from datetime import datetime, timedelta
+from pathlib import Path
 
-# Minimal fallback keywords (only used if R2 is unavailable)
-# Full keyword list is stored remotely in R2 to prevent user discovery
-# This is just a basic safety net - production MUST use R2 storage
+# Minimal fallback keywords (used if local file is missing)
 DEFAULT_BANNED_KEYWORDS = [
     "nsfw",
     "porn",
@@ -29,20 +27,16 @@ def get_config_value(key: str, default: str = "") -> str:
 class ContentFilter:
     """
     Two-layer content safety filter.
-    Layer 1: Fast keyword matching (instant blocking) - loaded from remote R2
+    Layer 1: Fast keyword matching (instant blocking)
     Layer 2: AI-powered deep analysis (context-aware)
     """
 
-    # R2 path for remote keyword storage
-    REMOTE_KEYWORDS_KEY = "config/banned_keywords.json"
-    CACHE_TTL = timedelta(hours=1)  # Cache keywords for 1 hour
+    # Path to local keyword file (relative to project root)
+    KEYWORDS_FILE = Path(__file__).parent.parent / "config" / "banned_keywords.json"
 
     def __init__(self, api_key: str = None):
         """Initialize content filter with banned keywords and AI moderator."""
-        self._keywords_cache = None
-        self._keywords_cache_time = None
-
-        # Load keywords (remote + local fallback)
+        # Load keywords from local file
         self.banned_keywords = self._load_keywords()
 
         # Check if filter is enabled
@@ -63,25 +57,16 @@ class ContentFilter:
 
     def _load_keywords(self) -> list[str]:
         """
-        Load banned keywords from remote R2 storage.
-        Falls back to default list if remote unavailable.
+        Load banned keywords from local config file.
+        Falls back to default list if file is missing.
         """
-        # Check cache first
-        if self._keywords_cache and self._keywords_cache_time:
-            if datetime.now() - self._keywords_cache_time < self.CACHE_TTL:
-                return self._keywords_cache
+        keywords = self._load_from_file()
+        if keywords:
+            print(f"[ContentFilter] Loaded {len(keywords)} keywords from {self.KEYWORDS_FILE}")
+            return keywords
 
-        # Try to load from R2
-        remote_keywords = self._load_from_r2()
-        if remote_keywords:
-            self._keywords_cache = remote_keywords
-            self._keywords_cache_time = datetime.now()
-            print(f"[ContentFilter] Loaded {len(remote_keywords)} keywords from R2")
-            return remote_keywords
-
-        # Fallback to minimal default keywords
-        print("⚠️ [ContentFilter] WARNING: R2 unavailable, using minimal fallback keywords")
-        print("⚠️ [ContentFilter] Production deployment MUST have R2 configured for full protection")
+        # Fallback to minimal default keywords + env var overrides
+        print("[ContentFilter] WARNING: keyword file not found, using minimal fallback keywords")
         custom_keywords = get_config_value("BANNED_KEYWORDS", "")
         custom_list = (
             [k.strip().lower() for k in custom_keywords.split(",") if k.strip()]
@@ -90,31 +75,22 @@ class ContentFilter:
         )
         return list(set(DEFAULT_BANNED_KEYWORDS + custom_list))
 
-    def _load_from_r2(self) -> list[str] | None:
-        """Load keyword list from R2 storage."""
+    def _load_from_file(self) -> list[str] | None:
+        """Load keyword list from local JSON file."""
         try:
-            from .r2_storage import get_r2_storage
-
-            r2 = get_r2_storage()
-            if not r2.is_available:
+            if not self.KEYWORDS_FILE.exists():
                 return None
 
-            # Download keywords JSON from R2
-            response = r2._client.get_object(Bucket=r2.bucket_name, Key=self.REMOTE_KEYWORDS_KEY)
-            content = response["Body"].read().decode("utf-8")
-            data = json.loads(content)
+            with open(self.KEYWORDS_FILE, encoding="utf-8") as f:
+                data = json.load(f)
 
-            # Return the keywords list
             return data.get("keywords", [])
-
         except Exception as e:
-            print(f"[ContentFilter] Failed to load from R2: {e}")
+            print(f"[ContentFilter] Failed to load keywords file: {e}")
             return None
 
     def refresh_keywords(self):
-        """Force refresh keywords from R2 (bypasses cache)."""
-        self._keywords_cache = None
-        self._keywords_cache_time = None
+        """Force refresh keywords from file."""
         self.banned_keywords = self._load_keywords()
 
     def is_safe(self, prompt: str, context: dict | None = None) -> tuple[bool, str]:

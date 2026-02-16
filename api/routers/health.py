@@ -57,7 +57,7 @@ async def detailed_health_check(
 
     Checks the health of:
     - Redis connection
-    - R2 storage (if configured)
+    - Storage backend (if configured)
     - Gemini API (if API key configured)
     """
     components = {}
@@ -76,16 +76,16 @@ async def detailed_health_check(
     if redis_health["status"] != "healthy":
         overall_status = HealthStatus.UNHEALTHY
 
-    # Check R2 Storage configuration
-    if settings.is_r2_configured:
-        components["r2_storage"] = ComponentHealth(
+    # Check Storage configuration
+    if settings.is_storage_configured:
+        components["storage"] = ComponentHealth(
             status=HealthStatus.HEALTHY,
-            details={"bucket": settings.r2_bucket_name},
+            details={"backend": settings.storage_backend},
         )
     else:
-        components["r2_storage"] = ComponentHealth(
+        components["storage"] = ComponentHealth(
             status=HealthStatus.DEGRADED,
-            error="R2 storage not configured",
+            error="Storage not configured",
         )
         if overall_status == HealthStatus.HEALTHY:
             overall_status = HealthStatus.DEGRADED

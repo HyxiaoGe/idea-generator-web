@@ -30,9 +30,6 @@ from .health_check import (
     get_health_checker,
 )
 
-# Storage services (legacy)
-from .image_storage import ImageStorage, get_storage
-
 # LLM Client & Prompt Pipeline
 from .llm_client import LLMClient, get_llm_client
 from .prompt_pipeline import ProcessedPrompt, PromptPipeline, get_prompt_pipeline
@@ -73,9 +70,8 @@ from .quota_service import (
     QuotaService,
     get_quota_service,
 )
-from .r2_storage import R2Storage, get_r2_storage
 
-# New pluggable storage system
+# Pluggable storage system
 from .storage import (
     StorageConfig,
     StorageManager,
@@ -98,12 +94,7 @@ __all__ = [
     "format_cost",
     "get_pricing_table",
     "CostEstimate",
-    # Storage (legacy)
-    "ImageStorage",
-    "get_storage",
-    "R2Storage",
-    "get_r2_storage",
-    # Storage (new pluggable system)
+    # Storage
     "StorageConfig",
     "StorageObject",
     "StorageProvider",

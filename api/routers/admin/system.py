@@ -136,7 +136,7 @@ async def get_storage_status(
     settings = get_settings()
 
     return StorageStatusResponse(
-        backend="r2" if settings.r2_enabled else "local",
+        backend=settings.storage_backend,
         total_files=0,  # TODO: implement file counting
         total_size_bytes=0,
         usage_by_user=[],

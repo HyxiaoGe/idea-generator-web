@@ -41,7 +41,7 @@ streamlit run app.py
 - 📜 **History** - View and download previously generated images
 - 🤖 **AI Prompt Generator** - Generate custom prompts with AI ✨ NEW
 - ⭐ **Favorites System** - Save and organize your favorite prompts ✨ NEW
-- ☁️ **Cloud Sync** - Sync prompts to Cloudflare R2 (optional) ✨ NEW
+- ☁️ **Cloud Storage** - Pluggable storage (local/MinIO/OSS)
 
 
 ## Function Details
@@ -105,7 +105,7 @@ The project now includes a powerful AI-driven prompt library system:
 - 📚 **Organized Library** - Browse prompts by category (portrait, landscape, food, etc.)
 - ⭐ **Favorites** - Save and organize your favorite prompts
 - 🔍 **Search** - Find prompts by keywords
-- ☁️ **Cloud Sync** - Optional Cloudflare R2 integration
+- ☁️ **Cloud Storage** - Pluggable storage backend support
 - 🌐 **Multi-language** - Generate prompts in English or Chinese
 
 ### Quick Start with Prompts
