@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # ============ Server ============
     host: str = "0.0.0.0"
-    port: int = 8000
+    port: int = 8888
 
     # ============ Security ============
     secret_key: str = "change-me-in-production-use-a-long-random-string"
@@ -167,6 +167,23 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 60  # requests per minute
     rate_limit_window: int = 60  # seconds
 
+    # ============ Prompt Pipeline ============
+    prompthub_enabled: bool = False
+    prompthub_base_url: str = "https://api.prompthub.dev"
+    prompthub_api_key: str | None = None
+    prompthub_project_id: str | None = None
+    prompthub_cache_ttl: int = 3600  # seconds
+
+    # OpenRouter LLM (for prompt processing)
+    openrouter_api_key: str | None = None
+    openrouter_model: str = "anthropic/claude-sonnet-4-5"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+
+    # Pipeline defaults
+    prompt_auto_translate: bool = True
+    prompt_auto_enhance: bool = False
+    prompt_auto_negative: bool = False
+
     # ============ Defaults ============
     default_language: str = "en"
     default_resolution: str = "1K"
@@ -217,6 +234,15 @@ class Settings(BaseSettings):
     def is_database_configured(self) -> bool:
         """Check if PostgreSQL database is properly configured."""
         return self.database_enabled and bool(self.database_url)
+
+    @property
+    def is_prompt_pipeline_configured(self) -> bool:
+        """Check if prompt pipeline is properly configured."""
+        return (
+            self.prompthub_enabled
+            and bool(self.prompthub_api_key)
+            and bool(self.openrouter_api_key)
+        )
 
     # ============ Provider Helper Methods ============
 

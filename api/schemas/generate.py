@@ -66,6 +66,11 @@ class GenerateImageRequest(BaseModel):
         default_factory=GenerationSettings, description="Generation settings"
     )
     include_thinking: bool = Field(default=False, description="Include model's thinking process")
+    enhance_prompt: bool | None = Field(
+        None, description="AI-enhance the prompt for better results"
+    )
+    generate_negative: bool | None = Field(None, description="Auto-generate negative prompt")
+    template_id: str | None = Field(None, description="Local template ID to apply")
 
     @field_validator("prompt")
     @classmethod
@@ -99,6 +104,11 @@ class GenerateImageResponse(BaseModel):
     provider: str | None = Field(None, description="Provider used (google, openai, bfl, etc)")
     model: str | None = Field(None, description="Model ID used")
     search_sources: str | None = Field(None, description="Search sources for grounded generation")
+    # Prompt pipeline
+    processed_prompt: str | None = Field(
+        None, description="Final processed prompt (if pipeline ran)"
+    )
+    negative_prompt: str | None = Field(None, description="Generated negative prompt")
 
 
 class BatchGenerateRequest(BaseModel):
@@ -162,6 +172,11 @@ class SearchGenerateRequest(BaseModel):
     settings: GenerationSettings = Field(
         default_factory=GenerationSettings, description="Generation settings"
     )
+    enhance_prompt: bool | None = Field(
+        None, description="AI-enhance the prompt for better results"
+    )
+    generate_negative: bool | None = Field(None, description="Auto-generate negative prompt")
+    template_id: str | None = Field(None, description="Local template ID to apply")
 
 
 class CostEstimate(BaseModel):

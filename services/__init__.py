@@ -33,6 +33,10 @@ from .health_check import (
 # Storage services (legacy)
 from .image_storage import ImageStorage, get_storage
 
+# LLM Client & Prompt Pipeline
+from .llm_client import LLMClient, get_llm_client
+from .prompt_pipeline import ProcessedPrompt, PromptPipeline, get_prompt_pipeline
+
 # Provider Router
 from .provider_router import (
     ProviderRouter,
@@ -128,6 +132,12 @@ __all__ = [
     "get_ai_moderator",
     "AuditLogger",
     "get_audit_logger",
+    # LLM Client & Prompt Pipeline
+    "LLMClient",
+    "get_llm_client",
+    "PromptPipeline",
+    "ProcessedPrompt",
+    "get_prompt_pipeline",
     # Multi-provider abstraction
     "MediaType",
     "ProviderCapability",

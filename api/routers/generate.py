@@ -16,7 +16,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
-from api.dependencies import get_image_repository
+from api.dependencies import get_image_repository, get_template_repository
 from api.routers.auth import get_current_user
 from api.schemas.generate import (
     BatchGenerateRequest,
@@ -32,7 +32,7 @@ from api.schemas.generate import (
 from core.config import get_settings
 from core.exceptions import QuotaExceededError
 from core.redis import get_redis
-from database.repositories import ImageRepository
+from database.repositories import ImageRepository, TemplateRepository
 from services import (
     # Multi-provider support
     GenerationRequest as ProviderRequest,
@@ -46,6 +46,7 @@ from services import (
     get_quota_service,
 )
 from services.auth_service import GitHubUser
+from services.prompt_pipeline import get_prompt_pipeline
 from services.storage import get_storage_manager
 
 logger = logging.getLogger(__name__)
@@ -104,10 +105,12 @@ def build_provider_request(
     enable_thinking: bool = False,
     enable_search: bool = False,
     reference_images: list | None = None,
+    negative_prompt: str | None = None,
 ) -> ProviderRequest:
     """Build a unified provider request from API parameters."""
     return ProviderRequest(
         prompt=prompt,
+        negative_prompt=negative_prompt,
         aspect_ratio=settings.aspect_ratio.value,
         resolution=settings.resolution.value,
         safety_level=settings.safety_level.value,
@@ -129,6 +132,7 @@ async def generate_image(
     request: GenerateImageRequest,
     user: GitHubUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
+    template_repo: TemplateRepository | None = Depends(get_template_repository),
     x_api_key: str | None = Header(None, alias="X-API-Key"),
     x_provider: str | None = Header(None, alias="X-Provider"),
     x_model: str | None = Header(None, alias="X-Model"),
@@ -149,14 +153,37 @@ async def generate_image(
     # Check quota
     await check_quota_and_consume(user_id)
 
+    # Run prompt pipeline
+    app_settings = get_settings()
+    if app_settings.is_prompt_pipeline_configured:
+        pipeline = get_prompt_pipeline()
+        processed = await pipeline.process(
+            prompt=request.prompt,
+            enhance=request.enhance_prompt
+            if request.enhance_prompt is not None
+            else app_settings.prompt_auto_enhance,
+            generate_negative=request.generate_negative
+            if request.generate_negative is not None
+            else app_settings.prompt_auto_negative,
+            template_id=request.template_id,
+            template_repo=template_repo,
+        )
+        final_prompt = processed.final
+        negative_prompt = processed.negative_prompt
+    else:
+        final_prompt = request.prompt
+        negative_prompt = None
+        processed = None
+
     # Build provider request
     provider_request = build_provider_request(
-        prompt=request.prompt,
+        prompt=final_prompt,
         settings=request.settings,
         user_id=user_id,
         preferred_provider=x_provider,
         preferred_model=x_model,
         enable_thinking=request.include_thinking,
+        negative_prompt=negative_prompt,
     )
 
     # Use multi-provider router
@@ -267,6 +294,9 @@ async def generate_image(
         # New: provider info
         provider=result.provider,
         model=result.model,
+        # Prompt pipeline
+        processed_prompt=processed.final if processed else None,
+        negative_prompt=negative_prompt,
     )
 
 
@@ -354,13 +384,31 @@ async def process_batch_generation(
     results = []
     errors = []
 
+    # Run pipeline on each prompt if configured
+    app_settings = get_settings()
+    pipeline_configured = app_settings.is_prompt_pipeline_configured
+
     for i, prompt in enumerate(prompts):
         try:
             # Update current prompt
             await redis.hset(task_key, "current_prompt", prompt)
 
+            # Apply prompt pipeline
+            final_prompt = prompt
+            if pipeline_configured:
+                try:
+                    pipeline = get_prompt_pipeline()
+                    processed = await pipeline.process(
+                        prompt=prompt,
+                        enhance=app_settings.prompt_auto_enhance,
+                        generate_negative=False,
+                    )
+                    final_prompt = processed.final
+                except Exception as e:
+                    logger.warning(f"Batch pipeline failed for prompt {i + 1}: {e}")
+
             result = generator.generate(
-                prompt=prompt,
+                prompt=final_prompt,
                 aspect_ratio=settings.aspect_ratio.value,
                 resolution=settings.resolution.value,
                 safety_level=settings.safety_level.value,
@@ -441,6 +489,7 @@ async def search_grounded_generate(
     request: SearchGenerateRequest,
     user: GitHubUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
+    template_repo: TemplateRepository | None = Depends(get_template_repository),
     x_api_key: str | None = Header(None, alias="X-API-Key"),
     x_provider: str | None = Header(None, alias="X-Provider"),
     x_model: str | None = Header(None, alias="X-Model"),
@@ -456,14 +505,37 @@ async def search_grounded_generate(
     # Check quota
     await check_quota_and_consume(user_id)
 
+    # Run prompt pipeline
+    app_settings = get_settings()
+    if app_settings.is_prompt_pipeline_configured:
+        pipeline = get_prompt_pipeline()
+        processed = await pipeline.process(
+            prompt=request.prompt,
+            enhance=request.enhance_prompt
+            if request.enhance_prompt is not None
+            else app_settings.prompt_auto_enhance,
+            generate_negative=request.generate_negative
+            if request.generate_negative is not None
+            else app_settings.prompt_auto_negative,
+            template_id=request.template_id,
+            template_repo=template_repo,
+        )
+        final_prompt = processed.final
+        negative_prompt = processed.negative_prompt
+    else:
+        final_prompt = request.prompt
+        negative_prompt = None
+        processed = None
+
     # Build provider request with search enabled
     provider_request = build_provider_request(
-        prompt=request.prompt,
+        prompt=final_prompt,
         settings=request.settings,
         user_id=user_id,
         preferred_provider=x_provider or "google",  # Search only works with Google
         preferred_model=x_model,
         enable_search=True,
+        negative_prompt=negative_prompt,
     )
 
     # Use multi-provider router
@@ -566,6 +638,9 @@ async def search_grounded_generate(
         created_at=datetime.now(),
         provider=result.provider,
         model=result.model,
+        # Prompt pipeline
+        processed_prompt=processed.final if processed else None,
+        negative_prompt=negative_prompt,
     )
 
 

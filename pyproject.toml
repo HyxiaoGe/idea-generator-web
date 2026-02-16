@@ -42,6 +42,7 @@ dependencies = [
     "Pillow>=10.0.0",
     # Cloud Storage
     "boto3>=1.34.0",
+    # Prompt Pipeline (uses self-hosted PromptHub API via httpx)
     # Utilities
     "python-dotenv>=1.0.0",
     "aiofiles>=25.1.0",
