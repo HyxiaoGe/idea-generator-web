@@ -187,7 +187,7 @@ DB_MAX_OVERFLOW             # Max overflow connections (default: 10)
 | POST | `/api/auth/api-keys` | Create API key |
 | DELETE | `/api/auth/api-keys/{id}` | Delete API key |
 
-### User Settings
+### User Settings (powered by prefhub)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/settings` | Get user settings |
@@ -284,6 +284,16 @@ DB_MAX_OVERFLOW             # Max overflow connections (default: 10)
 - `/api/health` - Health checks (basic, detailed, ready, live)
 - `/api/quota` - Quota management (status, check, config)
 - `/api/history` - Generation history
+
+## Shared Preferences (prefhub)
+
+User preferences use the [prefhub](https://github.com/HyxiaoGe/prefhub) shared library. Universal fields (language, theme, timezone, notifications) come from `prefhub.schemas.preferences.BasePreferences`; domain-specific fields are defined locally.
+
+- **Schema**: `api/schemas/settings.py` — `UserPreferences(BasePreferences)` adds `GenerationDefaults` and `ProviderPreferences`
+- **Service**: `services/preferences_service.py` — `IdeaGeneratorPreferencesService` implements `_load_raw`/`_save_raw` via `SettingsRepository`
+- **Storage**: Pattern B — `user_settings.preferences` JSONB column (no migration needed, same column)
+- **Merge logic**: Uses `prefhub.services.preferences.deep_merge` for incremental updates
+- **Enums**: `Language`, `Theme`, `HourCycle` are imported from `prefhub.schemas`, not defined locally
 
 ## Code Patterns
 
