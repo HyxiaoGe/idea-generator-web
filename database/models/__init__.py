@@ -12,7 +12,10 @@ from .notification import Notification
 from .project import Project, ProjectImage
 from .quota import QuotaUsage
 from .settings import UserSettings
-from .template import Template
+from .template import PromptTemplate
+from .template_favorite import UserTemplateFavorite
+from .template_like import UserTemplateLike
+from .template_usage import UserTemplateUsage
 from .user import User
 
 __all__ = [
@@ -32,7 +35,10 @@ __all__ = [
     "ProviderHealthLog",
     "Favorite",
     "FavoriteFolder",
-    "Template",
+    "PromptTemplate",
+    "UserTemplateLike",
+    "UserTemplateFavorite",
+    "UserTemplateUsage",
     "Project",
     "ProjectImage",
     "Notification",

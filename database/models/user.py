@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from .project import Project
     from .quota import QuotaUsage
     from .settings import UserSettings
-    from .template import Template
+    from .template import PromptTemplate
 
 
 class User(Base, TimestampMixin):
@@ -126,10 +126,9 @@ class User(Base, TimestampMixin):
         back_populates="user",
         cascade="all, delete-orphan",
     )
-    templates: Mapped[list["Template"]] = relationship(
-        "Template",
-        back_populates="user",
-        cascade="all, delete-orphan",
+    templates: Mapped[list["PromptTemplate"]] = relationship(
+        "PromptTemplate",
+        back_populates="creator",
     )
     projects: Mapped[list["Project"]] = relationship(
         "Project",

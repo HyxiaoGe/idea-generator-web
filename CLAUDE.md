@@ -34,7 +34,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   ├── quota.py          │        ├── quota.py               │
 │   ├── chat.py           │        ├── chat.py                │
 │   ├── history.py        │        ├── history.py             │
-│   └── prompts.py        │        └── prompts.py             │
+│   ├── templates.py      │        ├── templates.py           │
+│   └── ...               │        └── ...                    │
 ├─────────────────────────┴───────────────────────────────────┤
 │                    core/ (Configuration)                     │
 │   ├── config.py          - Pydantic Settings                │
@@ -49,12 +50,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   │   ├── image.py       - GeneratedImage (history)         │
 │   │   ├── chat.py        - ChatSession, ChatMessage         │
 │   │   ├── quota.py       - QuotaUsage                       │
-│   │   ├── prompt.py      - Prompt, UserFavoritePrompt       │
+│   │   ├── template.py    - PromptTemplate                   │
+│   │   ├── template_like.py - UserTemplateLike               │
+│   │   ├── template_favorite.py - UserTemplateFavorite       │
+│   │   ├── template_usage.py - UserTemplateUsage             │
 │   │   └── audit.py       - AuditLog, ProviderHealthLog      │
 │   ├── repositories/      - Data access layer                │
 │   │   ├── user_repo.py   - User CRUD                        │
 │   │   ├── image_repo.py  - Image history CRUD               │
 │   │   ├── chat_repo.py   - Chat session CRUD                │
+│   │   ├── template_repo.py - Template library CRUD          │
 │   │   └── ...                                               │
 │   └── migrations/        - Alembic migrations               │
 ├─────────────────────────────────────────────────────────────┤
@@ -72,7 +77,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   ├── chat_session.py    - Multi-turn conversations         │
 │   ├── quota_service.py   - Per-user daily quota + cooldown   │
 │   ├── content_filter.py  - Content moderation               │
-│   └── ai_content_moderator.py - AI-based moderation         │
+│   ├── ai_content_moderator.py - AI-based moderation         │
+│   └── template_generator.py - AI template generation        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -199,16 +205,24 @@ DB_MAX_OVERFLOW             # Max overflow connections (default: 10)
 | GET | `/api/favorites/folders` | List folders |
 | POST | `/api/favorites/folders` | Create folder |
 
-### Templates
+### Templates (Prompt Library)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/templates` | List templates |
-| POST | `/api/templates` | Create template |
-| GET | `/api/templates/{id}` | Get template |
-| PUT | `/api/templates/{id}` | Update template |
-| DELETE | `/api/templates/{id}` | Delete template |
-| POST | `/api/templates/{id}/use` | Use template |
-| GET | `/api/templates/public` | Public templates |
+| GET | `/api/templates` | List templates (filter/search/sort/paginate) |
+| GET | `/api/templates/categories` | Get categories with counts |
+| GET | `/api/templates/favorites` | User's favorited templates |
+| GET | `/api/templates/recommended` | Recommended templates |
+| POST | `/api/templates` | Create template (admin) |
+| GET | `/api/templates/{id}` | Get template detail |
+| PUT | `/api/templates/{id}` | Update template (admin) |
+| DELETE | `/api/templates/{id}` | Soft-delete template (admin) |
+| POST | `/api/templates/{id}/use` | Record template usage |
+| POST | `/api/templates/{id}/like` | Toggle like |
+| POST | `/api/templates/{id}/favorite` | Toggle favorite |
+| POST | `/api/templates/generate` | AI generate templates (admin) |
+| POST | `/api/templates/batch-generate` | AI batch generate (admin) |
+| POST | `/api/templates/{id}/enhance` | AI enhance prompt (admin) |
+| POST | `/api/templates/{id}/variants` | AI generate variants (admin) |
 
 ### Projects
 | Method | Endpoint | Description |
@@ -270,7 +284,6 @@ DB_MAX_OVERFLOW             # Max overflow connections (default: 10)
 - `/api/health` - Health checks (basic, detailed, ready, live)
 - `/api/quota` - Quota management (status, check, config)
 - `/api/history` - Generation history
-- `/api/prompts` - Prompt library
 
 ## Code Patterns
 

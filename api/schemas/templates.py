@@ -1,261 +1,198 @@
 """
-Pydantic schemas for templates API.
+Pydantic schemas for the prompt template library API.
 """
 
 from datetime import datetime
-from enum import StrEnum
-from typing import Any
 
 from pydantic import BaseModel, Field
 
-
-class VariableType(StrEnum):
-    """Template variable types."""
-
-    STRING = "string"
-    NUMBER = "number"
-    ENUM = "enum"
-    BOOLEAN = "boolean"
-
-
-class TemplateVariable(BaseModel):
-    """Definition of a template variable."""
-
-    name: str = Field(
-        ...,
-        min_length=1,
-        max_length=50,
-        description="Variable name (used in {{name}} placeholders)",
-    )
-    type: VariableType = Field(
-        default=VariableType.STRING,
-        description="Variable type",
-    )
-    required: bool = Field(
-        default=True,
-        description="Whether the variable is required",
-    )
-    default: str | None = Field(
-        default=None,
-        description="Default value",
-    )
-    description: str | None = Field(
-        default=None,
-        max_length=200,
-        description="Variable description for users",
-    )
-    options: list[str] | None = Field(
-        default=None,
-        description="Valid options (for enum type)",
-    )
-
-
-class TemplateSettings(BaseModel):
-    """Default generation settings for a template."""
-
-    aspect_ratio: str | None = Field(
-        default=None,
-        description="Default aspect ratio (e.g., '16:9')",
-    )
-    resolution: str | None = Field(
-        default=None,
-        description="Default resolution (e.g., '2K')",
-    )
-    provider: str | None = Field(
-        default=None,
-        description="Preferred provider",
-    )
-
-
-class TemplateInfo(BaseModel):
-    """Template information."""
-
-    id: str = Field(..., description="Template ID")
-    name: str = Field(..., description="Template name")
-    description: str | None = Field(None, description="Template description")
-    prompt_template: str = Field(..., description="Prompt template with {{variables}}")
-    variables: list[TemplateVariable] = Field(
-        default_factory=list,
-        description="Variable definitions",
-    )
-    default_settings: TemplateSettings = Field(
-        default_factory=TemplateSettings,
-        description="Default generation settings",
-    )
-    category: str | None = Field(None, description="Template category")
-    tags: list[str] | None = Field(None, description="Template tags")
-    is_public: bool = Field(default=False, description="Whether template is public")
-    is_owner: bool = Field(default=False, description="Whether current user owns it")
-    use_count: int = Field(default=0, description="Usage count")
-    preview_url: str | None = Field(None, description="Preview image URL")
-    created_at: datetime = Field(..., description="Creation timestamp")
-    updated_at: datetime = Field(..., description="Last update timestamp")
+# ============================================================================
+# Response Schemas
+# ============================================================================
 
 
 class TemplateListItem(BaseModel):
-    """Abbreviated template info for list views."""
+    """Compact template for list views."""
 
-    id: str = Field(..., description="Template ID")
-    name: str = Field(..., description="Template name")
-    description: str | None = Field(None, description="Template description")
-    category: str | None = Field(None, description="Template category")
-    tags: list[str] | None = Field(None, description="Template tags")
-    is_public: bool = Field(default=False, description="Whether template is public")
-    is_owner: bool = Field(default=False, description="Whether current user owns it")
-    use_count: int = Field(default=0, description="Usage count")
-    preview_url: str | None = Field(None, description="Preview image URL")
+    id: str
+    display_name_en: str
+    display_name_zh: str
+    preview_image_url: str | None = None
+    category: str
+    tags: list[str] = Field(default_factory=list)
+    difficulty: str
+    use_count: int
+    like_count: int
+    favorite_count: int
+    source: str
+    trending_score: float
+    created_at: datetime
 
-
-# ============ Request/Response Schemas ============
-
-
-class CreateTemplateRequest(BaseModel):
-    """Request for creating a template."""
-
-    name: str = Field(
-        ...,
-        min_length=1,
-        max_length=200,
-        description="Template name",
-    )
-    description: str | None = Field(
-        default=None,
-        max_length=1000,
-        description="Template description",
-    )
-    prompt_template: str = Field(
-        ...,
-        min_length=1,
-        max_length=10000,
-        description="Prompt template with {{variable}} placeholders",
-    )
-    variables: list[TemplateVariable] = Field(
-        default_factory=list,
-        description="Variable definitions",
-    )
-    default_settings: TemplateSettings | None = Field(
-        default=None,
-        description="Default generation settings",
-    )
-    category: str | None = Field(
-        default=None,
-        max_length=50,
-        description="Template category",
-    )
-    tags: list[str] | None = Field(
-        default=None,
-        max_items=10,
-        description="Template tags",
-    )
-    is_public: bool = Field(
-        default=False,
-        description="Make template publicly visible",
-    )
+    model_config = {"from_attributes": True}
 
 
-class CreateTemplateResponse(BaseModel):
-    """Response for creating a template."""
+class TemplateDetailResponse(BaseModel):
+    """Full template detail."""
 
-    success: bool = True
-    template: TemplateInfo
+    id: str
+    prompt_text: str
+    display_name_en: str
+    display_name_zh: str
+    description_en: str | None = None
+    description_zh: str | None = None
+    preview_image_url: str | None = None
+    category: str
+    tags: list[str] = Field(default_factory=list)
+    style_keywords: list[str] = Field(default_factory=list)
+    parameters: dict = Field(default_factory=dict)
+    difficulty: str
+    language: str
+    source: str
+    use_count: int
+    like_count: int
+    favorite_count: int
+    trending_score: float
+    is_active: bool
+    created_by: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
+    # Computed at runtime per user
+    is_liked: bool = False
+    is_favorited: bool = False
 
-class ListTemplatesResponse(BaseModel):
-    """Response for listing templates."""
-
-    templates: list[TemplateListItem] = Field(default_factory=list)
-    total: int = Field(..., description="Total number of templates")
-    limit: int = Field(..., description="Items per page")
-    offset: int = Field(..., description="Current offset")
-    has_more: bool = Field(..., description="Whether more items exist")
-    categories: list[str] = Field(
-        default_factory=list,
-        description="Available categories",
-    )
-
-
-class GetTemplateResponse(BaseModel):
-    """Response for getting a template."""
-
-    template: TemplateInfo
-
-
-class UpdateTemplateRequest(BaseModel):
-    """Request for updating a template."""
-
-    name: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=200,
-        description="Template name",
-    )
-    description: str | None = Field(
-        default=None,
-        max_length=1000,
-        description="Template description",
-    )
-    prompt_template: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=10000,
-        description="Prompt template",
-    )
-    variables: list[TemplateVariable] | None = Field(
-        default=None,
-        description="Variable definitions",
-    )
-    default_settings: TemplateSettings | None = Field(
-        default=None,
-        description="Default generation settings",
-    )
-    category: str | None = Field(
-        default=None,
-        max_length=50,
-        description="Template category",
-    )
-    tags: list[str] | None = Field(
-        default=None,
-        max_items=10,
-        description="Template tags",
-    )
-    is_public: bool | None = Field(
-        default=None,
-        description="Make template publicly visible",
-    )
+    model_config = {"from_attributes": True}
 
 
-class UpdateTemplateResponse(BaseModel):
-    """Response for updating a template."""
-
-    success: bool = True
-    template: TemplateInfo
+# ============================================================================
+# Request Schemas
+# ============================================================================
 
 
-class DeleteTemplateResponse(BaseModel):
-    """Response for deleting a template."""
+class TemplateCreateRequest(BaseModel):
+    """Request to create a template."""
 
-    success: bool = True
-    message: str = Field(default="Template deleted successfully")
-
-
-class UseTemplateRequest(BaseModel):
-    """Request for using a template to generate an image."""
-
-    variables: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Variable values to fill in the template",
-    )
-    settings_override: TemplateSettings | None = Field(
-        default=None,
-        description="Override default settings",
-    )
+    prompt_text: str
+    display_name_en: str
+    display_name_zh: str
+    description_en: str | None = None
+    description_zh: str | None = None
+    preview_image_url: str | None = None
+    category: str
+    tags: list[str] = Field(default_factory=list)
+    style_keywords: list[str] = Field(default_factory=list)
+    parameters: dict = Field(default_factory=dict)
+    difficulty: str = "beginner"
+    language: str = "bilingual"
+    source: str = "curated"
 
 
-class UseTemplateResponse(BaseModel):
-    """Response for using a template."""
+class TemplateUpdateRequest(BaseModel):
+    """Request to update a template (all fields optional)."""
 
-    prompt: str = Field(..., description="Generated prompt with variables filled in")
-    settings: TemplateSettings = Field(
-        ...,
-        description="Settings to use for generation",
-    )
+    prompt_text: str | None = None
+    display_name_en: str | None = None
+    display_name_zh: str | None = None
+    description_en: str | None = None
+    description_zh: str | None = None
+    preview_image_url: str | None = None
+    category: str | None = None
+    tags: list[str] | None = None
+    style_keywords: list[str] | None = None
+    parameters: dict | None = None
+    difficulty: str | None = None
+    language: str | None = None
+    source: str | None = None
+    is_active: bool | None = None
+
+
+# ============================================================================
+# Utility Schemas
+# ============================================================================
+
+
+class CategoryItem(BaseModel):
+    """Category with template count."""
+
+    category: str
+    count: int
+
+
+class ToggleResponse(BaseModel):
+    """Response for like/favorite toggle."""
+
+    action: str  # "added" or "removed"
+    count: int
+
+
+# ============================================================================
+# Paginated Response
+# ============================================================================
+
+
+class TemplateListResponse(BaseModel):
+    """Paginated list of templates."""
+
+    items: list[TemplateListItem]
+    total: int
+    page: int
+    page_size: int
+
+
+# ============================================================================
+# AI Generation Schemas
+# ============================================================================
+
+
+class GenerateRequest(BaseModel):
+    """Request to generate templates for a single category."""
+
+    category: str
+    count: int = Field(default=10, ge=1, le=50)
+    styles: list[str] | None = None
+
+
+class BatchGenerateRequest(BaseModel):
+    """Request to batch-generate templates across categories."""
+
+    categories: list[str] | None = None  # None = all categories
+    count_per_category: int = Field(default=10, ge=1, le=50)
+
+
+class VariantRequest(BaseModel):
+    """Request to generate style variants of a template."""
+
+    target_styles: list[str]
+
+
+class GenerateStats(BaseModel):
+    """Stats for a single category generation run."""
+
+    category: str
+    generated: int
+    passed_quality: int
+    saved: int
+
+
+class GenerateResponse(BaseModel):
+    """Response for template generation (single or batch)."""
+
+    stats: list[GenerateStats]
+    total_generated: int
+    total_saved: int
+
+
+class EnhanceResponse(BaseModel):
+    """Response for template enhancement."""
+
+    template_id: str
+    original_prompt: str
+    enhanced_prompt: str
+    improvements: list[str]
+
+
+class VariantResponse(BaseModel):
+    """Response for style variant generation."""
+
+    source_template_id: str
+    variants_created: list[TemplateDetailResponse]

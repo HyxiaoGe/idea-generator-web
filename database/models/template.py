@@ -1,11 +1,15 @@
 """
-Template model for reusable prompt templates.
+PromptTemplate model for the prompt template library.
+
+Replaces the old simple Template model with a full-featured prompt library system
+including bilingual support, engagement metrics, and trending scores.
 """
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -16,14 +20,37 @@ if TYPE_CHECKING:
     from .user import User
 
 
-class Template(Base, TimestampMixin):
+class PromptTemplate(Base, TimestampMixin):
     """
-    Template model for reusable prompt templates.
+    Prompt template for the image generation template library.
 
-    Templates contain prompt patterns with variables that can be filled in.
+    Features bilingual display names, engagement tracking (likes, favorites, usage),
+    trending score computation, and soft-delete support.
     """
 
-    __tablename__ = "templates"
+    __tablename__ = "prompt_templates"
+    __table_args__ = (
+        Index(
+            "ix_prompt_templates_category",
+            "category",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index(
+            "ix_prompt_templates_trending",
+            "trending_score",
+            postgresql_where=text("deleted_at IS NULL AND is_active = TRUE"),
+        ),
+        Index(
+            "ix_prompt_templates_tags",
+            "tags",
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_prompt_templates_use_count",
+            "use_count",
+            postgresql_where=text("deleted_at IS NULL AND is_active = TRUE"),
+        ),
+    )
 
     # Primary key
     id: Mapped[UUID] = mapped_column(
@@ -32,95 +59,76 @@ class Template(Base, TimestampMixin):
         default=uuid4,
     )
 
-    # Owner (None for system templates)
-    user_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=True,
-        index=True,
-    )
+    # Core prompt content
+    prompt_text: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Template name
-    name: Mapped[str] = mapped_column(
-        String(200),
-        nullable=False,
-    )
+    # Bilingual display
+    display_name_en: Mapped[str] = mapped_column(String(200), nullable=False)
+    display_name_zh: Mapped[str] = mapped_column(String(200), nullable=False)
+    description_en: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Description
-    description: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
-    )
+    # Preview
+    preview_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
-    # Prompt template with {{variable}} placeholders
-    prompt_template: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-    )
-
-    # Variable definitions
-    # [{"name": "product_name", "type": "string", "required": true, "default": ""}]
-    variables: Mapped[list[dict]] = mapped_column(
-        JSONB,
+    # Classification
+    category: Mapped[str] = mapped_column(String(50), nullable=False)
+    tags: Mapped[list[str]] = mapped_column(
+        ARRAY(String),
         default=list,
+        server_default=text("'{}'::varchar[]"),
         nullable=False,
-        server_default="[]",
+    )
+    style_keywords: Mapped[list[str]] = mapped_column(
+        ARRAY(String),
+        default=list,
+        server_default=text("'{}'::varchar[]"),
+        nullable=False,
     )
 
-    # Default generation settings
-    # {"aspect_ratio": "1:1", "resolution": "2K", "provider": "google"}
-    default_settings: Mapped[dict] = mapped_column(
+    # Parameters / metadata
+    parameters: Mapped[dict] = mapped_column(
         JSONB,
         default=dict,
-        nullable=False,
-        server_default="{}",
-    )
-
-    # Category for organization
-    category: Mapped[str | None] = mapped_column(
-        String(50),
-        nullable=True,
-        index=True,
-    )
-
-    # Tags for search
-    tags: Mapped[list[str] | None] = mapped_column(
-        ARRAY(String(50)),
-        nullable=True,
-    )
-
-    # Visibility
-    is_public: Mapped[bool] = mapped_column(
-        Boolean,
-        default=False,
+        server_default=text("'{}'::jsonb"),
         nullable=False,
     )
+    difficulty: Mapped[str] = mapped_column(String(20), default="beginner", nullable=False)
+    language: Mapped[str] = mapped_column(String(10), default="bilingual", nullable=False)
+    source: Mapped[str] = mapped_column(String(20), default="curated", nullable=False)
 
-    # Usage tracking
+    # Engagement metrics
     use_count: Mapped[int] = mapped_column(
-        Integer,
-        default=0,
-        nullable=False,
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    like_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    favorite_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    trending_score: Mapped[float] = mapped_column(
+        Float, default=0.0, server_default=text("0.0"), nullable=False
     )
 
-    # Thumbnail/preview image URL
-    preview_url: Mapped[str | None] = mapped_column(
-        Text,
+    # Status
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true"), nullable=False
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Creator (FK to users, nullable for system/seed templates)
+    created_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
 
     # Relationship
-    user: Mapped["User | None"] = relationship(
+    creator: Mapped["User | None"] = relationship(
         "User",
         back_populates="templates",
     )
 
     def __repr__(self) -> str:
-        return f"<Template(id={self.id}, name={self.name})>"
-
-
-# Indexes
-Index("idx_templates_user_id", Template.user_id)
-Index("idx_templates_category", Template.category)
-Index("idx_templates_is_public", Template.is_public)
-Index("idx_templates_use_count", Template.use_count.desc())
+        return f"<PromptTemplate(id={self.id}, name={self.display_name_en})>"

@@ -1,250 +1,455 @@
 """
-Template repository for template CRUD operations.
+Template repository for the prompt template library.
+
+Provides data access for PromptTemplate, likes, favorites, and usage tracking.
 """
 
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import desc, func, or_, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import Template
+from database.models.template import PromptTemplate
+from database.models.template_favorite import UserTemplateFavorite
+from database.models.template_like import UserTemplateLike
+from database.models.template_usage import UserTemplateUsage
 
 
 class TemplateRepository:
-    """Repository for Template model operations."""
+    """Repository for PromptTemplate and related models."""
 
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_by_id(self, template_id: UUID) -> Template | None:
-        """Get template by ID."""
-        result = await self.session.execute(select(Template).where(Template.id == template_id))
+    # ------------------------------------------------------------------
+    # Core CRUD
+    # ------------------------------------------------------------------
+
+    async def get_by_id(self, template_id: UUID) -> PromptTemplate | None:
+        """Get a template by ID (excludes soft-deleted)."""
+        result = await self.session.execute(
+            select(PromptTemplate).where(
+                PromptTemplate.id == template_id,
+                PromptTemplate.deleted_at.is_(None),
+            )
+        )
         return result.scalar_one_or_none()
 
     async def create(
         self,
-        name: str,
-        prompt_template: str,
-        user_id: UUID | None = None,
-        description: str | None = None,
-        variables: list[dict] | None = None,
-        default_settings: dict | None = None,
-        category: str | None = None,
+        prompt_text: str,
+        display_name_en: str,
+        display_name_zh: str,
+        category: str,
+        description_en: str | None = None,
+        description_zh: str | None = None,
+        preview_image_url: str | None = None,
         tags: list[str] | None = None,
-        is_public: bool = False,
-        preview_url: str | None = None,
-    ) -> Template:
+        style_keywords: list[str] | None = None,
+        parameters: dict | None = None,
+        difficulty: str = "beginner",
+        language: str = "bilingual",
+        source: str = "curated",
+        created_by: UUID | None = None,
+    ) -> PromptTemplate:
         """Create a new template."""
-        template = Template(
-            user_id=user_id,
-            name=name,
-            description=description,
-            prompt_template=prompt_template,
-            variables=variables or [],
-            default_settings=default_settings or {},
+        template = PromptTemplate(
+            prompt_text=prompt_text,
+            display_name_en=display_name_en,
+            display_name_zh=display_name_zh,
             category=category,
-            tags=tags,
-            is_public=is_public,
-            preview_url=preview_url,
+            description_en=description_en,
+            description_zh=description_zh,
+            preview_image_url=preview_image_url,
+            tags=tags or [],
+            style_keywords=style_keywords or [],
+            parameters=parameters or {},
+            difficulty=difficulty,
+            language=language,
+            source=source,
+            created_by=created_by,
         )
         self.session.add(template)
         await self.session.flush()
         return template
 
-    async def list_by_user(
-        self,
-        user_id: UUID,
-        category: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> list[Template]:
-        """List templates owned by a user."""
-        query = select(Template).where(Template.user_id == user_id)
-
-        if category:
-            query = query.where(Template.category == category)
-
-        query = query.order_by(desc(Template.created_at)).limit(limit).offset(offset)
-
-        result = await self.session.execute(query)
-        return list(result.scalars().all())
-
-    async def list_public(
-        self,
-        category: str | None = None,
-        search: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> list[Template]:
-        """List public templates."""
-        query = select(Template).where(Template.is_public)
-
-        if category:
-            query = query.where(Template.category == category)
-
-        if search:
-            search_pattern = f"%{search}%"
-            query = query.where(
-                or_(
-                    Template.name.ilike(search_pattern),
-                    Template.description.ilike(search_pattern),
-                )
-            )
-
-        # Sort by popularity (use_count) then recency
-        query = (
-            query.order_by(desc(Template.use_count), desc(Template.created_at))
-            .limit(limit)
-            .offset(offset)
-        )
-
-        result = await self.session.execute(query)
-        return list(result.scalars().all())
-
-    async def list_accessible(
-        self,
-        user_id: UUID | None,
-        category: str | None = None,
-        search: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> list[Template]:
-        """List templates accessible to a user (own + public)."""
-        if user_id:
-            query = select(Template).where(
-                or_(
-                    Template.user_id == user_id,
-                    Template.is_public,
-                )
-            )
-        else:
-            query = select(Template).where(Template.is_public)
-
-        if category:
-            query = query.where(Template.category == category)
-
-        if search:
-            search_pattern = f"%{search}%"
-            query = query.where(
-                or_(
-                    Template.name.ilike(search_pattern),
-                    Template.description.ilike(search_pattern),
-                )
-            )
-
-        query = query.order_by(desc(Template.created_at)).limit(limit).offset(offset)
-
-        result = await self.session.execute(query)
-        return list(result.scalars().all())
-
-    async def count_by_user(self, user_id: UUID) -> int:
-        """Count templates owned by a user."""
-        result = await self.session.execute(
-            select(func.count()).select_from(Template).where(Template.user_id == user_id)
-        )
-        return result.scalar_one()
-
-    async def count_public(self) -> int:
-        """Count public templates."""
-        result = await self.session.execute(
-            select(func.count()).select_from(Template).where(Template.is_public)
-        )
-        return result.scalar_one()
-
     async def update(
         self,
         template_id: UUID,
-        name: str | None = None,
-        description: str | None = None,
-        prompt_template: str | None = None,
-        variables: list[dict] | None = None,
-        default_settings: dict | None = None,
-        category: str | None = None,
-        tags: list[str] | None = None,
-        is_public: bool | None = None,
-        preview_url: str | None = None,
-    ) -> Template | None:
-        """Update a template."""
+        **kwargs,
+    ) -> PromptTemplate | None:
+        """Update a template with arbitrary fields (partial update)."""
         template = await self.get_by_id(template_id)
         if not template:
             return None
 
-        if name is not None:
-            template.name = name
-        if description is not None:
-            template.description = description
-        if prompt_template is not None:
-            template.prompt_template = prompt_template
-        if variables is not None:
-            template.variables = variables
-        if default_settings is not None:
-            template.default_settings = default_settings
-        if category is not None:
-            template.category = category
-        if tags is not None:
-            template.tags = tags
-        if is_public is not None:
-            template.is_public = is_public
-        if preview_url is not None:
-            template.preview_url = preview_url
+        for key, value in kwargs.items():
+            if hasattr(template, key):
+                setattr(template, key, value)
 
         await self.session.flush()
         return template
 
-    async def increment_use_count(self, template_id: UUID) -> None:
-        """Increment the use count for a template."""
-        await self.session.execute(
-            update(Template)
-            .where(Template.id == template_id)
-            .values(use_count=Template.use_count + 1)
+    async def soft_delete(self, template_id: UUID) -> bool:
+        """Soft-delete a template by setting deleted_at."""
+        template = await self.get_by_id(template_id)
+        if not template:
+            return False
+
+        template.deleted_at = datetime.now(datetime.UTC)
+        await self.session.flush()
+        return True
+
+    # ------------------------------------------------------------------
+    # Listing / filtering / search
+    # ------------------------------------------------------------------
+
+    async def list_templates(
+        self,
+        category: str | None = None,
+        tags: list[str] | None = None,
+        difficulty: str | None = None,
+        search: str | None = None,
+        sort_by: str = "trending",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[PromptTemplate], int]:
+        """List templates with multi-dimensional filtering, search, and sorting."""
+        query = select(PromptTemplate).where(
+            PromptTemplate.deleted_at.is_(None),
+            PromptTemplate.is_active.is_(True),
         )
+
+        if category:
+            query = query.where(PromptTemplate.category == category)
+
+        if tags:
+            query = query.where(PromptTemplate.tags.overlap(tags))
+
+        if difficulty:
+            query = query.where(PromptTemplate.difficulty == difficulty)
+
+        if search:
+            pattern = f"%{search}%"
+            query = query.where(
+                PromptTemplate.display_name_en.ilike(pattern)
+                | PromptTemplate.display_name_zh.ilike(pattern)
+                | PromptTemplate.prompt_text.ilike(pattern)
+            )
+
+        # Total count
+        count_query = select(func.count()).select_from(query.subquery())
+        total = await self.session.scalar(count_query) or 0
+
+        # Sorting
+        sort_map = {
+            "trending": PromptTemplate.trending_score.desc(),
+            "newest": PromptTemplate.created_at.desc(),
+            "most_used": PromptTemplate.use_count.desc(),
+            "most_liked": PromptTemplate.like_count.desc(),
+        }
+        order = sort_map.get(sort_by, PromptTemplate.trending_score.desc())
+        query = query.order_by(order)
+
+        # Pagination
+        query = query.offset(offset).limit(limit)
+        result = await self.session.execute(query)
+        templates = list(result.scalars().all())
+
+        return templates, total
+
+    # ------------------------------------------------------------------
+    # Categories
+    # ------------------------------------------------------------------
+
+    async def get_categories_with_count(self) -> list[tuple[str, int]]:
+        """Get all categories with their active template counts."""
+        query = (
+            select(PromptTemplate.category, func.count().label("count"))
+            .where(
+                PromptTemplate.deleted_at.is_(None),
+                PromptTemplate.is_active.is_(True),
+            )
+            .group_by(PromptTemplate.category)
+            .order_by(func.count().desc())
+        )
+        result = await self.session.execute(query)
+        return [(row[0], row[1]) for row in result.all()]
+
+    # ------------------------------------------------------------------
+    # Like / Favorite toggles
+    # ------------------------------------------------------------------
+
+    async def is_liked(self, template_id: UUID, user_id: UUID) -> bool:
+        """Check if a user has liked a template."""
+        result = await self.session.execute(
+            select(UserTemplateLike).where(
+                UserTemplateLike.user_id == user_id,
+                UserTemplateLike.template_id == template_id,
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def is_favorited(self, template_id: UUID, user_id: UUID) -> bool:
+        """Check if a user has favorited a template."""
+        result = await self.session.execute(
+            select(UserTemplateFavorite).where(
+                UserTemplateFavorite.user_id == user_id,
+                UserTemplateFavorite.template_id == template_id,
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def toggle_like(self, template_id: UUID, user_id: UUID) -> tuple[str, int]:
+        """Toggle like on a template. Returns (action, new_count)."""
+        template = await self.get_by_id(template_id)
+        if not template:
+            raise ValueError("Template not found")
+
+        existing = await self.session.execute(
+            select(UserTemplateLike).where(
+                UserTemplateLike.user_id == user_id,
+                UserTemplateLike.template_id == template_id,
+            )
+        )
+
+        if existing.scalar_one_or_none():
+            # Remove like
+            await self.session.execute(
+                delete(UserTemplateLike).where(
+                    UserTemplateLike.user_id == user_id,
+                    UserTemplateLike.template_id == template_id,
+                )
+            )
+            await self.session.execute(
+                update(PromptTemplate)
+                .where(PromptTemplate.id == template_id)
+                .values(like_count=PromptTemplate.like_count - 1)
+            )
+            action = "removed"
+        else:
+            # Add like
+            self.session.add(UserTemplateLike(user_id=user_id, template_id=template_id))
+            await self.session.execute(
+                update(PromptTemplate)
+                .where(PromptTemplate.id == template_id)
+                .values(like_count=PromptTemplate.like_count + 1)
+            )
+            action = "added"
+
         await self.session.flush()
 
-    async def delete(self, template_id: UUID) -> bool:
-        """Delete a template."""
-        template = await self.get_by_id(template_id)
-        if template:
-            await self.session.delete(template)
-            await self.session.flush()
-            return True
-        return False
+        # Refresh trending score
+        await self.refresh_trending_score(template_id)
 
-    async def delete_by_user(self, user_id: UUID, template_id: UUID) -> bool:
-        """Delete a template owned by a specific user."""
-        result = await self.session.execute(
-            select(Template).where(
-                Template.id == template_id,
-                Template.user_id == user_id,
+        await self.session.refresh(template)
+        return action, template.like_count
+
+    async def toggle_favorite(self, template_id: UUID, user_id: UUID) -> tuple[str, int]:
+        """Toggle favorite on a template. Returns (action, new_count)."""
+        template = await self.get_by_id(template_id)
+        if not template:
+            raise ValueError("Template not found")
+
+        existing = await self.session.execute(
+            select(UserTemplateFavorite).where(
+                UserTemplateFavorite.user_id == user_id,
+                UserTemplateFavorite.template_id == template_id,
             )
         )
-        template = result.scalar_one_or_none()
-        if template:
-            await self.session.delete(template)
-            await self.session.flush()
-            return True
-        return False
 
-    async def get_categories(self, user_id: UUID | None = None) -> list[str]:
-        """Get distinct categories for templates."""
-        if user_id:
-            query = (
-                select(Template.category)
-                .where(
-                    or_(
-                        Template.user_id == user_id,
-                        Template.is_public,
-                    )
+        if existing.scalar_one_or_none():
+            # Remove favorite
+            await self.session.execute(
+                delete(UserTemplateFavorite).where(
+                    UserTemplateFavorite.user_id == user_id,
+                    UserTemplateFavorite.template_id == template_id,
                 )
-                .where(Template.category.isnot(None))
-                .distinct()
             )
+            await self.session.execute(
+                update(PromptTemplate)
+                .where(PromptTemplate.id == template_id)
+                .values(favorite_count=PromptTemplate.favorite_count - 1)
+            )
+            action = "removed"
         else:
-            query = (
-                select(Template.category)
-                .where(Template.is_public)
-                .where(Template.category.isnot(None))
-                .distinct()
+            # Add favorite
+            self.session.add(UserTemplateFavorite(user_id=user_id, template_id=template_id))
+            await self.session.execute(
+                update(PromptTemplate)
+                .where(PromptTemplate.id == template_id)
+                .values(favorite_count=PromptTemplate.favorite_count + 1)
             )
+            action = "added"
+
+        await self.session.flush()
+
+        # Refresh trending score
+        await self.refresh_trending_score(template_id)
+
+        await self.session.refresh(template)
+        return action, template.favorite_count
+
+    # ------------------------------------------------------------------
+    # User favorites list
+    # ------------------------------------------------------------------
+
+    async def get_user_favorites(
+        self,
+        user_id: UUID,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[PromptTemplate], int]:
+        """Get user's favorited templates, paginated."""
+        query = (
+            select(PromptTemplate)
+            .join(
+                UserTemplateFavorite,
+                UserTemplateFavorite.template_id == PromptTemplate.id,
+            )
+            .where(
+                UserTemplateFavorite.user_id == user_id,
+                PromptTemplate.deleted_at.is_(None),
+            )
+        )
+
+        count_query = select(func.count()).select_from(query.subquery())
+        total = await self.session.scalar(count_query) or 0
+
+        query = query.order_by(UserTemplateFavorite.created_at.desc())
+        query = query.offset(offset).limit(limit)
+        result = await self.session.execute(query)
+        templates = list(result.scalars().all())
+
+        return templates, total
+
+    # ------------------------------------------------------------------
+    # Recommendations
+    # ------------------------------------------------------------------
+
+    async def get_recommendations(
+        self,
+        based_on: UUID | None = None,
+        tags: list[str] | None = None,
+        limit: int = 10,
+    ) -> list[PromptTemplate]:
+        """Get recommended templates based on tags or a source template."""
+        target_tags: list[str] = []
+
+        if based_on:
+            result = await self.session.execute(
+                select(PromptTemplate.tags).where(
+                    PromptTemplate.id == based_on,
+                    PromptTemplate.deleted_at.is_(None),
+                )
+            )
+            row = result.scalar_one_or_none()
+            if row:
+                target_tags = list(row)
+
+        if tags:
+            target_tags.extend(tags)
+
+        if not target_tags:
+            # Fallback: top trending
+            query = (
+                select(PromptTemplate)
+                .where(
+                    PromptTemplate.deleted_at.is_(None),
+                    PromptTemplate.is_active.is_(True),
+                )
+                .order_by(PromptTemplate.trending_score.desc())
+                .limit(limit)
+            )
+            result = await self.session.execute(query)
+            return list(result.scalars().all())
+
+        query = (
+            select(PromptTemplate)
+            .where(
+                PromptTemplate.deleted_at.is_(None),
+                PromptTemplate.is_active.is_(True),
+                PromptTemplate.tags.overlap(target_tags),
+            )
+            .order_by(PromptTemplate.trending_score.desc())
+            .limit(limit)
+        )
+
+        if based_on:
+            query = query.where(PromptTemplate.id != based_on)
 
         result = await self.session.execute(query)
-        return [row[0] for row in result.all()]
+        return list(result.scalars().all())
+
+    # ------------------------------------------------------------------
+    # Usage tracking
+    # ------------------------------------------------------------------
+
+    async def record_usage(
+        self, template_id: UUID, user_id: UUID | None = None
+    ) -> PromptTemplate | None:
+        """Record template usage and increment use_count."""
+        template = await self.get_by_id(template_id)
+        if not template:
+            return None
+
+        # Insert usage record
+        self.session.add(UserTemplateUsage(template_id=template_id, user_id=user_id))
+
+        # Increment use_count
+        await self.session.execute(
+            update(PromptTemplate)
+            .where(PromptTemplate.id == template_id)
+            .values(use_count=PromptTemplate.use_count + 1)
+        )
+
+        await self.session.flush()
+
+        # Refresh trending score
+        await self.refresh_trending_score(template_id)
+
+        await self.session.refresh(template)
+        return template
+
+    # ------------------------------------------------------------------
+    # Trending score
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def compute_trending_score(
+        like_count: int,
+        use_count: int,
+        favorite_count: int,
+        created_at: datetime,
+    ) -> float:
+        """Compute trending score: (like*3 + use*1 + fav*2) / (hours + 2)^1.5"""
+        now = datetime.now(datetime.UTC)
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=datetime.UTC)
+        hours = (now - created_at).total_seconds() / 3600
+        numerator = like_count * 3 + use_count * 1 + favorite_count * 2
+        denominator = (hours + 2) ** 1.5
+        return numerator / denominator
+
+    async def refresh_trending_score(self, template_id: UUID) -> None:
+        """Recompute and update the trending score for a single template."""
+        result = await self.session.execute(
+            select(PromptTemplate).where(PromptTemplate.id == template_id)
+        )
+        template = result.scalar_one_or_none()
+        if not template:
+            return
+
+        score = self.compute_trending_score(
+            template.like_count,
+            template.use_count,
+            template.favorite_count,
+            template.created_at,
+        )
+        await self.session.execute(
+            update(PromptTemplate)
+            .where(PromptTemplate.id == template_id)
+            .values(trending_score=score)
+        )
+        await self.session.flush()

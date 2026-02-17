@@ -1,18 +1,14 @@
 """
-Templates router for managing prompt templates.
+Templates router for the prompt template library.
 
-Endpoints:
-- GET /api/templates - List templates
-- POST /api/templates - Create template
-- GET /api/templates/{id} - Get template
-- PUT /api/templates/{id} - Update template
-- DELETE /api/templates/{id} - Delete template
-- POST /api/templates/{id}/use - Use template
-- GET /api/templates/public - List public templates
+15 endpoints covering listing, CRUD, social engagement, recommendations,
+and AI generation/enhancement.
+
+Fixed-path endpoints are placed before parameterized endpoints to avoid
+route conflicts.
 """
 
 import logging
-import re
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,21 +16,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from api.dependencies import get_template_repository, get_user_repository
 from api.routers.auth import get_current_user, require_current_user
 from api.schemas.templates import (
-    CreateTemplateRequest,
-    CreateTemplateResponse,
-    DeleteTemplateResponse,
-    GetTemplateResponse,
-    ListTemplatesResponse,
-    TemplateInfo,
+    BatchGenerateRequest,
+    CategoryItem,
+    EnhanceResponse,
+    GenerateRequest,
+    GenerateResponse,
+    TemplateCreateRequest,
+    TemplateDetailResponse,
     TemplateListItem,
-    TemplateSettings,
-    TemplateVariable,
-    UpdateTemplateRequest,
-    UpdateTemplateResponse,
-    UseTemplateRequest,
-    UseTemplateResponse,
+    TemplateListResponse,
+    TemplateUpdateRequest,
+    ToggleResponse,
+    VariantRequest,
+    VariantResponse,
 )
-from database.models import Template
 from database.repositories import TemplateRepository, UserRepository
 from services.auth_service import GitHubUser
 
@@ -46,168 +41,134 @@ router = APIRouter(prefix="/templates", tags=["templates"])
 # ============ Helpers ============
 
 
-def template_to_info(template: Template, user_id: UUID | None = None) -> TemplateInfo:
-    """Convert database template to response model."""
-    variables = [TemplateVariable(**v) for v in template.variables]
-    settings = (
-        TemplateSettings(**template.default_settings)
-        if template.default_settings
-        else TemplateSettings()
-    )
-
-    return TemplateInfo(
-        id=str(template.id),
-        name=template.name,
-        description=template.description,
-        prompt_template=template.prompt_template,
-        variables=variables,
-        default_settings=settings,
-        category=template.category,
-        tags=template.tags,
-        is_public=template.is_public,
-        is_owner=template.user_id == user_id if user_id else False,
-        use_count=template.use_count,
-        preview_url=template.preview_url,
-        created_at=template.created_at,
-        updated_at=template.updated_at,
-    )
-
-
-def template_to_list_item(template: Template, user_id: UUID | None = None) -> TemplateListItem:
-    """Convert database template to list item."""
-    return TemplateListItem(
-        id=str(template.id),
-        name=template.name,
-        description=template.description,
-        category=template.category,
-        tags=template.tags,
-        is_public=template.is_public,
-        is_owner=template.user_id == user_id if user_id else False,
-        use_count=template.use_count,
-        preview_url=template.preview_url,
-    )
+async def require_admin(user: GitHubUser = Depends(require_current_user)) -> GitHubUser:
+    """Require admin privileges (currently passes through authenticated user)."""
+    return user
 
 
 async def get_db_user_id(
     user: GitHubUser | None,
     user_repo: UserRepository | None,
 ) -> UUID | None:
-    """Get database user ID from GitHub user."""
+    """Resolve GitHub user to database user ID."""
     if not user or not user_repo:
         return None
-
     db_user = await user_repo.get_by_github_id(int(user.id))
     return db_user.id if db_user else None
 
 
-def fill_template(prompt_template: str, variables: dict) -> str:
-    """Fill template variables with provided values."""
-    result = prompt_template
-    for name, value in variables.items():
-        pattern = r"\{\{\s*" + re.escape(name) + r"\s*\}\}"
-        result = re.sub(pattern, str(value), result)
-    return result
+def template_to_list_item(t) -> TemplateListItem:
+    """Convert a PromptTemplate model to a TemplateListItem schema."""
+    return TemplateListItem(
+        id=str(t.id),
+        display_name_en=t.display_name_en,
+        display_name_zh=t.display_name_zh,
+        preview_image_url=t.preview_image_url,
+        category=t.category,
+        tags=t.tags or [],
+        difficulty=t.difficulty,
+        use_count=t.use_count,
+        like_count=t.like_count,
+        favorite_count=t.favorite_count,
+        source=t.source,
+        trending_score=t.trending_score,
+        created_at=t.created_at,
+    )
 
 
-# ============ Endpoints ============
+def template_to_detail(
+    t, *, is_liked: bool = False, is_favorited: bool = False
+) -> TemplateDetailResponse:
+    """Convert a PromptTemplate model to a TemplateDetailResponse schema."""
+    return TemplateDetailResponse(
+        id=str(t.id),
+        prompt_text=t.prompt_text,
+        display_name_en=t.display_name_en,
+        display_name_zh=t.display_name_zh,
+        description_en=t.description_en,
+        description_zh=t.description_zh,
+        preview_image_url=t.preview_image_url,
+        category=t.category,
+        tags=t.tags or [],
+        style_keywords=t.style_keywords or [],
+        parameters=t.parameters or {},
+        difficulty=t.difficulty,
+        language=t.language,
+        source=t.source,
+        use_count=t.use_count,
+        like_count=t.like_count,
+        favorite_count=t.favorite_count,
+        trending_score=t.trending_score,
+        is_active=t.is_active,
+        created_by=str(t.created_by) if t.created_by else None,
+        created_at=t.created_at,
+        updated_at=t.updated_at,
+        is_liked=is_liked,
+        is_favorited=is_favorited,
+    )
 
 
-@router.get("", response_model=ListTemplatesResponse)
+# ============================================================================
+# Fixed-path endpoints (must come before parameterized)
+# ============================================================================
+
+
+@router.get("", response_model=TemplateListResponse)
 async def list_templates(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     category: str | None = Query(default=None),
+    tags: str | None = Query(default=None, description="Comma-separated tags"),
+    difficulty: str | None = Query(default=None),
     search: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
-    user: GitHubUser | None = Depends(get_current_user),
-    template_repo: TemplateRepository | None = Depends(get_template_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
-):
-    """List templates accessible to the current user."""
-    if not template_repo:
-        return ListTemplatesResponse(
-            templates=[],
-            total=0,
-            limit=limit,
-            offset=offset,
-            has_more=False,
-            categories=[],
-        )
-
-    user_id = await get_db_user_id(user, user_repo)
-
-    templates = await template_repo.list_accessible(
-        user_id=user_id,
-        category=category,
-        search=search,
-        limit=limit + 1,
-        offset=offset,
-    )
-
-    has_more = len(templates) > limit
-    templates = templates[:limit]
-
-    # Get categories
-    categories = await template_repo.get_categories(user_id)
-
-    return ListTemplatesResponse(
-        templates=[template_to_list_item(t, user_id) for t in templates],
-        total=len(templates),  # Approximate
-        limit=limit,
-        offset=offset,
-        has_more=has_more,
-        categories=categories,
-    )
-
-
-@router.get("/public", response_model=ListTemplatesResponse)
-async def list_public_templates(
-    category: str | None = Query(default=None),
-    search: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    sort_by: str = Query(default="trending"),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
 ):
-    """List public templates."""
+    """List templates with filtering, searching, and sorting."""
     if not template_repo:
-        return ListTemplatesResponse(
-            templates=[],
-            total=0,
-            limit=limit,
-            offset=offset,
-            has_more=False,
-            categories=[],
-        )
+        return TemplateListResponse(items=[], total=0, page=page, page_size=page_size)
 
-    templates = await template_repo.list_public(
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+
+    templates, total = await template_repo.list_templates(
         category=category,
+        tags=tag_list,
+        difficulty=difficulty,
         search=search,
-        limit=limit + 1,
-        offset=offset,
+        sort_by=sort_by,
+        limit=page_size,
+        offset=(page - 1) * page_size,
     )
 
-    has_more = len(templates) > limit
-    templates = templates[:limit]
-
-    categories = await template_repo.get_categories()
-
-    return ListTemplatesResponse(
-        templates=[template_to_list_item(t) for t in templates],
-        total=await template_repo.count_public(),
-        limit=limit,
-        offset=offset,
-        has_more=has_more,
-        categories=categories,
+    return TemplateListResponse(
+        items=[template_to_list_item(t) for t in templates],
+        total=total,
+        page=page,
+        page_size=page_size,
     )
 
 
-@router.post("", response_model=CreateTemplateResponse)
-async def create_template(
-    request: CreateTemplateRequest,
+@router.get("/categories", response_model=list[CategoryItem])
+async def get_categories(
+    template_repo: TemplateRepository | None = Depends(get_template_repository),
+):
+    """Get all categories with template counts."""
+    if not template_repo:
+        return []
+
+    rows = await template_repo.get_categories_with_count()
+    return [CategoryItem(category=cat, count=cnt) for cat, cnt in rows]
+
+
+@router.get("/favorites", response_model=TemplateListResponse)
+async def get_user_favorites(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     user: GitHubUser = Depends(require_current_user),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
-    """Create a new template."""
+    """Get current user's favorited templates."""
     if not template_repo or not user_repo:
         raise HTTPException(status_code=503, detail="Database not configured")
 
@@ -215,197 +176,327 @@ async def create_template(
     if not user_id:
         raise HTTPException(status_code=404, detail="User not found")
 
-    template = await template_repo.create(
+    templates, total = await template_repo.get_user_favorites(
         user_id=user_id,
-        name=request.name,
-        description=request.description,
-        prompt_template=request.prompt_template,
-        variables=[v.model_dump() for v in request.variables],
-        default_settings=request.default_settings.model_dump() if request.default_settings else {},
-        category=request.category,
-        tags=request.tags,
-        is_public=request.is_public,
+        limit=page_size,
+        offset=(page - 1) * page_size,
     )
 
-    return CreateTemplateResponse(
-        success=True,
-        template=template_to_info(template, user_id),
+    return TemplateListResponse(
+        items=[template_to_list_item(t) for t in templates],
+        total=total,
+        page=page,
+        page_size=page_size,
     )
 
 
-@router.get("/{template_id}", response_model=GetTemplateResponse)
-async def get_template(
+@router.get("/recommended", response_model=list[TemplateListItem])
+async def get_recommendations(
+    based_on: str | None = Query(default=None, description="Template ID to base on"),
+    tags: str | None = Query(default=None, description="Comma-separated tags"),
+    limit: int = Query(default=10, ge=1, le=50),
+    template_repo: TemplateRepository | None = Depends(get_template_repository),
+):
+    """Get recommended templates based on tags or a source template."""
+    if not template_repo:
+        return []
+
+    based_on_uuid = None
+    if based_on:
+        try:
+            based_on_uuid = UUID(based_on)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid template ID")
+
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+
+    templates = await template_repo.get_recommendations(
+        based_on=based_on_uuid,
+        tags=tag_list,
+        limit=limit,
+    )
+    return [template_to_list_item(t) for t in templates]
+
+
+@router.post("/generate", response_model=GenerateResponse)
+async def generate_templates(
+    data: GenerateRequest,
+    admin: GitHubUser = Depends(require_admin),
+    template_repo: TemplateRepository | None = Depends(get_template_repository),
+):
+    """Generate AI templates for a single category (admin only)."""
+    if not template_repo:
+        raise HTTPException(status_code=503, detail="Database not configured")
+
+    from services.template_generator import TemplateGenerator
+
+    generator = TemplateGenerator(template_repo)
+    try:
+        stats = await generator.generate_templates_for_category(
+            category=data.category,
+            count=data.count,
+            styles=data.styles,
+        )
+        return GenerateResponse(
+            stats=[stats],
+            total_generated=stats.generated,
+            total_saved=stats.saved,
+        )
+    finally:
+        await generator.close()
+
+
+@router.post("/batch-generate", response_model=GenerateResponse)
+async def batch_generate(
+    data: BatchGenerateRequest,
+    admin: GitHubUser = Depends(require_admin),
+    template_repo: TemplateRepository | None = Depends(get_template_repository),
+):
+    """Batch-generate AI templates across categories (admin only)."""
+    if not template_repo:
+        raise HTTPException(status_code=503, detail="Database not configured")
+
+    from services.template_generator import TemplateGenerator
+
+    generator = TemplateGenerator(template_repo)
+    try:
+        result = await generator.batch_generate(
+            categories=data.categories,
+            count_per_category=data.count_per_category,
+        )
+        return result
+    finally:
+        await generator.close()
+
+
+@router.post("", response_model=TemplateDetailResponse)
+async def create_template(
+    data: TemplateCreateRequest,
+    admin: GitHubUser = Depends(require_admin),
+    template_repo: TemplateRepository | None = Depends(get_template_repository),
+    user_repo: UserRepository | None = Depends(get_user_repository),
+):
+    """Create a new template (admin only)."""
+    if not template_repo or not user_repo:
+        raise HTTPException(status_code=503, detail="Database not configured")
+
+    user_id = await get_db_user_id(admin, user_repo)
+
+    template = await template_repo.create(
+        **data.model_dump(),
+        created_by=user_id,
+    )
+    return template_to_detail(template)
+
+
+# ============================================================================
+# Parameterized endpoints
+# ============================================================================
+
+
+@router.get("/{template_id}", response_model=TemplateDetailResponse)
+async def get_template_detail(
     template_id: str,
     user: GitHubUser | None = Depends(get_current_user),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
-    """Get a specific template."""
+    """Get full template detail."""
     if not template_repo:
         raise HTTPException(status_code=503, detail="Database not configured")
 
     try:
-        template_uuid = UUID(template_id)
+        tid = UUID(template_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid template ID")
 
-    template = await template_repo.get_by_id(template_uuid)
+    template = await template_repo.get_by_id(tid)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
     user_id = await get_db_user_id(user, user_repo)
 
-    # Check access
-    if not template.is_public and template.user_id != user_id:
+    is_liked = False
+    is_favorited = False
+    if user_id:
+        is_liked = await template_repo.is_liked(tid, user_id)
+        is_favorited = await template_repo.is_favorited(tid, user_id)
+
+    return template_to_detail(template, is_liked=is_liked, is_favorited=is_favorited)
+
+
+@router.post("/{template_id}/use", response_model=TemplateDetailResponse)
+async def record_usage(
+    template_id: str,
+    user: GitHubUser | None = Depends(get_current_user),
+    template_repo: TemplateRepository | None = Depends(get_template_repository),
+    user_repo: UserRepository | None = Depends(get_user_repository),
+):
+    """Record that a template was used."""
+    if not template_repo:
+        raise HTTPException(status_code=503, detail="Database not configured")
+
+    try:
+        tid = UUID(template_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid template ID")
+
+    user_id = await get_db_user_id(user, user_repo)
+    template = await template_repo.record_usage(tid, user_id=user_id)
+    if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    return GetTemplateResponse(template=template_to_info(template, user_id))
+    return template_to_detail(template)
 
 
-@router.put("/{template_id}", response_model=UpdateTemplateResponse)
+@router.post("/{template_id}/like", response_model=ToggleResponse)
+async def toggle_like(
+    template_id: str,
+    user: GitHubUser = Depends(require_current_user),
+    template_repo: TemplateRepository | None = Depends(get_template_repository),
+    user_repo: UserRepository | None = Depends(get_user_repository),
+):
+    """Toggle like on a template."""
+    if not template_repo or not user_repo:
+        raise HTTPException(status_code=503, detail="Database not configured")
+
+    try:
+        tid = UUID(template_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid template ID")
+
+    user_id = await get_db_user_id(user, user_repo)
+    if not user_id:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    try:
+        action, count = await template_repo.toggle_like(tid, user_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    return ToggleResponse(action=action, count=count)
+
+
+@router.post("/{template_id}/favorite", response_model=ToggleResponse)
+async def toggle_favorite(
+    template_id: str,
+    user: GitHubUser = Depends(require_current_user),
+    template_repo: TemplateRepository | None = Depends(get_template_repository),
+    user_repo: UserRepository | None = Depends(get_user_repository),
+):
+    """Toggle favorite on a template."""
+    if not template_repo or not user_repo:
+        raise HTTPException(status_code=503, detail="Database not configured")
+
+    try:
+        tid = UUID(template_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid template ID")
+
+    user_id = await get_db_user_id(user, user_repo)
+    if not user_id:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    try:
+        action, count = await template_repo.toggle_favorite(tid, user_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    return ToggleResponse(action=action, count=count)
+
+
+@router.post("/{template_id}/enhance", response_model=EnhanceResponse)
+async def enhance_template(
+    template_id: str,
+    admin: GitHubUser = Depends(require_admin),
+    template_repo: TemplateRepository | None = Depends(get_template_repository),
+):
+    """Enhance a template's prompt using AI (admin only)."""
+    if not template_repo:
+        raise HTTPException(status_code=503, detail="Database not configured")
+
+    try:
+        tid = UUID(template_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid template ID")
+
+    from services.template_generator import TemplateGenerator
+
+    generator = TemplateGenerator(template_repo)
+    try:
+        result = await generator.enhance_template(str(tid))
+        return result
+    finally:
+        await generator.close()
+
+
+@router.post("/{template_id}/variants", response_model=VariantResponse)
+async def generate_variants(
+    template_id: str,
+    data: VariantRequest,
+    admin: GitHubUser = Depends(require_admin),
+    template_repo: TemplateRepository | None = Depends(get_template_repository),
+):
+    """Generate style variants of a template (admin only)."""
+    if not template_repo:
+        raise HTTPException(status_code=503, detail="Database not configured")
+
+    try:
+        tid = UUID(template_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid template ID")
+
+    from services.template_generator import TemplateGenerator
+
+    generator = TemplateGenerator(template_repo)
+    try:
+        result = await generator.generate_style_variants(str(tid), data.target_styles)
+        return result
+    finally:
+        await generator.close()
+
+
+@router.put("/{template_id}", response_model=TemplateDetailResponse)
 async def update_template(
     template_id: str,
-    request: UpdateTemplateRequest,
-    user: GitHubUser = Depends(require_current_user),
+    data: TemplateUpdateRequest,
+    admin: GitHubUser = Depends(require_admin),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
-    """Update a template."""
-    if not template_repo or not user_repo:
+    """Update a template (admin only)."""
+    if not template_repo:
         raise HTTPException(status_code=503, detail="Database not configured")
 
     try:
-        template_uuid = UUID(template_id)
+        tid = UUID(template_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid template ID")
 
-    user_id = await get_db_user_id(user, user_repo)
-    if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Verify ownership
-    template = await template_repo.get_by_id(template_uuid)
-    if not template or template.user_id != user_id:
+    update_data = data.model_dump(exclude_unset=True)
+    template = await template_repo.update(tid, **update_data)
+    if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    updated = await template_repo.update(
-        template_id=template_uuid,
-        name=request.name,
-        description=request.description,
-        prompt_template=request.prompt_template,
-        variables=[v.model_dump() for v in request.variables] if request.variables else None,
-        default_settings=request.default_settings.model_dump()
-        if request.default_settings
-        else None,
-        category=request.category,
-        tags=request.tags,
-        is_public=request.is_public,
-    )
-
-    return UpdateTemplateResponse(
-        success=True,
-        template=template_to_info(updated, user_id),
-    )
+    return template_to_detail(template)
 
 
-@router.delete("/{template_id}", response_model=DeleteTemplateResponse)
+@router.delete("/{template_id}")
 async def delete_template(
     template_id: str,
-    user: GitHubUser = Depends(require_current_user),
+    admin: GitHubUser = Depends(require_admin),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
-    """Delete a template."""
-    if not template_repo or not user_repo:
+    """Soft-delete a template (admin only)."""
+    if not template_repo:
         raise HTTPException(status_code=503, detail="Database not configured")
 
     try:
-        template_uuid = UUID(template_id)
+        tid = UUID(template_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid template ID")
 
-    user_id = await get_db_user_id(user, user_repo)
-    if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    deleted = await template_repo.delete_by_user(user_id, template_uuid)
+    deleted = await template_repo.soft_delete(tid)
     if not deleted:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    return DeleteTemplateResponse(success=True)
-
-
-@router.post("/{template_id}/use", response_model=UseTemplateResponse)
-async def use_template(
-    template_id: str,
-    request: UseTemplateRequest,
-    user: GitHubUser | None = Depends(get_current_user),
-    template_repo: TemplateRepository | None = Depends(get_template_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
-):
-    """
-    Use a template to generate a prompt.
-
-    Fills in the template variables and returns the final prompt with settings.
-    Does not actually generate an image - use /api/generate for that.
-    """
-    if not template_repo:
-        raise HTTPException(status_code=503, detail="Database not configured")
-
-    try:
-        template_uuid = UUID(template_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid template ID")
-
-    template = await template_repo.get_by_id(template_uuid)
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
-
-    user_id = await get_db_user_id(user, user_repo)
-
-    # Check access
-    if not template.is_public and template.user_id != user_id:
-        raise HTTPException(status_code=404, detail="Template not found")
-
-    # Validate required variables
-    for var in template.variables:
-        if var.get("required", True) and var["name"] not in request.variables:
-            if not var.get("default"):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Missing required variable: {var['name']}",
-                )
-
-    # Fill in defaults
-    variables = {}
-    for var in template.variables:
-        name = var["name"]
-        if name in request.variables:
-            variables[name] = request.variables[name]
-        elif var.get("default"):
-            variables[name] = var["default"]
-
-    # Fill template
-    prompt = fill_template(template.prompt_template, variables)
-
-    # Merge settings
-    settings = (
-        TemplateSettings(**template.default_settings)
-        if template.default_settings
-        else TemplateSettings()
-    )
-    if request.settings_override:
-        if request.settings_override.aspect_ratio:
-            settings.aspect_ratio = request.settings_override.aspect_ratio
-        if request.settings_override.resolution:
-            settings.resolution = request.settings_override.resolution
-        if request.settings_override.provider:
-            settings.provider = request.settings_override.provider
-
-    # Increment use count
-    await template_repo.increment_use_count(template_uuid)
-
-    return UseTemplateResponse(
-        prompt=prompt,
-        settings=settings,
-    )
+    return {"message": "Template deleted"}
