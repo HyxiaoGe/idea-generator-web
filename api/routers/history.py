@@ -93,6 +93,8 @@ def record_to_history_item(record: dict, user_id: str | None = None) -> HistoryI
         text_response=record.get("text_response"),
         thinking=record.get("thinking"),
         session_id=record.get("session_id"),
+        provider=record.get("provider") or settings_data.get("provider"),
+        model=record.get("model") or settings_data.get("model"),
     )
 
 
@@ -116,6 +118,8 @@ def db_image_to_history_item(image: GeneratedImage) -> HistoryItem:
         text_response=image.text_response,
         thinking=image.thinking,
         session_id=str(image.chat_session_id) if image.chat_session_id else None,
+        provider=image.provider,
+        model=image.model,
     )
 
 
