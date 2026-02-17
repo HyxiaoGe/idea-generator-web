@@ -2,6 +2,8 @@
 Pydantic schemas for API request/response models.
 """
 
+from prefhub.schemas import Language, Theme
+
 from .analytics import (
     CostBreakdown,
     CostsResponse,
@@ -153,11 +155,9 @@ from .settings import (
     APISettings,
     GetProviderPreferencesResponse,
     GetSettingsResponse,
-    Language,
     ProviderPreference,
     ProviderPreferences,
     RoutingStrategy,
-    Theme,
     UpdateProviderPreferencesRequest,
     UpdateProviderPreferencesResponse,
     UpdateSettingsRequest,

@@ -49,6 +49,8 @@ dependencies = [
     "asyncpg>=0.31.0",
     "alembic>=1.18.3",
     "greenlet>=3.3.1",
+    # Shared preferences library
+    "prefhub[all] @ git+https://github.com/HyxiaoGe/prefhub.git",
 ]
 
 [project.optional-dependencies]
@@ -80,6 +82,9 @@ nano-banana = "api.main:run"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["api", "services", "core", "database", "i18n"]

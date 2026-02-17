@@ -1,28 +1,15 @@
 """
 Pydantic schemas for user settings API.
+
+Universal preferences (language, theme, notifications) come from prefhub.
+Domain-specific fields (generation defaults, provider preferences) are defined here.
 """
 
 from datetime import datetime
 from enum import StrEnum
 
+from prefhub.schemas.preferences import BasePreferences
 from pydantic import BaseModel, Field
-
-
-class Theme(StrEnum):
-    """UI theme options."""
-
-    LIGHT = "light"
-    DARK = "dark"
-    SYSTEM = "system"
-
-
-class Language(StrEnum):
-    """Supported languages."""
-
-    EN = "en"
-    ZH_CN = "zh-CN"
-    ZH_TW = "zh-TW"
-    JA = "ja"
 
 
 class RoutingStrategy(StrEnum):
@@ -36,10 +23,9 @@ class RoutingStrategy(StrEnum):
     ADAPTIVE = "adaptive"
 
 
-class UserPreferences(BaseModel):
-    """User preference settings."""
+class GenerationDefaults(BaseModel):
+    """Image generation specific defaults."""
 
-    # Generation defaults
     default_aspect_ratio: str | None = Field(
         default=None,
         description="Default aspect ratio for generation (e.g., '16:9', '1:1')",
@@ -55,48 +41,6 @@ class UserPreferences(BaseModel):
     routing_strategy: RoutingStrategy | None = Field(
         default=None,
         description="Provider routing strategy",
-    )
-
-    # UI preferences
-    language: Language = Field(
-        default=Language.EN,
-        description="UI language",
-    )
-    theme: Theme = Field(
-        default=Theme.SYSTEM,
-        description="UI theme",
-    )
-
-    # Feature toggles
-    enable_notifications: bool = Field(
-        default=True,
-        description="Enable in-app notifications",
-    )
-    enable_sound: bool = Field(
-        default=False,
-        description="Enable sound effects",
-    )
-
-
-class APISettings(BaseModel):
-    """API-specific settings."""
-
-    # Webhook configuration
-    webhook_url: str | None = Field(
-        default=None,
-        description="Webhook URL for async notifications",
-    )
-    webhook_secret: str | None = Field(
-        default=None,
-        description="Webhook secret for signature verification",
-    )
-
-    # Rate limiting preferences
-    max_concurrent_requests: int = Field(
-        default=5,
-        ge=1,
-        le=20,
-        description="Maximum concurrent generation requests",
     )
 
 
@@ -123,6 +67,42 @@ class ProviderPreferences(BaseModel):
     fallback_enabled: bool = Field(
         default=True,
         description="Enable automatic fallback on provider failure",
+    )
+
+
+class UserPreferences(BasePreferences):
+    """
+    Idea-generator preferences = universal (from prefhub) + domain-specific.
+
+    Inherits from BasePreferences:
+      - ui: UIPreferences (language, theme, timezone, hour_cycle)
+      - notifications: NotificationPreferences (enabled, task_completed, task_failed, sound)
+      - extra: dict
+    """
+
+    generation: GenerationDefaults = Field(default_factory=GenerationDefaults)
+    providers: ProviderPreferences = Field(default_factory=ProviderPreferences)
+
+
+class APISettings(BaseModel):
+    """API-specific settings."""
+
+    # Webhook configuration
+    webhook_url: str | None = Field(
+        default=None,
+        description="Webhook URL for async notifications",
+    )
+    webhook_secret: str | None = Field(
+        default=None,
+        description="Webhook secret for signature verification",
+    )
+
+    # Rate limiting preferences
+    max_concurrent_requests: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum concurrent generation requests",
     )
 
 
