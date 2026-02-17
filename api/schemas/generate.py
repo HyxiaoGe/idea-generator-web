@@ -109,6 +109,10 @@ class GenerateImageResponse(BaseModel):
         None, description="Final processed prompt (if pipeline ran)"
     )
     negative_prompt: str | None = Field(None, description="Generated negative prompt")
+    template_used: bool = Field(False, description="Whether a template was applied")
+    was_translated: bool = Field(False, description="Whether prompt was auto-translated")
+    was_enhanced: bool = Field(False, description="Whether prompt was AI-enhanced")
+    template_name: str | None = Field(None, description="Template name if used")
 
 
 class BatchGenerateRequest(BaseModel):

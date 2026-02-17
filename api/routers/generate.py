@@ -312,6 +312,10 @@ async def generate_image(
         # Prompt pipeline
         processed_prompt=processed.final if processed else None,
         negative_prompt=negative_prompt,
+        template_used=processed.template_used if processed else False,
+        was_translated=processed.was_translated if processed else False,
+        was_enhanced=processed.was_enhanced if processed else False,
+        template_name=processed.template_name if processed else None,
     )
 
 
@@ -671,6 +675,10 @@ async def search_grounded_generate(
         # Prompt pipeline
         processed_prompt=processed.final if processed else None,
         negative_prompt=negative_prompt,
+        template_used=processed.template_used if processed else False,
+        was_translated=processed.was_translated if processed else False,
+        was_enhanced=processed.was_enhanced if processed else False,
+        template_name=processed.template_name if processed else None,
     )
 
 

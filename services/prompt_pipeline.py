@@ -44,6 +44,10 @@ class ProcessedPrompt:
     final: str = ""
     language_detected: str | None = None
     pipeline_duration: float = 0.0
+    template_used: bool = False
+    was_translated: bool = False
+    was_enhanced: bool = False
+    template_name: str | None = None
 
 
 class PromptPipeline:
@@ -136,6 +140,13 @@ class PromptPipeline:
         """
         Run the prompt through the processing pipeline.
 
+        Two paths:
+        - Path A (template): If template_id is provided, use the template's
+          pre-optimized prompt_text directly, skipping translation/enhancement.
+        - Path B (manual): Run full pipeline (detect → translate → enhance).
+
+        Both paths share negative prompt generation at the end.
+
         Args:
             prompt: Raw user prompt
             enhance: Whether to AI-enhance the prompt
@@ -151,43 +162,60 @@ class PromptPipeline:
         result = ProcessedPrompt(original=prompt, final=prompt)
         current = prompt
 
-        # Step 1: Template rendering
+        # === Path A: Template path ===
         if template_id and template_repo:
             try:
-                current = await self._apply_template(current, template_id, template_repo)
-                result.final = current
-            except Exception as e:
-                logger.warning(f"Template rendering failed: {e}")
-
-        # Step 2: Language detection
-        if contains_chinese(current):
-            result.language_detected = "zh"
-        else:
-            result.language_detected = "en"
-
-        # Step 3: Auto-translation (Chinese -> English)
-        if result.language_detected == "zh" and settings.prompt_auto_translate:
-            try:
-                translated = await self._translate(current)
-                if translated:
-                    result.translated = translated
-                    current = translated
+                template = await template_repo.get_by_id(UUID(template_id))
+                if template:
+                    result.template_used = True
+                    result.template_name = template.display_name_en
+                    current = template.prompt_text
                     result.final = current
-            except Exception as e:
-                logger.warning(f"Translation failed, using original: {e}")
+                    result.language_detected = "en"
 
-        # Step 4: Enhancement
-        if enhance:
-            try:
-                enhanced = await self._enhance(current)
-                if enhanced:
-                    result.enhanced = enhanced
-                    current = enhanced
-                    result.final = current
+                    # Record usage (fire-and-forget)
+                    try:
+                        await template_repo.record_usage(template.id)
+                    except Exception as e:
+                        logger.debug(f"Failed to record template usage: {e}")
+                else:
+                    logger.warning(f"Template {template_id} not found, falling back to manual path")
             except Exception as e:
-                logger.warning(f"Enhancement failed, using previous: {e}")
+                logger.warning(f"Template lookup failed, falling back to manual path: {e}")
 
-        # Step 5: Negative prompt generation
+        # === Path B: Manual input path ===
+        if not result.template_used:
+            # Language detection
+            if contains_chinese(current):
+                result.language_detected = "zh"
+            else:
+                result.language_detected = "en"
+
+            # Auto-translation (Chinese -> English)
+            if result.language_detected == "zh" and settings.prompt_auto_translate:
+                try:
+                    translated = await self._translate(current)
+                    if translated:
+                        result.translated = translated
+                        result.was_translated = True
+                        current = translated
+                        result.final = current
+                except Exception as e:
+                    logger.warning(f"Translation failed, using original: {e}")
+
+            # Enhancement
+            if enhance:
+                try:
+                    enhanced = await self._enhance(current)
+                    if enhanced:
+                        result.enhanced = enhanced
+                        result.was_enhanced = True
+                        current = enhanced
+                        result.final = current
+                except Exception as e:
+                    logger.warning(f"Enhancement failed, using previous: {e}")
+
+        # === Shared: Negative prompt generation ===
         if generate_negative:
             try:
                 negative = await self._generate_negative(current)
@@ -198,30 +226,6 @@ class PromptPipeline:
 
         result.pipeline_duration = time.time() - start
         return result
-
-    async def _apply_template(
-        self,
-        prompt: str,
-        template_id: str,
-        template_repo: TemplateRepository,
-    ) -> str:
-        """Fetch template from local DB and render with the user prompt."""
-        template = await template_repo.get_by_id(UUID(template_id))
-        if not template:
-            logger.warning(f"Template {template_id} not found")
-            return prompt
-
-        rendered = template.prompt_template
-        # Replace {{prompt}} / {{input}} / any single placeholder with user prompt
-        rendered = re.sub(r"\{\{\s*\w+\s*\}\}", prompt, rendered, count=1)
-
-        # Increment usage counter (fire-and-forget)
-        try:
-            await template_repo.increment_use_count(template.id)
-        except Exception as e:
-            logger.debug(f"Failed to increment template use count: {e}")
-
-        return rendered
 
     async def _translate(self, text: str) -> str | None:
         """Translate Chinese prompt to English via PromptHub meta prompt + LLM."""
