@@ -15,9 +15,9 @@ from database.repositories import (
     FavoriteRepository,
     ImageRepository,
     NotificationRepository,
+    PreferencesRepository,
     ProjectRepository,
     QuotaRepository,
-    SettingsRepository,
     TemplateRepository,
     UserRepository,
 )
@@ -82,13 +82,13 @@ async def get_audit_repository(
     return AuditRepository(session)
 
 
-async def get_settings_repository(
+async def get_preferences_repository(
     session: AsyncSession | None = Depends(get_db_session),
-) -> SettingsRepository | None:
-    """Get SettingsRepository dependency."""
+) -> PreferencesRepository | None:
+    """Get PreferencesRepository dependency."""
     if session is None:
         return None
-    return SettingsRepository(session)
+    return PreferencesRepository(session)
 
 
 async def get_api_key_repository(

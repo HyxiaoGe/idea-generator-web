@@ -22,10 +22,10 @@ from api.routers import (
     history_router,
     images_router,
     notifications_router,
+    preferences_router,
     projects_router,
     quota_router,
     search_router,
-    settings_router,
     templates_router,
     video_router,
     websocket_router,
@@ -149,8 +149,8 @@ def create_app() -> FastAPI:
     # Image serving (for local storage proxy)
     app.include_router(images_router, prefix="/api")
 
-    # User settings
-    app.include_router(settings_router, prefix="/api")
+    # User preferences
+    app.include_router(preferences_router, prefix="/api")
 
     # Favorites (bookmarks)
     app.include_router(favorites_router, prefix="/api")

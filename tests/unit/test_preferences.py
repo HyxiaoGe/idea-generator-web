@@ -6,7 +6,7 @@ import pytest
 from prefhub.schemas import Language, Theme
 from prefhub.services.preferences import InMemoryPreferencesService, deep_merge
 
-from api.schemas.settings import (
+from api.schemas.preferences import (
     RoutingStrategy,
     UserPreferences,
 )

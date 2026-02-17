@@ -187,13 +187,13 @@ DB_MAX_OVERFLOW             # Max overflow connections (default: 10)
 | POST | `/api/auth/api-keys` | Create API key |
 | DELETE | `/api/auth/api-keys/{id}` | Delete API key |
 
-### User Settings (powered by prefhub)
+### User Preferences (powered by prefhub)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/settings` | Get user settings |
-| PUT | `/api/settings` | Update user settings |
-| GET | `/api/settings/providers` | Get provider preferences |
-| PUT | `/api/settings/providers` | Update provider preferences |
+| GET | `/api/preferences` | Get user preferences |
+| PUT | `/api/preferences` | Update user preferences |
+| GET | `/api/preferences/providers` | Get provider preferences |
+| PUT | `/api/preferences/providers` | Update provider preferences |
 
 ### Favorites
 | Method | Endpoint | Description |
@@ -289,7 +289,7 @@ DB_MAX_OVERFLOW             # Max overflow connections (default: 10)
 
 User preferences use the [prefhub](https://github.com/HyxiaoGe/prefhub) shared library. Universal fields (language, theme, timezone, notifications) come from `prefhub.schemas.preferences.BasePreferences`; domain-specific fields are defined locally.
 
-- **Schema**: `api/schemas/settings.py` — `UserPreferences(BasePreferences)` adds `GenerationDefaults` and `ProviderPreferences`
+- **Schema**: `api/schemas/preferences.py` — `UserPreferences(BasePreferences)` adds `GenerationDefaults` and `ProviderPreferences`
 - **Service**: `services/preferences_service.py` — `IdeaGeneratorPreferencesService` implements `_load_raw`/`_save_raw` via `SettingsRepository`
 - **Storage**: Pattern B — `user_settings.preferences` JSONB column (no migration needed, same column)
 - **Merge logic**: Uses `prefhub.services.preferences.deep_merge` for incremental updates

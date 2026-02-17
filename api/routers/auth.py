@@ -118,12 +118,31 @@ async def get_login_url(
     return LoginUrlResponse(url=url, state=state)
 
 
+async def _sync_user_to_db(user_data: dict, user_repo: UserRepository | None) -> None:
+    """Sync GitHub user to PostgreSQL users table after OAuth login."""
+    if not user_repo:
+        return
+    try:
+        await user_repo.create_or_update_from_github(
+            github_id=int(user_data["id"]),
+            username=user_data["login"],
+            email=user_data.get("email"),
+            avatar_url=user_data.get("avatar_url"),
+            display_name=user_data.get("name"),
+        )
+    except Exception:
+        logger.warning("Failed to sync user to database", exc_info=True)
+
+
 @router.post("/callback", response_model=TokenResponse)
-async def oauth_callback(request: OAuthCallbackRequest):
+async def oauth_callback(
+    request: OAuthCallbackRequest,
+    user_repo: UserRepository | None = Depends(get_user_repository),
+):
     """
     Handle OAuth callback from GitHub.
 
-    Exchange authorization code for JWT token.
+    Exchange authorization code for JWT token and sync user to database.
     """
     auth_service = get_auth_service()
 
@@ -134,6 +153,8 @@ async def oauth_callback(request: OAuthCallbackRequest):
         result = await auth_service.authenticate(request.code)
 
         user_data = result["user"]
+        await _sync_user_to_db(user_data, user_repo)
+
         return TokenResponse(
             access_token=result["access_token"],
             token_type=result["token_type"],
@@ -157,6 +178,7 @@ async def oauth_callback_redirect(
     code: str,
     state: str | None = None,
     redirect_to: str | None = None,
+    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """
     Handle OAuth callback redirect from GitHub.
@@ -172,13 +194,14 @@ async def oauth_callback_redirect(
 
     try:
         result = await auth_service.authenticate(code)
+        user_data = result["user"]
+        await _sync_user_to_db(user_data, user_repo)
 
         # If redirect_to is provided, redirect with token as query param
         if redirect_to:
             return RedirectResponse(url=f"{redirect_to}?token={result['access_token']}")
 
         # Otherwise return token directly
-        user_data = result["user"]
         return TokenResponse(
             access_token=result["access_token"],
             token_type=result["token_type"],
@@ -324,7 +347,7 @@ async def create_api_key(
 
     db_user = await user_repo.get_by_github_id(int(user.id))
     if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     # Check key limit (max 10 keys per user)
     current_count = await api_key_repo.count_by_user(db_user.id)
@@ -376,7 +399,7 @@ async def delete_api_key(
 
     db_user = await user_repo.get_by_github_id(int(user.id))
     if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     try:
         key_uuid = UUID(key_id)

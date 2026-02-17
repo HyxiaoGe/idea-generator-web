@@ -12,10 +12,10 @@ from .health import router as health_router
 from .history import router as history_router
 from .images import router as images_router
 from .notifications import router as notifications_router
+from .preferences import router as preferences_router
 from .projects import router as projects_router
 from .quota import router as quota_router
 from .search import router as search_router
-from .settings import router as settings_router
 from .templates import router as templates_router
 from .video import router as video_router
 from .websocket import router as websocket_router
@@ -29,7 +29,7 @@ __all__ = [
     "history_router",
     "video_router",
     "images_router",
-    "settings_router",
+    "preferences_router",
     "favorites_router",
     "templates_router",
     "projects_router",

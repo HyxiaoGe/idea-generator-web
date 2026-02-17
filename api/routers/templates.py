@@ -174,7 +174,7 @@ async def get_user_favorites(
 
     user_id = await get_db_user_id(user, user_repo)
     if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     templates, total = await template_repo.get_user_favorites(
         user_id=user_id,
@@ -367,7 +367,7 @@ async def toggle_like(
 
     user_id = await get_db_user_id(user, user_repo)
     if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     try:
         action, count = await template_repo.toggle_like(tid, user_id)
@@ -395,7 +395,7 @@ async def toggle_favorite(
 
     user_id = await get_db_user_id(user, user_repo)
     if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     try:
         action, count = await template_repo.toggle_favorite(tid, user_id)

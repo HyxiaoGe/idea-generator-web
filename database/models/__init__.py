@@ -11,12 +11,12 @@ from .image import GeneratedImage
 from .notification import Notification
 from .project import Project, ProjectImage
 from .quota import QuotaUsage
-from .settings import UserSettings
 from .template import PromptTemplate
 from .template_favorite import UserTemplateFavorite
 from .template_like import UserTemplateLike
 from .template_usage import UserTemplateUsage
 from .user import User
+from .user_preferences import UserPreference
 
 __all__ = [
     # Base
@@ -25,7 +25,7 @@ __all__ = [
     "UUIDPrimaryKeyMixin",
     # Models
     "User",
-    "UserSettings",
+    "UserPreference",
     "APIKey",
     "GeneratedImage",
     "ChatSession",

@@ -134,7 +134,7 @@ async def list_projects(
 
     user_id = await get_db_user_id(user, user_repo)
     if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     projects = await project_repo.list_by_user(user_id, limit=limit + 1, offset=offset)
 
@@ -171,7 +171,7 @@ async def create_project(
 
     user_id = await get_db_user_id(user, user_repo)
     if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     project = await project_repo.create(
         user_id=user_id,
@@ -237,7 +237,7 @@ async def update_project(
 
     user_id = await get_db_user_id(user, user_repo)
     if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     # Verify ownership
     project = await project_repo.get_by_id(project_uuid)
@@ -279,7 +279,7 @@ async def delete_project(
 
     user_id = await get_db_user_id(user, user_repo)
     if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     deleted = await project_repo.delete_by_user(user_id, project_uuid)
     if not deleted:
@@ -355,7 +355,7 @@ async def add_project_image(
 
     user_id = await get_db_user_id(user, user_repo)
     if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     # Verify ownership
     project = await project_repo.get_by_id(project_uuid)
@@ -405,7 +405,7 @@ async def remove_project_image(
 
     user_id = await get_db_user_id(user, user_repo)
     if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     # Verify ownership
     project = await project_repo.get_by_id(project_uuid)
@@ -438,7 +438,7 @@ async def bulk_add_project_images(
 
     user_id = await get_db_user_id(user, user_repo)
     if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     # Verify ownership
     project = await project_repo.get_by_id(project_uuid)

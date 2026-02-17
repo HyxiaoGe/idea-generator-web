@@ -113,6 +113,19 @@ from .notifications import (
     NotificationType,
     UnreadCountResponse,
 )
+from .preferences import (
+    APISettings,
+    GetPreferencesResponse,
+    GetProviderPreferencesResponse,
+    ProviderPreference,
+    ProviderPreferences,
+    RoutingStrategy,
+    UpdatePreferencesRequest,
+    UpdatePreferencesResponse,
+    UpdateProviderPreferencesRequest,
+    UpdateProviderPreferencesResponse,
+    UserPreferences,
+)
 from .projects import (
     AddProjectImageRequest,
     AddProjectImageResponse,
@@ -150,19 +163,6 @@ from .search import (
     SearchResultType,
     SearchSuggestion,
     SuggestionsResponse,
-)
-from .settings import (
-    APISettings,
-    GetProviderPreferencesResponse,
-    GetSettingsResponse,
-    ProviderPreference,
-    ProviderPreferences,
-    RoutingStrategy,
-    UpdateProviderPreferencesRequest,
-    UpdateProviderPreferencesResponse,
-    UpdateSettingsRequest,
-    UpdateSettingsResponse,
-    UserPreferences,
 )
 from .templates import (
     BatchGenerateRequest as TemplateBatchGenerateRequest,
@@ -297,7 +297,7 @@ __all__ = [
     "ListVideoTasksResponse",
     "VideoProviderInfo",
     "ListVideoProvidersResponse",
-    # Settings
+    # Preferences
     "Theme",
     "Language",
     "RoutingStrategy",
@@ -305,9 +305,9 @@ __all__ = [
     "APISettings",
     "ProviderPreference",
     "ProviderPreferences",
-    "GetSettingsResponse",
-    "UpdateSettingsRequest",
-    "UpdateSettingsResponse",
+    "GetPreferencesResponse",
+    "UpdatePreferencesRequest",
+    "UpdatePreferencesResponse",
     "GetProviderPreferencesResponse",
     "UpdateProviderPreferencesRequest",
     "UpdateProviderPreferencesResponse",

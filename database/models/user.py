@@ -22,8 +22,8 @@ if TYPE_CHECKING:
     from .notification import Notification
     from .project import Project
     from .quota import QuotaUsage
-    from .settings import UserSettings
     from .template import PromptTemplate
+    from .user_preferences import UserPreference
 
 
 class User(Base, TimestampMixin):
@@ -105,8 +105,8 @@ class User(Base, TimestampMixin):
         "AuditLog",
         back_populates="user",
     )
-    settings: Mapped["UserSettings | None"] = relationship(
-        "UserSettings",
+    preferences: Mapped["UserPreference | None"] = relationship(
+        "UserPreference",
         back_populates="user",
         uselist=False,
         cascade="all, delete-orphan",

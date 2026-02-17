@@ -1,14 +1,14 @@
 """
-Settings router for user preferences and configuration.
+Preferences router for user preferences and configuration.
 
 Preferences merge logic is delegated to prefhub's PreferencesService.
 API settings (webhooks, rate limits) remain handled locally.
 
 Endpoints:
-- GET /api/settings - Get user settings
-- PUT /api/settings - Update user settings
-- GET /api/settings/providers - Get provider preferences
-- PUT /api/settings/providers - Update provider preferences
+- GET /api/preferences - Get user preferences
+- PUT /api/preferences - Update user preferences
+- GET /api/preferences/providers - Get provider preferences
+- PUT /api/preferences/providers - Update provider preferences
 """
 
 import logging
@@ -17,26 +17,26 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from prefhub.services.preferences import deep_merge
 
-from api.dependencies import get_settings_repository, get_user_repository
+from api.dependencies import get_preferences_repository, get_user_repository
 from api.routers.auth import require_current_user
-from api.schemas.settings import (
+from api.schemas.preferences import (
     APISettings,
+    GetPreferencesResponse,
     GetProviderPreferencesResponse,
-    GetSettingsResponse,
     ProviderPreferences,
+    UpdatePreferencesRequest,
+    UpdatePreferencesResponse,
     UpdateProviderPreferencesRequest,
     UpdateProviderPreferencesResponse,
-    UpdateSettingsRequest,
-    UpdateSettingsResponse,
     UserPreferences,
 )
-from database.repositories import SettingsRepository, UserRepository
+from database.repositories import PreferencesRepository, UserRepository
 from services.auth_service import GitHubUser
 from services.preferences_service import IdeaGeneratorPreferencesService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/settings", tags=["settings"])
+router = APIRouter(prefix="/preferences", tags=["preferences"])
 
 
 # ============ Helpers ============
@@ -58,66 +58,66 @@ async def _get_db_user_id(
 # ============ Endpoints ============
 
 
-@router.get("", response_model=GetSettingsResponse)
-async def get_settings(
+@router.get("", response_model=GetPreferencesResponse)
+async def get_preferences(
     user: GitHubUser = Depends(require_current_user),
-    settings_repo: SettingsRepository | None = Depends(get_settings_repository),
+    prefs_repo: PreferencesRepository | None = Depends(get_preferences_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """
-    Get current user settings.
+    Get current user preferences.
 
-    Returns default settings if none have been saved.
+    Returns default preferences if none have been saved.
     """
     user_id = await _get_db_user_id(user, user_repo)
 
-    if not user_id or not settings_repo:
-        return GetSettingsResponse()
+    if not user_id or not prefs_repo:
+        return GetPreferencesResponse()
 
-    pref_service = IdeaGeneratorPreferencesService(settings_repo)
+    pref_service = IdeaGeneratorPreferencesService(prefs_repo)
     raw = await pref_service._load_raw(user_id)
     prefs = UserPreferences(**raw) if raw else UserPreferences()
 
     # Load api_settings separately
-    db_settings = await settings_repo.get_by_user_id(UUID(user_id))
+    db_prefs = await prefs_repo.get_by_user_id(UUID(user_id))
     api_settings = (
-        APISettings(**db_settings.api_settings)
-        if db_settings and db_settings.api_settings
+        APISettings(**db_prefs.api_settings)
+        if db_prefs and db_prefs.api_settings
         else APISettings()
     )
-    updated_at = db_settings.updated_at if db_settings else None
+    updated_at = db_prefs.updated_at if db_prefs else None
 
-    return GetSettingsResponse(
+    return GetPreferencesResponse(
         preferences=prefs,
         api_settings=api_settings,
         updated_at=updated_at,
     )
 
 
-@router.put("", response_model=UpdateSettingsResponse)
-async def update_settings(
-    request: UpdateSettingsRequest,
+@router.put("", response_model=UpdatePreferencesResponse)
+async def update_preferences(
+    request: UpdatePreferencesRequest,
     user: GitHubUser = Depends(require_current_user),
-    settings_repo: SettingsRepository | None = Depends(get_settings_repository),
+    prefs_repo: PreferencesRepository | None = Depends(get_preferences_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """
-    Update user settings.
+    Update user preferences.
 
     Only provided fields are updated; others remain unchanged.
     """
-    if not settings_repo or not user_repo:
+    if not prefs_repo or not user_repo:
         raise HTTPException(
             status_code=503,
-            detail="Database not configured. Settings cannot be saved.",
+            detail="Database not configured. Preferences cannot be saved.",
         )
 
     user_id = await _get_db_user_id(user, user_repo)
     if not user_id:
-        raise HTTPException(status_code=404, detail="User not found in database")
+        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     db_user_id = UUID(user_id)
-    pref_service = IdeaGeneratorPreferencesService(settings_repo)
+    pref_service = IdeaGeneratorPreferencesService(prefs_repo)
 
     # Merge preferences via prefhub deep_merge
     if request.preferences:
@@ -130,32 +130,32 @@ async def update_settings(
         merged_prefs = current_raw
 
     # Merge API settings (not part of prefhub)
-    current = await settings_repo.get_by_user_id(db_user_id)
+    current = await prefs_repo.get_by_user_id(db_user_id)
     if request.api_settings:
         new_api = request.api_settings.model_dump(exclude_unset=True)
         if current and current.api_settings:
             merged_api = {**current.api_settings, **new_api}
         else:
             merged_api = new_api
-        await settings_repo.upsert(user_id=db_user_id, api_settings=merged_api)
+        await prefs_repo.upsert(user_id=db_user_id, api_settings=merged_api)
     else:
         merged_api = current.api_settings if current else {}
 
     # Reload for updated_at
-    settings = await settings_repo.get_by_user_id(db_user_id)
+    record = await prefs_repo.get_by_user_id(db_user_id)
 
-    return UpdateSettingsResponse(
+    return UpdatePreferencesResponse(
         success=True,
         preferences=UserPreferences(**merged_prefs),
         api_settings=APISettings(**merged_api),
-        updated_at=settings.updated_at,
+        updated_at=record.updated_at,
     )
 
 
 @router.get("/providers", response_model=GetProviderPreferencesResponse)
 async def get_provider_preferences(
     user: GitHubUser = Depends(require_current_user),
-    settings_repo: SettingsRepository | None = Depends(get_settings_repository),
+    prefs_repo: PreferencesRepository | None = Depends(get_preferences_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """
@@ -165,10 +165,10 @@ async def get_provider_preferences(
     """
     user_id = await _get_db_user_id(user, user_repo)
 
-    if not user_id or not settings_repo:
+    if not user_id or not prefs_repo:
         return GetProviderPreferencesResponse(provider_preferences=ProviderPreferences())
 
-    pref_service = IdeaGeneratorPreferencesService(settings_repo)
+    pref_service = IdeaGeneratorPreferencesService(prefs_repo)
     raw = await pref_service._load_raw(user_id)
     prefs = UserPreferences(**raw) if raw else UserPreferences()
 
@@ -179,33 +179,33 @@ async def get_provider_preferences(
 async def update_provider_preferences(
     request: UpdateProviderPreferencesRequest,
     user: GitHubUser = Depends(require_current_user),
-    settings_repo: SettingsRepository | None = Depends(get_settings_repository),
+    prefs_repo: PreferencesRepository | None = Depends(get_preferences_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """
     Update user's provider preferences.
     """
-    if not settings_repo or not user_repo:
+    if not prefs_repo or not user_repo:
         raise HTTPException(
             status_code=503,
-            detail="Database not configured. Settings cannot be saved.",
+            detail="Database not configured. Preferences cannot be saved.",
         )
 
     user_id = await _get_db_user_id(user, user_repo)
     if not user_id:
-        raise HTTPException(status_code=404, detail="User not found in database")
+        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
-    pref_service = IdeaGeneratorPreferencesService(settings_repo)
+    pref_service = IdeaGeneratorPreferencesService(prefs_repo)
     current_raw = await pref_service._load_raw(user_id)
     update_dict = {"providers": request.provider_preferences.model_dump()}
     merged = deep_merge(current_raw, update_dict)
     await pref_service._save_raw(user_id, merged)
 
     # Reload for updated_at
-    db_settings = await settings_repo.get_by_user_id(UUID(user_id))
+    db_prefs = await prefs_repo.get_by_user_id(UUID(user_id))
 
     return UpdateProviderPreferencesResponse(
         success=True,
         provider_preferences=request.provider_preferences,
-        updated_at=db_settings.updated_at,
+        updated_at=db_prefs.updated_at,
     )

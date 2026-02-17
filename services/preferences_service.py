@@ -1,8 +1,8 @@
 """
-Preferences service backed by SettingsRepository.
+Preferences service backed by PreferencesRepository.
 
 Implements prefhub's PreferencesService using the existing
-user_settings table (Pattern B: JSONB preferences column).
+user_preferences table (Pattern B: JSONB preferences column).
 """
 
 from __future__ import annotations
@@ -12,23 +12,23 @@ from uuid import UUID
 
 from prefhub.services.preferences import PreferencesService
 
-from database.repositories import SettingsRepository
+from database.repositories import PreferencesRepository
 
 
 class IdeaGeneratorPreferencesService(PreferencesService):
-    """Storage backend using the existing user_settings table."""
+    """Storage backend using the user_preferences table."""
 
-    def __init__(self, settings_repo: SettingsRepository):
-        self.settings_repo = settings_repo
+    def __init__(self, prefs_repo: PreferencesRepository):
+        self.prefs_repo = prefs_repo
 
     async def _load_raw(self, user_id: str) -> dict[str, Any]:
-        settings = await self.settings_repo.get_by_user_id(UUID(user_id))
-        if not settings:
+        record = await self.prefs_repo.get_by_user_id(UUID(user_id))
+        if not record:
             return {}
-        return settings.preferences or {}
+        return record.preferences or {}
 
     async def _save_raw(self, user_id: str, data: dict[str, Any]) -> None:
-        await self.settings_repo.upsert(
+        await self.prefs_repo.upsert(
             user_id=UUID(user_id),
             preferences=data,
         )

@@ -1,5 +1,5 @@
 """
-User settings model for storing user preferences.
+User preferences model for storing user preferences and API settings.
 """
 
 from datetime import datetime
@@ -17,14 +17,14 @@ if TYPE_CHECKING:
     from .user import User
 
 
-class UserSettings(Base):
+class UserPreference(Base):
     """
-    User settings model for storing preferences and API settings.
+    User preferences model for storing preferences and API settings.
 
     One-to-one relationship with User.
     """
 
-    __tablename__ = "user_settings"
+    __tablename__ = "user_preferences"
 
     # Primary key is user_id (one-to-one with users)
     user_id: Mapped[UUID] = mapped_column(
@@ -60,8 +60,8 @@ class UserSettings(Base):
     # Relationship
     user: Mapped["User"] = relationship(
         "User",
-        back_populates="settings",
+        back_populates="preferences",
     )
 
     def __repr__(self) -> str:
-        return f"<UserSettings(user_id={self.user_id})>"
+        return f"<UserPreference(user_id={self.user_id})>"

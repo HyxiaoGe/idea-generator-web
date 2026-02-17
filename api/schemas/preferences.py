@@ -1,5 +1,5 @@
 """
-Pydantic schemas for user settings API.
+Pydantic schemas for user preferences API.
 
 Universal preferences (language, theme, notifications) come from prefhub.
 Domain-specific fields (generation defaults, provider preferences) are defined here.
@@ -109,8 +109,8 @@ class APISettings(BaseModel):
 # ============ Request/Response Schemas ============
 
 
-class GetSettingsResponse(BaseModel):
-    """Response for GET /api/settings."""
+class GetPreferencesResponse(BaseModel):
+    """Response for GET /api/preferences."""
 
     preferences: UserPreferences = Field(
         default_factory=UserPreferences,
@@ -126,8 +126,8 @@ class GetSettingsResponse(BaseModel):
     )
 
 
-class UpdateSettingsRequest(BaseModel):
-    """Request for PUT /api/settings."""
+class UpdatePreferencesRequest(BaseModel):
+    """Request for PUT /api/preferences."""
 
     preferences: UserPreferences | None = Field(
         default=None,
@@ -139,8 +139,8 @@ class UpdateSettingsRequest(BaseModel):
     )
 
 
-class UpdateSettingsResponse(BaseModel):
-    """Response for PUT /api/settings."""
+class UpdatePreferencesResponse(BaseModel):
+    """Response for PUT /api/preferences."""
 
     success: bool = True
     preferences: UserPreferences
@@ -149,19 +149,19 @@ class UpdateSettingsResponse(BaseModel):
 
 
 class GetProviderPreferencesResponse(BaseModel):
-    """Response for GET /api/settings/providers."""
+    """Response for GET /api/preferences/providers."""
 
     provider_preferences: ProviderPreferences
 
 
 class UpdateProviderPreferencesRequest(BaseModel):
-    """Request for PUT /api/settings/providers."""
+    """Request for PUT /api/preferences/providers."""
 
     provider_preferences: ProviderPreferences
 
 
 class UpdateProviderPreferencesResponse(BaseModel):
-    """Response for PUT /api/settings/providers."""
+    """Response for PUT /api/preferences/providers."""
 
     success: bool = True
     provider_preferences: ProviderPreferences
