@@ -23,6 +23,9 @@ services:
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
       - GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI}
+      # Storage (MinIO on host)
+      - MINIO_ENDPOINT=host.docker.internal:9000
+      - STORAGE_PUBLIC_URL=http://localhost:9000/idea-generator
     volumes:
       - ./outputs:/app/outputs
     restart: unless-stopped
