@@ -63,6 +63,8 @@ def template_to_list_item(t) -> TemplateListItem:
         id=str(t.id),
         display_name_en=t.display_name_en,
         display_name_zh=t.display_name_zh,
+        description_en=t.description_en,
+        description_zh=t.description_zh,
         preview_image_url=t.preview_image_url,
         category=t.category,
         tags=t.tags or [],

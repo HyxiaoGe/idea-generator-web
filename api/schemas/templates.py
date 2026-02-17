@@ -17,6 +17,8 @@ class TemplateListItem(BaseModel):
     id: str
     display_name_en: str
     display_name_zh: str
+    description_en: str | None = None
+    description_zh: str | None = None
     preview_image_url: str | None = None
     category: str
     tags: list[str] = Field(default_factory=list)
