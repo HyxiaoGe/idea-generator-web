@@ -91,7 +91,7 @@ async def detailed_health_check(
             overall_status = HealthStatus.DEGRADED
 
     # Check Gemini API configuration
-    if settings.google_api_key:
+    if settings.provider_google_api_key:
         components["gemini_api"] = ComponentHealth(
             status=HealthStatus.HEALTHY,
             details={"configured": True},

@@ -5,14 +5,18 @@ Records all moderation checks for analysis, review, and optimization.
 Logs are written to local filesystem under outputs/logs/content_moderation/.
 """
 
+import asyncio
 import hashlib
 import json
+import logging
 import os
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from queue import Queue
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def get_config_value(key: str, default: str = "") -> str:
@@ -59,6 +63,7 @@ class AuditLogger:
                     if log_data is None:  # Shutdown signal
                         break
                     self._write_to_local(log_data)
+                    self._write_to_db(log_data)
                 except Exception:
                     # Empty queue or error, continue
                     pass
@@ -98,6 +103,7 @@ class AuditLogger:
                 self._write_queue.put(log_entry)
             else:
                 self._write_to_local(log_entry)
+                self._write_to_db(log_entry)
 
         except Exception as e:
             # Don't block user flow on logging errors
@@ -223,6 +229,55 @@ class AuditLogger:
 
         except Exception as e:
             print(f"[AuditLogger] Failed to write log: {e}")
+
+    def _write_to_db(self, log_entry: dict[str, Any]):
+        """Write queryable summary to PostgreSQL via AuditRepository."""
+        try:
+            from database import is_database_available
+
+            if not is_database_available():
+                return
+
+            # Map log entry to DB columns
+            final_decision = log_entry.get("final_decision", {})
+            allowed = final_decision.get("allowed", True)
+            needs_review = log_entry.get("analysis_flags", {}).get("needs_review", False)
+
+            if needs_review:
+                filter_result = "flagged"
+            elif allowed:
+                filter_result = "allowed"
+            else:
+                filter_result = "blocked"
+
+            prompt = log_entry.get("user_input", {}).get("prompt", "")
+            blocked_reason = final_decision.get("blocked_reason")
+
+            async def _persist():
+                from database import get_session
+                from database.repositories import AuditRepository
+
+                async for session in get_session():
+                    repo = AuditRepository(session)
+                    await repo.create_audit_log(
+                        action="content_moderation",
+                        prompt=prompt,
+                        filter_result=filter_result,
+                        blocked_reason=blocked_reason,
+                    )
+                    break
+
+            # Run async DB write from sync context
+            try:
+                loop = asyncio.get_running_loop()
+                # Already in an async context — schedule as a task
+                loop.create_task(_persist())
+            except RuntimeError:
+                # No running loop (background thread) — create one
+                asyncio.run(_persist())
+
+        except Exception as e:
+            logger.warning(f"Failed to write audit log to database: {e}")
 
     def generate_daily_summary(self, date: str) -> dict[str, Any]:
         """

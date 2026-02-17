@@ -132,6 +132,7 @@ class ChatRepository:
         content: str,
         image_id: UUID | None = None,
         image_url: str | None = None,
+        thinking: str | None = None,
     ) -> ChatMessage:
         """Create a new chat message."""
         # Get next sequence number
@@ -146,6 +147,7 @@ class ChatRepository:
             content=content,
             image_id=image_id,
             image_url=image_url,
+            thinking=thinking,
             sequence_number=sequence_number,
         )
         self.session.add(message)

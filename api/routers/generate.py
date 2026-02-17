@@ -16,7 +16,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
-from api.dependencies import get_image_repository, get_template_repository
+from api.dependencies import get_image_repository, get_quota_repository, get_template_repository
 from api.routers.auth import get_current_user
 from api.schemas.generate import (
     BatchGenerateRequest,
@@ -32,7 +32,7 @@ from api.schemas.generate import (
 from core.config import get_settings
 from core.exceptions import QuotaExceededError
 from core.redis import get_redis
-from database.repositories import ImageRepository, TemplateRepository
+from database.repositories import ImageRepository, QuotaRepository, TemplateRepository
 from services import (
     # Multi-provider support
     GenerationRequest as ProviderRequest,
@@ -133,6 +133,7 @@ async def generate_image(
     user: GitHubUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
+    quota_repo: QuotaRepository | None = Depends(get_quota_repository),
     x_api_key: str | None = Header(None, alias="X-API-Key"),
     x_provider: str | None = Header(None, alias="X-Provider"),
     x_model: str | None = Header(None, alias="X-Model"),
@@ -275,6 +276,20 @@ async def generate_image(
         except Exception as e:
             logger.warning(f"Failed to save image to database: {e}")
             # Continue - file storage is the primary storage
+
+    # Record quota usage to PostgreSQL if available
+    if quota_repo:
+        try:
+            await quota_repo.record_usage(
+                mode="basic",
+                points_used=1,
+                provider=result.provider,
+                model=result.model,
+                resolution=request.settings.resolution.value,
+                media_type="image",
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record quota usage to database: {e}")
 
     return GenerateImageResponse(
         image=GeneratedImage(
@@ -490,6 +505,7 @@ async def search_grounded_generate(
     user: GitHubUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
+    quota_repo: QuotaRepository | None = Depends(get_quota_repository),
     x_api_key: str | None = Header(None, alias="X-API-Key"),
     x_provider: str | None = Header(None, alias="X-Provider"),
     x_model: str | None = Header(None, alias="X-Model"),
@@ -620,6 +636,20 @@ async def search_grounded_generate(
             )
         except Exception as e:
             logger.warning(f"Failed to save image to database: {e}")
+
+    # Record quota usage to PostgreSQL if available
+    if quota_repo:
+        try:
+            await quota_repo.record_usage(
+                mode="search",
+                points_used=1,
+                provider=result.provider,
+                model=result.model,
+                resolution=request.settings.resolution.value,
+                media_type="image",
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record quota usage to database: {e}")
 
     return GenerateImageResponse(
         image=GeneratedImage(

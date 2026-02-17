@@ -13,6 +13,9 @@ services:
       - DEBUG=false
       # Redis (host machine, DB 1 to avoid conflict)
       - REDIS_URL=redis://host.docker.internal:6379/1
+      # PostgreSQL
+      - DATABASE_ENABLED=true
+      - DATABASE_URL=postgresql+asyncpg://prompthub:prompthub_dev@host.docker.internal:5432/idea_generator
       # Google Gemini API
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       # GitHub OAuth (optional)
@@ -37,6 +40,8 @@ services:
     command: arq api.workers.WorkerSettings
     environment:
       - REDIS_URL=redis://host.docker.internal:6379/1
+      - DATABASE_ENABLED=true
+      - DATABASE_URL=postgresql+asyncpg://prompthub:prompthub_dev@host.docker.internal:5432/idea_generator
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     volumes:
       - ./outputs:/app/outputs

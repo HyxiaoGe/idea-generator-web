@@ -143,6 +143,12 @@ class ChatMessage(Base):
         nullable=True,
     )
 
+    # Thinking content (for assistant responses with reasoning)
+    thinking: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
     # Sequence number for ordering
     sequence_number: Mapped[int] = mapped_column(
         Integer,
