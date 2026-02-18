@@ -217,6 +217,9 @@ class AuthService:
             data={
                 "sub": user.id,
                 "login": user.login,
+                "name": user.name,
+                "email": user.email,
+                "avatar_url": user.avatar_url,
                 "provider": "github",
             }
         )
@@ -242,9 +245,9 @@ class AuthService:
             return GitHubUser(
                 id=payload.get("sub", ""),
                 login=payload.get("login", ""),
-                name=None,
-                email=None,
-                avatar_url=None,
+                name=payload.get("name"),
+                email=payload.get("email"),
+                avatar_url=payload.get("avatar_url"),
             )
         except AuthenticationError:
             return None
