@@ -11,6 +11,7 @@ from .generate import router as generate_router
 from .health import router as health_router
 from .history import router as history_router
 from .images import router as images_router
+from .models import router as models_router
 from .notifications import router as notifications_router
 from .preferences import router as preferences_router
 from .projects import router as projects_router
@@ -29,6 +30,7 @@ __all__ = [
     "history_router",
     "video_router",
     "images_router",
+    "models_router",
     "preferences_router",
     "favorites_router",
     "templates_router",

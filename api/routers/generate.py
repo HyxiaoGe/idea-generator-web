@@ -176,13 +176,40 @@ async def generate_image(
         negative_prompt = None
         processed = None
 
+    # Model resolution: alias or quality preset
+    from services.model_router import QualityPreset, resolve_alias, select_model_by_preset
+
+    effective_provider = x_provider
+    effective_model = x_model
+    preset_used = None
+
+    if x_model:
+        # Manual model → resolve alias
+        resolved_provider, resolved_model = resolve_alias(x_model)
+        effective_model = resolved_model
+        if resolved_provider and not x_provider:
+            effective_provider = resolved_provider
+        preset_used = "manual"
+    else:
+        # Quality preset routing (default: balanced)
+        preset_str = request.quality_preset or "balanced"
+        try:
+            preset = QualityPreset(preset_str)
+        except ValueError:
+            preset = QualityPreset.BALANCED
+        p_provider, p_model = select_model_by_preset(preset, x_provider)
+        if p_model:
+            effective_provider = p_provider or x_provider
+            effective_model = p_model
+        preset_used = preset_str
+
     # Build provider request
     provider_request = build_provider_request(
         prompt=final_prompt,
         settings=request.settings,
         user_id=user_id,
-        preferred_provider=x_provider,
-        preferred_model=x_model,
+        preferred_provider=effective_provider,
+        preferred_model=effective_model,
         enable_thinking=request.include_thinking,
         negative_prompt=negative_prompt,
     )
@@ -291,6 +318,18 @@ async def generate_image(
         except Exception as e:
             logger.warning(f"Failed to record quota usage to database: {e}")
 
+    # Resolve model display name
+    model_display_name = None
+    if result.model:
+        from services.providers.registry import get_provider_registry
+
+        registry = get_provider_registry()
+        for p in registry.get_available_image_providers():
+            m = p.get_model_by_id(result.model)
+            if m:
+                model_display_name = m.name
+                break
+
     return GenerateImageResponse(
         image=GeneratedImage(
             key=storage_obj.key,
@@ -306,9 +345,11 @@ async def generate_image(
         mode=GenerationMode.BASIC,
         settings=request.settings,
         created_at=datetime.now(),
-        # New: provider info
+        # Provider info
         provider=result.provider,
         model=result.model,
+        model_display_name=model_display_name,
+        quality_preset=preset_used,
         # Prompt pipeline
         processed_prompt=processed.final if processed else None,
         negative_prompt=negative_prompt,
@@ -547,13 +588,38 @@ async def search_grounded_generate(
         negative_prompt = None
         processed = None
 
+    # Model resolution: alias or quality preset
+    from services.model_router import QualityPreset, resolve_alias, select_model_by_preset
+
+    search_effective_provider = x_provider or "google"  # Search only works with Google
+    search_effective_model = x_model
+    search_preset_used = None
+
+    if x_model:
+        resolved_provider, resolved_model = resolve_alias(x_model)
+        search_effective_model = resolved_model
+        if resolved_provider and not x_provider:
+            search_effective_provider = resolved_provider
+        search_preset_used = "manual"
+    else:
+        preset_str = request.quality_preset or "balanced"
+        try:
+            preset = QualityPreset(preset_str)
+        except ValueError:
+            preset = QualityPreset.BALANCED
+        p_provider, p_model = select_model_by_preset(preset, search_effective_provider)
+        if p_model:
+            search_effective_provider = p_provider or search_effective_provider
+            search_effective_model = p_model
+        search_preset_used = preset_str
+
     # Build provider request with search enabled
     provider_request = build_provider_request(
         prompt=final_prompt,
         settings=request.settings,
         user_id=user_id,
-        preferred_provider=x_provider or "google",  # Search only works with Google
-        preferred_model=x_model,
+        preferred_provider=search_effective_provider,
+        preferred_model=search_effective_model,
         enable_search=True,
         negative_prompt=negative_prompt,
     )
@@ -655,6 +721,18 @@ async def search_grounded_generate(
         except Exception as e:
             logger.warning(f"Failed to record quota usage to database: {e}")
 
+    # Resolve model display name
+    search_model_display_name = None
+    if result.model:
+        from services.providers.registry import get_provider_registry
+
+        registry = get_provider_registry()
+        for p in registry.get_available_image_providers():
+            m = p.get_model_by_id(result.model)
+            if m:
+                search_model_display_name = m.name
+                break
+
     return GenerateImageResponse(
         image=GeneratedImage(
             key=storage_obj.key,
@@ -672,6 +750,8 @@ async def search_grounded_generate(
         created_at=datetime.now(),
         provider=result.provider,
         model=result.model,
+        model_display_name=search_model_display_name,
+        quality_preset=search_preset_used,
         # Prompt pipeline
         processed_prompt=processed.final if processed else None,
         negative_prompt=negative_prompt,

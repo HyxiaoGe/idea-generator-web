@@ -43,13 +43,17 @@ MINIMAX_MODELS = [
         ],
         max_resolution="2K",
         supports_aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4"],
-        pricing_per_unit=0.02,  # Competitive pricing
+        pricing_per_unit=0.02,
         quality_score=0.87,
         latency_estimate=12.0,
         is_default=True,
         region=ProviderRegion.CHINA,
         execution_mode=ExecutionMode.ASYNC_TASK,
         auth_type=AuthType.BEARER_TOKEN,
+        tier="fast",
+        arena_rank=11,
+        arena_score=1155,
+        strengths=["speed", "cost-effective"],
     ),
     ProviderModel(
         id="image-01-hd",
@@ -69,6 +73,11 @@ MINIMAX_MODELS = [
         region=ProviderRegion.CHINA,
         execution_mode=ExecutionMode.ASYNC_TASK,
         auth_type=AuthType.BEARER_TOKEN,
+        tier="balanced",
+        arena_rank=10,
+        arena_score=1160,
+        strengths=["upscaling", "detail"],
+        hidden=True,
     ),
 ]
 

@@ -32,6 +32,14 @@ from .health_check import (
 
 # LLM Client & Prompt Pipeline
 from .llm_client import LLMClient, get_llm_client
+
+# Model Router (quality presets & alias resolution)
+from .model_router import (
+    QualityPreset,
+    get_all_models,
+    resolve_alias,
+    select_model_by_preset,
+)
 from .prompt_pipeline import ProcessedPrompt, PromptPipeline, get_prompt_pipeline
 
 # Provider Router
@@ -145,6 +153,11 @@ __all__ = [
     "RoutingStrategy",
     "RoutingDecision",
     "get_provider_router",
+    # Model Router
+    "QualityPreset",
+    "resolve_alias",
+    "select_model_by_preset",
+    "get_all_models",
     # WebSocket
     "WebSocketManager",
     "get_websocket_manager",

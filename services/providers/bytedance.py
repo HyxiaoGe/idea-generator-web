@@ -37,27 +37,33 @@ logger = logging.getLogger(__name__)
 
 BYTEDANCE_MODELS = [
     ProviderModel(
-        id="jimeng-2.1-pro",
-        name="即梦 2.1 Pro",
+        id="seedream-4.5",
+        name="Seedream 4.5",
         provider="bytedance",
         media_type=MediaType.IMAGE,
         capabilities=[
             ProviderCapability.TEXT_TO_IMAGE,
             ProviderCapability.IMAGE_TO_IMAGE,
+            ProviderCapability.UPSCALING,
         ],
         max_resolution="4K",
         supports_aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"],
-        pricing_per_unit=0.03,  # ~0.2 RMB
-        quality_score=0.93,
+        pricing_per_unit=0.04,
+        quality_score=0.95,
         latency_estimate=15.0,
         is_default=True,
         region=ProviderRegion.CHINA,
         execution_mode=ExecutionMode.ASYNC_TASK,
         auth_type=AuthType.VOLCANO_ENGINE,
+        tier="premium",
+        arena_rank=1,
+        arena_score=1258,
+        aliases=["jimeng-xl-pro", "jimeng-2.1-pro"],
+        strengths=["photorealism", "chinese-style", "detail"],
     ),
     ProviderModel(
-        id="jimeng-2.0",
-        name="即梦 2.0",
+        id="seedream-4.0",
+        name="Seedream 4.0",
         provider="bytedance",
         media_type=MediaType.IMAGE,
         capabilities=[
@@ -72,30 +78,19 @@ BYTEDANCE_MODELS = [
         region=ProviderRegion.CHINA,
         execution_mode=ExecutionMode.ASYNC_TASK,
         auth_type=AuthType.VOLCANO_ENGINE,
-    ),
-    ProviderModel(
-        id="jimeng-xl-pro",
-        name="即梦 XL Pro",
-        provider="bytedance",
-        media_type=MediaType.IMAGE,
-        capabilities=[
-            ProviderCapability.TEXT_TO_IMAGE,
-            ProviderCapability.UPSCALING,
-        ],
-        max_resolution="4K",
-        supports_aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4"],
-        pricing_per_unit=0.04,
-        quality_score=0.95,
-        latency_estimate=20.0,
-        is_default=False,
-        region=ProviderRegion.CHINA,
-        execution_mode=ExecutionMode.ASYNC_TASK,
-        auth_type=AuthType.VOLCANO_ENGINE,
+        tier="balanced",
+        arena_rank=6,
+        arena_score=1183,
+        aliases=["jimeng-2.0"],
+        strengths=["speed", "chinese-style"],
     ),
 ]
 
 # Request key mappings for different models
 REQ_KEY_MAP = {
+    "seedream-4.5": "jimeng_high_aes_general_v21_L",
+    "seedream-4.0": "jimeng_high_aes_general_v20",
+    # Legacy (safety net)
     "jimeng-2.1-pro": "jimeng_high_aes_general_v21_L",
     "jimeng-2.0": "jimeng_high_aes_general_v20",
     "jimeng-xl-pro": "jimeng_xl_pro",

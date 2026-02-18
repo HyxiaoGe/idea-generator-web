@@ -654,6 +654,8 @@ class ProviderRouter:
 
         for provider in providers:
             for model in provider.models:
+                if model.hidden:
+                    continue
                 if model.supports_resolution(request.resolution):
                     cost = model.pricing_per_unit
                     if request.resolution == "4K":
@@ -674,6 +676,8 @@ class ProviderRouter:
 
         for provider in providers:
             for model in provider.models:
+                if model.hidden:
+                    continue
                 if model.supports_resolution(request.resolution):
                     if model.quality_score > best_quality:
                         best_quality = model.quality_score
@@ -688,6 +692,8 @@ class ProviderRouter:
 
         for provider in providers:
             for model in provider.models:
+                if model.hidden:
+                    continue
                 if model.supports_resolution(request.resolution):
                     if model.latency_estimate < best_latency:
                         best_latency = model.latency_estimate
@@ -858,6 +864,7 @@ class ProviderRouter:
                         "quality_score": m.quality_score,
                     }
                     for m in p.models
+                    if not m.hidden
                 ],
             }
             # Add region if available

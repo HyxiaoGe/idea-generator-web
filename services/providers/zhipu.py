@@ -35,42 +35,6 @@ logger = logging.getLogger(__name__)
 
 ZHIPU_MODELS = [
     ProviderModel(
-        id="cogview-3-plus",
-        name="CogView-3 Plus",
-        provider="zhipu",
-        media_type=MediaType.IMAGE,
-        capabilities=[
-            ProviderCapability.TEXT_TO_IMAGE,
-        ],
-        max_resolution="2K",
-        supports_aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"],
-        pricing_per_unit=0.025,  # ~0.18 RMB
-        quality_score=0.90,
-        latency_estimate=12.0,
-        is_default=True,
-        region=ProviderRegion.CHINA,
-        execution_mode=ExecutionMode.ASYNC_TASK,
-        auth_type=AuthType.BEARER_TOKEN,
-    ),
-    ProviderModel(
-        id="cogview-3",
-        name="CogView-3",
-        provider="zhipu",
-        media_type=MediaType.IMAGE,
-        capabilities=[
-            ProviderCapability.TEXT_TO_IMAGE,
-        ],
-        max_resolution="1K",
-        supports_aspect_ratios=["1:1", "16:9", "9:16"],
-        pricing_per_unit=0.015,  # ~0.1 RMB
-        quality_score=0.85,
-        latency_estimate=10.0,
-        is_default=False,
-        region=ProviderRegion.CHINA,
-        execution_mode=ExecutionMode.ASYNC_TASK,
-        auth_type=AuthType.BEARER_TOKEN,
-    ),
-    ProviderModel(
         id="cogview-4",
         name="CogView-4",
         provider="zhipu",
@@ -80,13 +44,18 @@ ZHIPU_MODELS = [
         ],
         max_resolution="2K",
         supports_aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4"],
-        pricing_per_unit=0.03,  # Higher quality, higher price
+        pricing_per_unit=0.03,
         quality_score=0.92,
         latency_estimate=15.0,
-        is_default=False,
+        is_default=True,
         region=ProviderRegion.CHINA,
         execution_mode=ExecutionMode.ASYNC_TASK,
         auth_type=AuthType.BEARER_TOKEN,
+        tier="balanced",
+        arena_rank=4,
+        arena_score=1190,
+        aliases=["cogview-3-plus", "cogview-3"],
+        strengths=["chinese-style", "artistic"],
     ),
 ]
 
@@ -197,8 +166,8 @@ class ZhipuProvider(ChinaImageProvider):
         if request.seed is not None:
             payload["seed"] = request.seed
 
-        # For CogView-3-Plus and CogView-4, quality parameter is available
-        if model.id in ["cogview-3-plus", "cogview-4"]:
+        # For CogView-4, quality parameter is available
+        if model.id in ["cogview-4"]:
             # Standard or HD quality
             payload["quality"] = "standard"
 

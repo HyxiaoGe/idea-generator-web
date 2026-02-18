@@ -21,6 +21,7 @@ from api.routers import (
     health_router,
     history_router,
     images_router,
+    models_router,
     notifications_router,
     preferences_router,
     projects_router,
@@ -148,6 +149,9 @@ def create_app() -> FastAPI:
 
     # Image serving (for local storage proxy)
     app.include_router(images_router, prefix="/api")
+
+    # Models (discovery endpoint)
+    app.include_router(models_router, prefix="/api")
 
     # User preferences
     app.include_router(preferences_router, prefix="/api")

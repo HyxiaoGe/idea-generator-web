@@ -35,8 +35,8 @@ logger = logging.getLogger(__name__)
 
 ALIBABA_MODELS = [
     ProviderModel(
-        id="wanx-v1",
-        name="通义万相 v1",
+        id="qwen-image",
+        name="通义万相 (Qwen Image)",
         provider="alibaba",
         media_type=MediaType.IMAGE,
         capabilities=[
@@ -44,13 +44,40 @@ ALIBABA_MODELS = [
         ],
         max_resolution="2K",
         supports_aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4"],
-        pricing_per_unit=0.02,  # ~0.14 RMB
+        pricing_per_unit=0.02,
         quality_score=0.88,
         latency_estimate=15.0,
         is_default=True,
         region=ProviderRegion.CHINA,
         execution_mode=ExecutionMode.ASYNC_TASK,
         auth_type=AuthType.BEARER_TOKEN,
+        tier="balanced",
+        arena_rank=9,
+        arena_score=1165,
+        aliases=["wanx-v1"],
+        strengths=["chinese-style", "cost-effective"],
+    ),
+    ProviderModel(
+        id="wan2.6-t2i",
+        name="Wan 2.6 Text-to-Image",
+        provider="alibaba",
+        media_type=MediaType.IMAGE,
+        capabilities=[
+            ProviderCapability.TEXT_TO_IMAGE,
+        ],
+        max_resolution="2K",
+        supports_aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4"],
+        pricing_per_unit=0.025,
+        quality_score=0.91,
+        latency_estimate=12.0,
+        is_default=False,
+        region=ProviderRegion.CHINA,
+        execution_mode=ExecutionMode.ASYNC_TASK,
+        auth_type=AuthType.BEARER_TOKEN,
+        tier="balanced",
+        arena_rank=7,
+        arena_score=1175,
+        strengths=["photorealism", "detail"],
     ),
     ProviderModel(
         id="wanx-sketch-to-image-v1",
@@ -69,6 +96,8 @@ ALIBABA_MODELS = [
         region=ProviderRegion.CHINA,
         execution_mode=ExecutionMode.ASYNC_TASK,
         auth_type=AuthType.BEARER_TOKEN,
+        tier="balanced",
+        hidden=True,
     ),
     ProviderModel(
         id="wanx-style-repaint-v1",
@@ -88,8 +117,16 @@ ALIBABA_MODELS = [
         region=ProviderRegion.CHINA,
         execution_mode=ExecutionMode.ASYNC_TASK,
         auth_type=AuthType.BEARER_TOKEN,
+        tier="balanced",
+        hidden=True,
     ),
 ]
+
+# DashScope API model name mapping (canonical ID → API model name)
+DASHSCOPE_MODEL_MAP = {
+    "qwen-image": "wanx-v1",
+    "wan2.6-t2i": "wan2.6-t2i",
+}
 
 # Size mappings for Alibaba API
 SIZE_MAP = {
@@ -189,10 +226,10 @@ class AlibabaProvider(ChinaImageProvider):
         client = await self._get_client()
 
         # Build payload based on model type
-        if model.id == "wanx-v1":
+        if model.id in ("qwen-image", "wan2.6-t2i"):
             # Text to image
             payload = {
-                "model": "wanx-v1",
+                "model": DASHSCOPE_MODEL_MAP.get(model.id, model.id),
                 "input": {
                     "prompt": request.prompt,
                 },

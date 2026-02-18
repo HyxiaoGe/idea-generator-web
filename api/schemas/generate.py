@@ -71,6 +71,10 @@ class GenerateImageRequest(BaseModel):
     )
     generate_negative: bool | None = Field(None, description="Auto-generate negative prompt")
     template_id: str | None = Field(None, description="Local template ID to apply")
+    quality_preset: str | None = Field(
+        None,
+        description="Quality preset: 'premium', 'balanced', 'fast'. Ignored if X-Model header is set.",
+    )
 
     @field_validator("prompt")
     @classmethod
@@ -103,6 +107,10 @@ class GenerateImageResponse(BaseModel):
     # Multi-provider support
     provider: str | None = Field(None, description="Provider used (google, openai, bfl, etc)")
     model: str | None = Field(None, description="Model ID used")
+    model_display_name: str | None = Field(None, description="Human-readable model name")
+    quality_preset: str | None = Field(
+        None, description="Quality preset used, or 'manual' if model was specified"
+    )
     search_sources: str | None = Field(None, description="Search sources for grounded generation")
     # Prompt pipeline
     processed_prompt: str | None = Field(
@@ -181,6 +189,10 @@ class SearchGenerateRequest(BaseModel):
     )
     generate_negative: bool | None = Field(None, description="Auto-generate negative prompt")
     template_id: str | None = Field(None, description="Local template ID to apply")
+    quality_preset: str | None = Field(
+        None,
+        description="Quality preset: 'premium', 'balanced', 'fast'. Ignored if X-Model header is set.",
+    )
 
 
 class CostEstimate(BaseModel):

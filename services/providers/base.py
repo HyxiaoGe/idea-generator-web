@@ -203,6 +203,13 @@ class ProviderModel:
     supports_batch: bool = False  # Batch generation support
     min_resolution: str | None = None  # Minimum resolution
     supported_styles: list[str] = field(default_factory=list)  # Style presets
+    # Model registry & quality preset fields
+    tier: str = "balanced"  # "premium" | "balanced" | "fast"
+    arena_rank: int | None = None  # LM Arena ranking (lower = better)
+    arena_score: int | None = None  # LM Arena ELO score
+    aliases: list[str] = field(default_factory=list)  # Old model IDs that map to this model
+    strengths: list[str] = field(default_factory=list)  # e.g. ["photorealism", "speed"]
+    hidden: bool = False  # Hidden from user-facing lists
 
     def supports_capability(self, capability: ProviderCapability) -> bool:
         """Check if this model supports a specific capability."""
@@ -951,9 +958,13 @@ class BaseProvider(ABC):
         return self._models[0] if self._models else None
 
     def get_model_by_id(self, model_id: str) -> ProviderModel | None:
-        """Get a specific model by ID."""
+        """Get a specific model by ID or alias."""
         for model in self._models:
             if model.id == model_id:
+                return model
+        # Fallback: check aliases
+        for model in self._models:
+            if model_id in model.aliases:
                 return model
         return None
 

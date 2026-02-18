@@ -46,10 +46,12 @@ OPENAI_MODELS = [
         ],
         max_resolution="4K",
         supports_aspect_ratios=["1:1", "16:9", "9:16"],
-        pricing_per_unit=0.04,  # Medium quality
+        pricing_per_unit=0.04,
         quality_score=0.92,
         latency_estimate=10.0,
         is_default=True,
+        tier="balanced",
+        strengths=["versatility", "instruction-following"],
     ),
     ProviderModel(
         id="gpt-image-1-hd",
@@ -61,10 +63,12 @@ OPENAI_MODELS = [
         ],
         max_resolution="4K",
         supports_aspect_ratios=["1:1", "16:9", "9:16"],
-        pricing_per_unit=0.08,  # High quality
+        pricing_per_unit=0.08,
         quality_score=0.95,
         latency_estimate=15.0,
         is_default=False,
+        tier="premium",
+        strengths=["photorealism", "detail", "4K"],
     ),
     ProviderModel(
         id="dall-e-3",
@@ -76,10 +80,12 @@ OPENAI_MODELS = [
         ],
         max_resolution="2K",
         supports_aspect_ratios=["1:1", "16:9", "9:16"],
-        pricing_per_unit=0.04,  # Standard
+        pricing_per_unit=0.04,
         quality_score=0.88,
         latency_estimate=12.0,
         is_default=False,
+        tier="balanced",
+        strengths=["creativity", "artistic"],
     ),
     ProviderModel(
         id="dall-e-3-hd",
@@ -91,10 +97,12 @@ OPENAI_MODELS = [
         ],
         max_resolution="2K",
         supports_aspect_ratios=["1:1", "16:9", "9:16"],
-        pricing_per_unit=0.08,  # HD
+        pricing_per_unit=0.08,
         quality_score=0.90,
         latency_estimate=15.0,
         is_default=False,
+        tier="premium",
+        strengths=["creativity", "artistic", "detail"],
     ),
 ]
 

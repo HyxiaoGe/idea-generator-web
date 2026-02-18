@@ -44,10 +44,14 @@ FLUX_MODELS = [
         ],
         max_resolution="4K",
         supports_aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "9:21"],
-        pricing_per_unit=0.05,  # Per image
+        pricing_per_unit=0.05,
         quality_score=0.93,
         latency_estimate=8.0,
         is_default=True,
+        tier="premium",
+        arena_rank=2,
+        arena_score=1220,
+        strengths=["photorealism", "prompt-adherence", "detail"],
     ),
     ProviderModel(
         id="flux-1.1-pro",
@@ -63,6 +67,8 @@ FLUX_MODELS = [
         quality_score=0.90,
         latency_estimate=6.0,
         is_default=False,
+        tier="balanced",
+        strengths=["speed", "quality-balance"],
     ),
     ProviderModel(
         id="flux-dev",
@@ -78,6 +84,8 @@ FLUX_MODELS = [
         quality_score=0.85,
         latency_estimate=5.0,
         is_default=False,
+        tier="fast",
+        strengths=["speed", "cost-effective"],
     ),
     ProviderModel(
         id="flux-schnell",
@@ -91,8 +99,10 @@ FLUX_MODELS = [
         supports_aspect_ratios=["1:1", "16:9", "9:16"],
         pricing_per_unit=0.014,
         quality_score=0.80,
-        latency_estimate=2.0,  # Fastest
+        latency_estimate=2.0,
         is_default=False,
+        tier="fast",
+        strengths=["speed", "cheapest"],
     ),
 ]
 
