@@ -14,7 +14,7 @@ import logging
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header
 
 from api.dependencies import get_chat_repository, get_quota_repository
 from api.routers.auth import get_current_user
@@ -30,7 +30,12 @@ from api.schemas.chat import (
 )
 from api.schemas.generate import GeneratedImage
 from core.config import get_settings
-from core.exceptions import QuotaExceededError
+from core.exceptions import (
+    GenerationError,
+    QuotaExceededError,
+    SessionNotFoundError,
+    ValidationError,
+)
 from core.redis import get_redis
 from database.repositories import ChatRepository, QuotaRepository
 from services import (
@@ -197,7 +202,7 @@ async def send_message(
                 logger.warning(f"Failed to load chat session from database: {e}")
 
     if not session_json:
-        raise HTTPException(status_code=404, detail="Chat session not found")
+        raise SessionNotFoundError()
 
     session_data = json.loads(session_json)
 
@@ -210,7 +215,7 @@ async def send_message(
     api_key = x_api_key or settings.get_google_api_key()
 
     if not api_key:
-        raise HTTPException(status_code=400, detail="No API key configured")
+        raise ValidationError(message="No API key configured")
 
     chat_session = ChatSession(api_key=api_key)
     chat_session.start_session(aspect_ratio=session_data["aspect_ratio"])
@@ -231,7 +236,7 @@ async def send_message(
     )
 
     if response.error:
-        raise HTTPException(status_code=400, detail=get_friendly_error_message(response.error))
+        raise GenerationError(message=get_friendly_error_message(response.error))
 
     # Save image if generated
     image_data = None
@@ -376,7 +381,7 @@ async def get_chat_history(
             logger.warning(f"Failed to load chat history from database: {e}")
 
     if not session_json:
-        raise HTTPException(status_code=404, detail="Chat session not found")
+        raise SessionNotFoundError()
 
     session_data = json.loads(session_json)
 
@@ -500,7 +505,7 @@ async def delete_chat_session(
             logger.warning(f"Failed to delete chat session from database: {e}")
 
     if not redis_exists and not db_deleted:
-        raise HTTPException(status_code=404, detail="Chat session not found")
+        raise SessionNotFoundError()
 
     # Delete from Redis
     if redis_exists:

@@ -27,6 +27,7 @@ from api.routers import (
     projects_router,
     quota_router,
     search_router,
+    tasks_router,
     templates_router,
     video_router,
     websocket_router,
@@ -34,6 +35,7 @@ from api.routers import (
 from core.config import get_settings
 from core.redis import close_redis, init_redis
 from database import close_database, init_database
+from services.websocket_manager import get_websocket_manager
 
 # Configure logging
 logging.basicConfig(
@@ -75,12 +77,20 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Database not configured, using file-based storage")
 
+    # Start WebSocket stale connection cleanup
+    ws_manager = get_websocket_manager()
+    await ws_manager.start_stale_cleanup()
+    logger.info("WebSocket stale cleanup started")
+
     logger.info("Application startup complete")
 
     yield
 
     # ============ Shutdown ============
     logger.info("Shutting down application...")
+
+    # Stop WebSocket cleanup
+    await ws_manager.stop_stale_cleanup()
 
     # Close Redis
     await close_redis()
@@ -173,6 +183,9 @@ def create_app() -> FastAPI:
 
     # Search
     app.include_router(search_router, prefix="/api")
+
+    # Tasks (cancel, etc.)
+    app.include_router(tasks_router, prefix="/api")
 
     # WebSocket
     app.include_router(websocket_router, prefix="/api")

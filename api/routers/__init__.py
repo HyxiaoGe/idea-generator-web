@@ -17,6 +17,7 @@ from .preferences import router as preferences_router
 from .projects import router as projects_router
 from .quota import router as quota_router
 from .search import router as search_router
+from .tasks import router as tasks_router
 from .templates import router as templates_router
 from .video import router as video_router
 from .websocket import router as websocket_router
@@ -38,6 +39,7 @@ __all__ = [
     "notifications_router",
     "analytics_router",
     "search_router",
+    "tasks_router",
     "websocket_router",
     "admin_router",
 ]

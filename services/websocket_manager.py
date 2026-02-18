@@ -16,6 +16,10 @@ from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
 
+# Stale connection cleanup constants
+STALE_CHECK_INTERVAL = 60  # seconds between cleanup checks
+STALE_TIMEOUT = 90  # seconds before a connection is considered stale
+
 
 @dataclass
 class Connection:
@@ -45,6 +49,7 @@ class WebSocketManager:
         self._user_connections: dict[str, set[str]] = {}
         self._channel_subscriptions: dict[str, set[str]] = {}
         self._lock = asyncio.Lock()
+        self._cleanup_task: asyncio.Task | None = None
 
     @property
     def connection_count(self) -> int:
@@ -277,6 +282,55 @@ class WebSocketManager:
                     },
                 },
             )
+
+    # ============ Stale Connection Cleanup ============
+
+    async def start_stale_cleanup(self) -> None:
+        """Start periodic stale connection cleanup task."""
+        if self._cleanup_task is None or self._cleanup_task.done():
+            self._cleanup_task = asyncio.create_task(self._cleanup_stale_connections())
+            logger.info("WebSocket stale connection cleanup started")
+
+    async def stop_stale_cleanup(self) -> None:
+        """Stop the periodic stale connection cleanup task."""
+        if self._cleanup_task and not self._cleanup_task.done():
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+            self._cleanup_task = None
+            logger.info("WebSocket stale connection cleanup stopped")
+
+    async def _cleanup_stale_connections(self) -> None:
+        """Periodically check and remove stale connections."""
+        try:
+            while True:
+                await asyncio.sleep(STALE_CHECK_INTERVAL)
+                await self._remove_stale_connections()
+        except asyncio.CancelledError:
+            raise
+
+    async def _remove_stale_connections(self) -> None:
+        """Scan all connections and disconnect those exceeding STALE_TIMEOUT."""
+        now = datetime.now()
+        stale_ids = []
+
+        async with self._lock:
+            for conn_id, conn in self._connections.items():
+                elapsed = (now - conn.last_ping).total_seconds()
+                if elapsed > STALE_TIMEOUT:
+                    stale_ids.append(conn_id)
+
+        for conn_id in stale_ids:
+            conn = self._connections.get(conn_id)
+            if conn:
+                logger.info(f"Removing stale WebSocket connection: {conn_id}")
+                try:
+                    await conn.websocket.close(code=4002, reason="Stale connection")
+                except Exception:
+                    pass
+                await self.disconnect(conn_id)
 
     async def _send(
         self,

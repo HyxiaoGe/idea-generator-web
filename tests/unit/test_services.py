@@ -124,6 +124,64 @@ class TestQuotaService:
         assert status["used"] == 0
 
     @pytest.mark.asyncio
+    async def test_refund_quota_basic(self, mock_redis):
+        """Test basic quota refund."""
+        from services.quota_service import QuotaService
+
+        service = QuotaService(redis_client=mock_redis)
+
+        # Consume 5 points
+        await service.consume_quota(user_id="test_user", count=5)
+
+        # Refund 3
+        refunded = await service.refund_quota(user_id="test_user", count=3)
+
+        assert refunded == 3
+
+        status = await service.get_quota_status("test_user")
+        assert status["used"] == 2
+
+    @pytest.mark.asyncio
+    async def test_refund_quota_capped(self, mock_redis):
+        """Test that refund is capped at current usage."""
+        from services.quota_service import QuotaService
+
+        service = QuotaService(redis_client=mock_redis)
+
+        # Consume 2 points
+        await service.consume_quota(user_id="test_user", count=2)
+
+        # Try to refund 10 (more than used)
+        refunded = await service.refund_quota(user_id="test_user", count=10)
+
+        assert refunded == 2
+
+        status = await service.get_quota_status("test_user")
+        assert status["used"] == 0
+
+    @pytest.mark.asyncio
+    async def test_refund_quota_zero_usage(self, mock_redis):
+        """Test refund when no quota has been consumed."""
+        from services.quota_service import QuotaService
+
+        service = QuotaService(redis_client=mock_redis)
+
+        refunded = await service.refund_quota(user_id="test_user", count=5)
+
+        assert refunded == 0
+
+    @pytest.mark.asyncio
+    async def test_refund_quota_no_redis(self):
+        """Test refund returns 0 when no Redis."""
+        from services.quota_service import QuotaService
+
+        service = QuotaService(redis_client=None)
+
+        refunded = await service.refund_quota(user_id="test_user", count=3)
+
+        assert refunded == 0
+
+    @pytest.mark.asyncio
     async def test_quota_tracks_per_user(self, mock_redis):
         """Test that quota is tracked independently per user."""
         from services.quota_service import QuotaService

@@ -14,7 +14,7 @@ import logging
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header
 
 from api.dependencies import get_image_repository, get_quota_repository, get_template_repository
 from api.routers.auth import get_current_user
@@ -30,7 +30,13 @@ from api.schemas.generate import (
     TaskProgress,
 )
 from core.config import get_settings
-from core.exceptions import QuotaExceededError
+from core.exceptions import (
+    GenerationError,
+    QuotaExceededError,
+    StorageError,
+    TaskNotFoundError,
+    ValidationError,
+)
 from core.redis import get_redis
 from database.repositories import ImageRepository, QuotaRepository, TemplateRepository
 from services import (
@@ -91,7 +97,7 @@ def create_generator(api_key: str | None = None) -> ImageGenerator:
     key = api_key or settings.get_google_api_key()
 
     if not key:
-        raise HTTPException(status_code=400, detail="No API key configured")
+        raise ValidationError(message="No API key configured")
 
     return ImageGenerator(api_key=key)
 
@@ -252,10 +258,10 @@ async def generate_image(
         )()
 
     if result.error:
-        raise HTTPException(status_code=400, detail=get_friendly_error_message(result.error))
+        raise GenerationError(message=get_friendly_error_message(result.error))
 
     if not result.image:
-        raise HTTPException(status_code=500, detail="Failed to generate image")
+        raise GenerationError(message="Failed to generate image")
 
     # Save to storage
     storage = get_storage_manager(user_id=user_id if user else None)
@@ -277,7 +283,7 @@ async def generate_image(
         )
     except Exception as e:
         logger.error(f"Failed to save image: {e}")
-        raise HTTPException(status_code=500, detail="Failed to save image")
+        raise StorageError(message="Failed to save image")
 
     # Save to PostgreSQL if available
     if image_repo:
@@ -449,6 +455,14 @@ async def process_batch_generation(
     pipeline_configured = app_settings.is_prompt_pipeline_configured
 
     for i, prompt in enumerate(prompts):
+        # Check if task was cancelled
+        cancelled = await redis.hget(task_key, "cancelled")
+        if cancelled == "1":
+            await redis.hset(task_key, "status", "cancelled")
+            await redis.hset(task_key, "completed_at", datetime.now().isoformat())
+            await redis.hdel(task_key, "current_prompt")
+            return
+
         try:
             # Update current prompt
             await redis.hset(task_key, "current_prompt", prompt)
@@ -522,7 +536,7 @@ async def get_task_progress(task_id: str):
     task_data = await redis.hgetall(task_key)
 
     if not task_data:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise TaskNotFoundError()
 
     results = json.loads(task_data.get("results", "[]"))
     errors = json.loads(task_data.get("errors", "[]"))
@@ -658,10 +672,10 @@ async def search_grounded_generate(
         )()
 
     if result.error:
-        raise HTTPException(status_code=400, detail=get_friendly_error_message(result.error))
+        raise GenerationError(message=get_friendly_error_message(result.error))
 
     if not result.image:
-        raise HTTPException(status_code=500, detail="Failed to generate image")
+        raise GenerationError(message="Failed to generate image")
 
     # Save to storage
     storage = get_storage_manager(user_id=user_id if user else None)
@@ -682,7 +696,7 @@ async def search_grounded_generate(
         )
     except Exception as e:
         logger.error(f"Failed to save image: {e}")
-        raise HTTPException(status_code=500, detail="Failed to save image")
+        raise StorageError(message="Failed to save image")
 
     # Save to PostgreSQL if available
     if image_repo:

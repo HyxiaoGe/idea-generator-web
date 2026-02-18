@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError as PydanticValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from core.exceptions import AppException
 
@@ -80,6 +81,39 @@ def setup_exception_handlers(app: FastAPI) -> None:
                     "code": "validation_error",
                     "message": "Data validation failed",
                     "details": {"errors": exc.errors()},
+                },
+            },
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        """Handle HTTPException and wrap in structured format."""
+        status_code_map = {
+            400: "bad_request",
+            401: "authentication_failed",
+            403: "authorization_failed",
+            404: "not_found",
+            405: "method_not_allowed",
+            409: "conflict",
+            422: "validation_error",
+            429: "rate_limit_exceeded",
+            501: "not_implemented",
+            503: "service_unavailable",
+        }
+        error_code = status_code_map.get(exc.status_code, f"http_{exc.status_code}")
+
+        logger.warning(
+            f"HTTPException: {exc.status_code} - {exc.detail}",
+            extra={"path": request.url.path},
+        )
+
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "success": False,
+                "error": {
+                    "code": error_code,
+                    "message": str(exc.detail) if exc.detail else "An error occurred",
                 },
             },
         )

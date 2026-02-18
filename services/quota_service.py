@@ -140,6 +140,32 @@ class QuotaService:
         logger.debug(f"Quota consumed: user={user_id}, count={count}")
         return True
 
+    async def refund_quota(self, user_id: str, count: int = 1) -> int:
+        """
+        Refund quota points (e.g. when a task is cancelled).
+
+        Args:
+            user_id: User identifier
+            count: Number of points to refund
+
+        Returns:
+            Actual number of points refunded (capped at current usage to avoid going negative)
+        """
+        if not self._redis or count <= 0:
+            return 0
+
+        usage_key = self._usage_key(user_id)
+        current_usage = int(await self._redis.get(usage_key) or 0)
+
+        # Cap refund at current usage to avoid going negative
+        actual_refund = min(count, current_usage)
+        if actual_refund <= 0:
+            return 0
+
+        await self._redis.incrby(usage_key, -actual_refund)
+        logger.info(f"Quota refunded: user={user_id}, refunded={actual_refund}")
+        return actual_refund
+
     async def get_quota_status(self, user_id: str) -> dict:
         """
         Get current quota status for display.

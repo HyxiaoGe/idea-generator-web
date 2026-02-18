@@ -207,3 +207,66 @@ class TestExceptions:
 
         assert exc.message == "Resource not found"
         assert exc.status_code == 404
+
+    def test_model_unavailable_error(self):
+        """Test ModelUnavailableError creation."""
+        from core.exceptions import ModelUnavailableError
+
+        exc = ModelUnavailableError()
+
+        assert exc.error_code == "model_unavailable"
+        assert exc.status_code == 503
+        assert "unavailable" in exc.message.lower()
+
+    def test_model_unavailable_error_custom_message(self):
+        """Test ModelUnavailableError with custom message."""
+        from core.exceptions import ModelUnavailableError
+
+        exc = ModelUnavailableError(message="GPT-4 is down")
+
+        assert exc.message == "GPT-4 is down"
+        assert exc.status_code == 503
+
+    def test_generation_timeout_error(self):
+        """Test GenerationTimeoutError creation."""
+        from core.exceptions import GenerationTimeoutError
+
+        exc = GenerationTimeoutError()
+
+        assert exc.error_code == "generation_timeout"
+        assert exc.status_code == 504
+        assert "timed out" in exc.message.lower()
+
+    def test_generation_timeout_error_custom_message(self):
+        """Test GenerationTimeoutError with custom message."""
+        from core.exceptions import GenerationTimeoutError
+
+        exc = GenerationTimeoutError(message="Provider took too long")
+
+        assert exc.message == "Provider took too long"
+        assert exc.status_code == 504
+
+    def test_exception_to_dict(self):
+        """Test exception serialization to dict."""
+        from core.exceptions import GenerationError
+
+        exc = GenerationError(
+            message="Test failure",
+            details={"provider": "google"},
+        )
+
+        d = exc.to_dict()
+
+        assert d["code"] == "generation_failed"
+        assert d["message"] == "Test failure"
+        assert d["details"]["provider"] == "google"
+
+    def test_exception_to_dict_no_details(self):
+        """Test exception serialization without details."""
+        from core.exceptions import TaskNotFoundError
+
+        exc = TaskNotFoundError()
+        d = exc.to_dict()
+
+        assert d["code"] == "task_not_found"
+        assert "details" not in d

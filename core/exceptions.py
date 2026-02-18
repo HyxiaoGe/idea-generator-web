@@ -111,6 +111,22 @@ class GenerationError(AppException):
     status_code = 500
 
 
+class ModelUnavailableError(AppException):
+    """Raised when requested model is currently unavailable."""
+
+    error_code = "model_unavailable"
+    message = "Requested model is currently unavailable"
+    status_code = 503
+
+
+class GenerationTimeoutError(AppException):
+    """Raised when generation times out."""
+
+    error_code = "generation_timeout"
+    message = "Generation timed out"
+    status_code = 504
+
+
 class StorageError(AppException):
     """Raised when storage operation fails."""
 

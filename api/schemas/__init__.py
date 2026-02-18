@@ -164,6 +164,9 @@ from .search import (
     SearchSuggestion,
     SuggestionsResponse,
 )
+from .tasks import (
+    TaskCancelResponse,
+)
 from .templates import (
     BatchGenerateRequest as TemplateBatchGenerateRequest,
 )
@@ -391,6 +394,8 @@ __all__ = [
     "TrendPoint",
     "Trend",
     "TrendsResponse",
+    # Tasks
+    "TaskCancelResponse",
     # Search
     "SearchResultType",
     "SearchResult",

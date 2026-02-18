@@ -13,7 +13,7 @@ import time
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header
 
 from api.routers.auth import get_current_user
 from api.schemas.video import (
@@ -27,7 +27,14 @@ from api.schemas.video import (
     VideoTaskStatus,
 )
 from core.config import get_settings
-from core.exceptions import GenerationError, QuotaExceededError
+from core.exceptions import (
+    AppException,
+    GenerationError,
+    ModelUnavailableError,
+    QuotaExceededError,
+    TaskNotFoundError,
+    ValidationError,
+)
 from core.redis import get_redis
 from services import get_quota_service
 from services.auth_service import GitHubUser
@@ -87,16 +94,14 @@ def get_video_provider(provider_name: str | None = None):
     providers = _init_video_providers()
 
     if not providers:
-        raise HTTPException(
-            status_code=503,
-            detail="No video providers configured. Please configure Runway or Kling API keys.",
+        raise ModelUnavailableError(
+            message="No video providers configured. Please configure Runway or Kling API keys.",
         )
 
     if provider_name:
         if provider_name not in providers:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Provider '{provider_name}' not found. Available: {list(providers.keys())}",
+            raise ValidationError(
+                message=f"Provider '{provider_name}' not found. Available: {list(providers.keys())}",
             )
         return providers[provider_name]
 
@@ -256,16 +261,11 @@ async def generate_video(
                 error_type=result.error_type,
             )
 
-    except HTTPException:
+    except AppException:
         raise
-    except QuotaExceededError as e:
-        raise HTTPException(status_code=429, detail=e.message)
-    except GenerationError as e:
-        logger.error(f"[{request_id}] Generation error: {e.message}")
-        raise HTTPException(status_code=500, detail=e.message)
     except Exception as e:
         logger.error(f"[{request_id}] Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise GenerationError(message=str(e))
 
 
 @router.post(
@@ -296,6 +296,8 @@ async def image_to_video(
     # 1. Load image from storage using image_key
     # 2. Convert to PIL Image
     # 3. Call provider.generate with reference_images
+    from fastapi import HTTPException
+
     raise HTTPException(
         status_code=501,
         detail="Image-to-video is coming soon. Please use text-to-video for now.",
@@ -321,17 +323,11 @@ async def get_task_progress(
     task_data = await get_video_task(task_id)
 
     if not task_data:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Task {task_id} not found",
-        )
+        raise TaskNotFoundError()
 
     provider_name = task_data.get("provider")
     if not provider_name:
-        raise HTTPException(
-            status_code=500,
-            detail="Task provider information missing",
-        )
+        raise GenerationError(message="Task provider information missing")
 
     try:
         provider = get_video_provider(provider_name)
@@ -385,11 +381,11 @@ async def get_task_progress(
 
         return response
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"Error getting task status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise GenerationError(message=str(e))
 
 
 @router.get(
@@ -452,7 +448,7 @@ async def check_provider_health(provider_name: str):
         provider = get_video_provider(provider_name)
         health = await provider.health_check()
         return health
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         return {
@@ -478,10 +474,7 @@ async def cancel_task(
     task_data = await get_video_task(task_id)
 
     if not task_data:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Task {task_id} not found",
-        )
+        raise TaskNotFoundError()
 
     # For now, just update status to cancelled
     # Full implementation would call provider's cancel API if available
