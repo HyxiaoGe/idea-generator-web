@@ -18,7 +18,6 @@ from api.dependencies import (
     get_template_repository,
     get_user_repository,
 )
-from api.routers.auth import get_current_user
 from api.schemas.search import (
     GlobalSearchResponse,
     ImageSearchResponse,
@@ -28,12 +27,12 @@ from api.schemas.search import (
     SearchSuggestion,
     SuggestionsResponse,
 )
+from core.auth import AppUser, get_current_user
 from database.repositories import (
     ImageRepository,
     TemplateRepository,
     UserRepository,
 )
-from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +43,14 @@ router = APIRouter(prefix="/search", tags=["search"])
 
 
 async def get_db_user_id(
-    user: GitHubUser | None,
+    user: AppUser | None,
     user_repo: UserRepository | None,
 ) -> UUID | None:
     """Get database user ID from GitHub user."""
     if not user or not user_repo:
         return None
 
-    db_user = await user_repo.get_by_github_id(int(user.id))
+    db_user = await user_repo.get_by_auth_id(user.id)
     return db_user.id if db_user else None
 
 
@@ -85,7 +84,7 @@ async def global_search(
     types: str | None = Query(default=None, description="Comma-separated types to search"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
@@ -179,7 +178,7 @@ async def search_images(
     provider: str | None = Query(default=None, description="Filter by provider"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -238,7 +237,7 @@ async def search_images(
 async def get_suggestions(
     q: str = Query(..., min_length=1, description="Input query"),
     limit: int = Query(default=5, ge=1, le=10),
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
 ):
     """
     Get search suggestions based on partial input.

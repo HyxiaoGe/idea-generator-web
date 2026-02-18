@@ -22,8 +22,13 @@ class UserRepository:
         result = await self.session.execute(select(User).where(User.id == user_id))
         return result.scalar_one_or_none()
 
+    async def get_by_auth_id(self, auth_id: str) -> User | None:
+        """Get user by auth-service ID."""
+        result = await self.session.execute(select(User).where(User.auth_id == auth_id))
+        return result.scalar_one_or_none()
+
     async def get_by_github_id(self, github_id: int) -> User | None:
-        """Get user by GitHub ID."""
+        """Get user by GitHub ID (legacy)."""
         result = await self.session.execute(select(User).where(User.github_id == github_id))
         return result.scalar_one_or_none()
 
@@ -50,6 +55,41 @@ class UserRepository:
             last_login_at=datetime.now(),
         )
         self.session.add(user)
+        await self.session.flush()
+        return user
+
+    async def create_or_update_from_auth(
+        self,
+        auth_id: str,
+        email: str | None = None,
+        name: str | None = None,
+        avatar_url: str | None = None,
+    ) -> User:
+        """
+        Create or update user from auth-service JWT data.
+
+        If user exists, updates their info and last login time.
+        If user doesn't exist, creates a new user.
+        """
+        user = await self.get_by_auth_id(auth_id)
+
+        if user:
+            user.email = email
+            user.display_name = name
+            user.avatar_url = avatar_url
+            user.last_login_at = datetime.now()
+        else:
+            user = User(
+                auth_id=auth_id,
+                github_id=None,
+                username=email or auth_id,
+                email=email,
+                avatar_url=avatar_url,
+                display_name=name,
+                last_login_at=datetime.now(),
+            )
+            self.session.add(user)
+
         await self.session.flush()
         return user
 

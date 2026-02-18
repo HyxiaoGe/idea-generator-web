@@ -10,8 +10,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
-from api.routers.auth import get_current_user
-from services.auth_service import GitHubUser
+from core.auth import AppUser, get_current_user
 from services.storage import get_storage_manager
 
 logger = logging.getLogger(__name__)
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/images", tags=["images"])
 
 
-def get_user_id_from_user(user: GitHubUser | None) -> str | None:
+def get_user_id_from_user(user: AppUser | None) -> str | None:
     """Get user ID from authenticated user."""
     if user:
         return user.user_folder_id
@@ -29,7 +28,7 @@ def get_user_id_from_user(user: GitHubUser | None) -> str | None:
 @router.get("/{path:path}")
 async def serve_image(
     path: str,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
 ):
     """
     Serve an image from storage.

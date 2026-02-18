@@ -18,7 +18,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from prefhub.services.preferences import deep_merge
 
 from api.dependencies import get_preferences_repository, get_user_repository
-from api.routers.auth import require_current_user
 from api.schemas.preferences import (
     APISettings,
     GetPreferencesResponse,
@@ -30,8 +29,8 @@ from api.schemas.preferences import (
     UpdateProviderPreferencesResponse,
     UserPreferences,
 )
+from core.auth import AppUser, require_current_user
 from database.repositories import PreferencesRepository, UserRepository
-from services.auth_service import GitHubUser
 from services.preferences_service import IdeaGeneratorPreferencesService
 
 logger = logging.getLogger(__name__)
@@ -43,13 +42,13 @@ router = APIRouter(prefix="/preferences", tags=["preferences"])
 
 
 async def _get_db_user_id(
-    user: GitHubUser,
+    user: AppUser,
     user_repo: UserRepository | None,
 ) -> str | None:
     """Resolve GitHub user to database UUID string."""
     if not user_repo:
         return None
-    db_user = await user_repo.get_by_github_id(int(user.id))
+    db_user = await user_repo.get_by_auth_id(user.id)
     if not db_user:
         return None
     return str(db_user.id)
@@ -60,7 +59,7 @@ async def _get_db_user_id(
 
 @router.get("", response_model=GetPreferencesResponse)
 async def get_preferences(
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     prefs_repo: PreferencesRepository | None = Depends(get_preferences_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -97,7 +96,7 @@ async def get_preferences(
 @router.put("", response_model=UpdatePreferencesResponse)
 async def update_preferences(
     request: UpdatePreferencesRequest,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     prefs_repo: PreferencesRepository | None = Depends(get_preferences_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -154,7 +153,7 @@ async def update_preferences(
 
 @router.get("/providers", response_model=GetProviderPreferencesResponse)
 async def get_provider_preferences(
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     prefs_repo: PreferencesRepository | None = Depends(get_preferences_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -178,7 +177,7 @@ async def get_provider_preferences(
 @router.put("/providers", response_model=UpdateProviderPreferencesResponse)
 async def update_provider_preferences(
     request: UpdateProviderPreferencesRequest,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     prefs_repo: PreferencesRepository | None = Depends(get_preferences_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):

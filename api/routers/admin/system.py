@@ -15,7 +15,6 @@ import time
 
 from fastapi import APIRouter, Depends, Query
 
-from api.routers.auth import require_current_user
 from api.schemas.admin import (
     DatabaseStatusResponse,
     RedisStatusResponse,
@@ -24,11 +23,11 @@ from api.schemas.admin import (
     SystemMetricsResponse,
     SystemStatusResponse,
 )
+from core.auth import AppUser, require_admin
 from core.config import get_settings
 from core.redis import get_redis
 from database import is_database_available
 from services import get_websocket_manager
-from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
 
@@ -38,20 +37,12 @@ router = APIRouter(prefix="/system", tags=["admin-system"])
 _start_time = time.time()
 
 
-# ============ Admin Check ============
-
-
-async def require_admin(user: GitHubUser = Depends(require_current_user)) -> GitHubUser:
-    """Require admin privileges."""
-    return user
-
-
 # ============ Endpoints ============
 
 
 @router.get("/status", response_model=SystemStatusResponse)
 async def get_system_status(
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Get overall system status."""
     settings = get_settings()
@@ -95,7 +86,7 @@ async def get_system_status(
 
 @router.get("/metrics", response_model=SystemMetricsResponse)
 async def get_system_metrics(
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Get system metrics."""
     ws_manager = get_websocket_manager()
@@ -115,7 +106,7 @@ async def get_system_logs(
     level: str = Query(default="INFO"),
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Get system logs."""
     # TODO: Implement log retrieval
@@ -130,7 +121,7 @@ async def get_system_logs(
 
 @router.get("/storage", response_model=StorageStatusResponse)
 async def get_storage_status(
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Get storage status."""
     settings = get_settings()
@@ -145,7 +136,7 @@ async def get_storage_status(
 
 @router.get("/redis", response_model=RedisStatusResponse)
 async def get_redis_status(
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Get Redis status."""
     try:
@@ -168,7 +159,7 @@ async def get_redis_status(
 
 @router.get("/database", response_model=DatabaseStatusResponse)
 async def get_database_status(
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Get database status."""
     if not is_database_available():

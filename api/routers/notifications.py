@@ -16,7 +16,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_notification_repository, get_user_repository
-from api.routers.auth import require_current_user
 from api.schemas.notifications import (
     DeleteNotificationResponse,
     GetNotificationResponse,
@@ -28,9 +27,9 @@ from api.schemas.notifications import (
     NotificationType,
     UnreadCountResponse,
 )
+from core.auth import AppUser, require_current_user
 from database.models import Notification
 from database.repositories import NotificationRepository, UserRepository
-from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +54,7 @@ def notification_to_info(notification: Notification) -> NotificationInfo:
 
 
 async def get_db_user_id(
-    user: GitHubUser,
+    user: AppUser,
     user_repo: UserRepository | None,
 ) -> UUID:
     """Get database user ID from GitHub user."""
@@ -65,7 +64,7 @@ async def get_db_user_id(
             detail="Database not configured",
         )
 
-    db_user = await user_repo.get_by_github_id(int(user.id))
+    db_user = await user_repo.get_by_auth_id(user.id)
     if not db_user:
         raise HTTPException(
             status_code=404,
@@ -84,7 +83,7 @@ async def list_notifications(
     type: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     notification_repo: NotificationRepository | None = Depends(get_notification_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -127,7 +126,7 @@ async def list_notifications(
 
 @router.get("/unread-count", response_model=UnreadCountResponse)
 async def get_unread_count(
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     notification_repo: NotificationRepository | None = Depends(get_notification_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -144,7 +143,7 @@ async def get_unread_count(
 @router.get("/{notification_id}", response_model=GetNotificationResponse)
 async def get_notification(
     notification_id: str,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     notification_repo: NotificationRepository | None = Depends(get_notification_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -169,7 +168,7 @@ async def get_notification(
 @router.post("/mark-read", response_model=MarkReadResponse)
 async def mark_read(
     request: MarkReadRequest,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     notification_repo: NotificationRepository | None = Depends(get_notification_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -194,7 +193,7 @@ async def mark_read(
 
 @router.post("/mark-all-read", response_model=MarkAllReadResponse)
 async def mark_all_read(
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     notification_repo: NotificationRepository | None = Depends(get_notification_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -214,7 +213,7 @@ async def mark_all_read(
 @router.delete("/{notification_id}", response_model=DeleteNotificationResponse)
 async def delete_notification(
     notification_id: str,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     notification_repo: NotificationRepository | None = Depends(get_notification_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):

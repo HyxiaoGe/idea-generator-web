@@ -42,11 +42,19 @@ class User(Base, TimestampMixin):
         default=uuid4,
     )
 
-    # GitHub OAuth info
-    github_id: Mapped[int] = mapped_column(
+    # Auth-service user ID
+    auth_id: Mapped[str | None] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=True,
+        index=True,
+    )
+
+    # GitHub OAuth info (legacy, kept for existing rows)
+    github_id: Mapped[int | None] = mapped_column(
         BigInteger,
         unique=True,
-        nullable=False,
+        nullable=True,
         index=True,
     )
     username: Mapped[str] = mapped_column(
@@ -146,10 +154,13 @@ class User(Base, TimestampMixin):
 
     @property
     def user_folder_id(self) -> str:
-        """Get the folder ID used for storage (matches auth service format)."""
-        return f"u_{self.github_id}"
+        """Get the folder ID used for storage."""
+        if self.auth_id:
+            return self.auth_id
+        return f"u_{self.github_id}"  # Legacy fallback
 
 
 # Indexes
+Index("idx_users_auth_id", User.auth_id)
 Index("idx_users_github_id", User.github_id)
 Index("idx_users_username", User.username)

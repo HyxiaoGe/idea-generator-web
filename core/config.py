@@ -31,8 +31,6 @@ class Settings(BaseSettings):
 
     # ============ Security ============
     secret_key: str = "change-me-in-production-use-a-long-random-string"
-    jwt_algorithm: str = "HS256"
-    jwt_expire_days: int = 7
 
     # ============ CORS ============
     cors_origins: list[str] = ["*"]
@@ -137,11 +135,10 @@ class Settings(BaseSettings):
     oss_access_key: str | None = None
     oss_secret_key: str | None = None
 
-    # ============ GitHub OAuth ============
-    github_client_id: str | None = None
-    github_client_secret: str | None = None
-    github_redirect_uri: str | None = None
+    # ============ Auth Service ============
     auth_enabled: bool = False
+    auth_service_url: str = "http://localhost:8100"
+    auth_service_client_id: str | None = None  # app_xxx from auth-service
 
     # ============ PostgreSQL Database ============
     database_enabled: bool = False
@@ -201,14 +198,8 @@ class Settings(BaseSettings):
 
     @property
     def is_auth_configured(self) -> bool:
-        """Check if GitHub OAuth is properly configured."""
-        return all(
-            [
-                self.auth_enabled,
-                self.github_client_id,
-                self.github_client_secret,
-            ]
-        )
+        """Check if auth-service is properly configured."""
+        return self.auth_enabled and bool(self.auth_service_url)
 
     @property
     def is_database_configured(self) -> bool:

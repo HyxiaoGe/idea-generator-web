@@ -13,7 +13,6 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.routers.auth import require_current_user
 from api.schemas.admin import (
     CreateModerationRuleRequest,
     ListModerationLogsResponse,
@@ -21,19 +20,11 @@ from api.schemas.admin import (
     ModerationRule,
     ModerationStatsResponse,
 )
-from services.auth_service import GitHubUser
+from core.auth import AppUser, require_admin
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/moderation", tags=["admin-moderation"])
-
-
-# ============ Admin Check ============
-
-
-async def require_admin(user: GitHubUser = Depends(require_current_user)) -> GitHubUser:
-    """Require admin privileges."""
-    return user
 
 
 # ============ Endpoints ============
@@ -43,7 +34,7 @@ async def require_admin(user: GitHubUser = Depends(require_current_user)) -> Git
 async def get_moderation_logs(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Get content moderation logs."""
     # TODO: Implement moderation log retrieval
@@ -58,7 +49,7 @@ async def get_moderation_logs(
 
 @router.get("/rules", response_model=ListModerationRulesResponse)
 async def list_moderation_rules(
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """List all moderation rules."""
     # TODO: Implement rule listing
@@ -71,7 +62,7 @@ async def list_moderation_rules(
 @router.post("/rules", response_model=ModerationRule)
 async def create_moderation_rule(
     request: CreateModerationRuleRequest,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Create a new moderation rule."""
     # TODO: Implement rule creation
@@ -82,7 +73,7 @@ async def create_moderation_rule(
 async def update_moderation_rule(
     rule_id: str,
     request: CreateModerationRuleRequest,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Update a moderation rule."""
     # TODO: Implement rule update
@@ -91,7 +82,7 @@ async def update_moderation_rule(
 
 @router.get("/stats", response_model=ModerationStatsResponse)
 async def get_moderation_stats(
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Get moderation statistics."""
     # TODO: Implement stats retrieval

@@ -17,7 +17,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_user_repository
-from api.routers.auth import require_current_user
 from api.schemas.admin import (
     AdminUserInfo,
     BanUserRequest,
@@ -27,22 +26,12 @@ from api.schemas.admin import (
     UserActionResponse,
     UserTier,
 )
+from core.auth import AppUser, require_admin
 from database.repositories import UserRepository
-from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["admin-users"])
-
-
-# ============ Admin Check ============
-
-
-async def require_admin(user: GitHubUser = Depends(require_current_user)) -> GitHubUser:
-    """Require admin privileges."""
-    # TODO: Implement proper admin check
-    # For now, just check if authenticated
-    return user
 
 
 # ============ Endpoints ============
@@ -54,7 +43,7 @@ async def list_users(
     tier: UserTier | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """List all users (admin only)."""
@@ -74,7 +63,7 @@ async def list_users(
 @router.get("/{user_id}", response_model=AdminUserInfo)
 async def get_user(
     user_id: str,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Get user details (admin only)."""
@@ -110,7 +99,7 @@ async def get_user(
 async def update_user_tier(
     user_id: str,
     request: UpdateUserTierRequest,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Update user tier (admin only)."""
@@ -150,7 +139,7 @@ async def update_user_tier(
 async def update_user_quota(
     user_id: str,
     request: UpdateUserQuotaRequest,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Adjust user quota multiplier (admin only)."""
@@ -197,7 +186,7 @@ async def update_user_quota(
 async def ban_user(
     user_id: str,
     request: BanUserRequest,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Ban a user (admin only)."""
@@ -208,7 +197,7 @@ async def ban_user(
 @router.post("/{user_id}/unban", response_model=UserActionResponse)
 async def unban_user(
     user_id: str,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Unban a user (admin only)."""

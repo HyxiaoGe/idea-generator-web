@@ -14,7 +14,6 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from api.routers.auth import require_current_user
 from api.schemas.admin import (
     AnnouncementInfo,
     AnnouncementResponse,
@@ -23,19 +22,11 @@ from api.schemas.admin import (
     CreateAnnouncementRequest,
     ListAnnouncementsResponse,
 )
-from services.auth_service import GitHubUser
+from core.auth import AppUser, require_admin
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["admin-announcements"])
-
-
-# ============ Admin Check ============
-
-
-async def require_admin(user: GitHubUser = Depends(require_current_user)) -> GitHubUser:
-    """Require admin privileges."""
-    return user
 
 
 # ============ In-memory storage (temporary) ============
@@ -48,7 +39,7 @@ _announcements: dict[str, AnnouncementInfo] = {}
 
 @router.get("/announcements", response_model=ListAnnouncementsResponse)
 async def list_announcements(
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """List all announcements."""
     return ListAnnouncementsResponse(
@@ -60,7 +51,7 @@ async def list_announcements(
 @router.post("/announcements", response_model=AnnouncementResponse)
 async def create_announcement(
     request: CreateAnnouncementRequest,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Create a new announcement."""
     announcement_id = str(uuid4())
@@ -91,7 +82,7 @@ async def create_announcement(
 async def update_announcement(
     announcement_id: str,
     request: CreateAnnouncementRequest,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Update an announcement."""
     if announcement_id not in _announcements:
@@ -122,7 +113,7 @@ async def update_announcement(
 @router.post("/notifications/broadcast", response_model=BroadcastNotificationResponse)
 async def broadcast_notification(
     request: BroadcastNotificationRequest,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Broadcast a notification to multiple users."""
     # TODO: Implement actual notification broadcasting

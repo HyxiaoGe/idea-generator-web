@@ -28,9 +28,8 @@ dependencies = [
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     # Auth & Security
-    "python-jose[cryptography]>=3.3.0",
+    "auth-client[fastapi] @ git+https://github.com/HyxiaoGe/auth-service.git#subdirectory=auth-client",
     "httpx>=0.27.0",
-    "passlib[bcrypt]>=1.7.4",
     # Cache & Queue (Required)
     "redis[hiredis]>=5.0.0",
     # Task Queue (Required)

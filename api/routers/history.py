@@ -20,7 +20,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
 from api.dependencies import get_image_repository
-from api.routers.auth import get_current_user
 from api.schemas.history import (
     HistoryDeleteResponse,
     HistoryDetailResponse,
@@ -29,9 +28,9 @@ from api.schemas.history import (
     HistorySettings,
     HistoryStatsResponse,
 )
+from core.auth import AppUser, get_current_user
 from database.models import GeneratedImage
 from database.repositories import ImageRepository
-from services.auth_service import GitHubUser
 from services.storage import StorageManager, get_storage_manager
 
 logger = logging.getLogger(__name__)
@@ -42,14 +41,14 @@ router = APIRouter(prefix="/history", tags=["history"])
 # ============ Helpers ============
 
 
-def get_user_id_from_user(user: GitHubUser | None) -> str | None:
+def get_user_id_from_user(user: AppUser | None) -> str | None:
     """Get user ID for storage access."""
     if user:
         return user.user_folder_id
     return None
 
 
-def get_user_storage(user: GitHubUser | None) -> StorageManager:
+def get_user_storage(user: AppUser | None) -> StorageManager:
     """Get storage manager instance for user."""
     user_id = get_user_id_from_user(user)
     return get_storage_manager(user_id=user_id)
@@ -133,7 +132,7 @@ async def list_history(
     mode: str | None = Query(default=None),
     search: str | None = Query(default=None),
     sort: str = Query(default="newest"),
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
 ):
     """
@@ -224,7 +223,7 @@ async def list_history(
 
 @router.get("/stats", response_model=HistoryStatsResponse)
 async def get_history_stats(
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
 ):
     """
@@ -300,7 +299,7 @@ async def get_history_stats(
 async def get_history_item(
     item_id: str,
     include_image: bool = Query(default=False, description="Include base64 image data"),
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
 ):
     """
@@ -368,7 +367,7 @@ async def get_history_item(
 @router.get("/{item_id}/image")
 async def get_history_image(
     item_id: str,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
 ):
     """
     Get the actual image file for a history item.
@@ -393,7 +392,7 @@ async def get_history_image(
 @router.delete("/{item_id}", response_model=HistoryDeleteResponse)
 async def delete_history_item(
     item_id: str,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
 ):
     """

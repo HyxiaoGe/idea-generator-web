@@ -14,7 +14,6 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from api.routers.auth import require_current_user
 from api.schemas.admin import (
     AdminProviderInfo,
     ListProvidersResponse,
@@ -23,20 +22,12 @@ from api.schemas.admin import (
     ResetCircuitBreakersResponse,
     UpdateProviderRequest,
 )
+from core.auth import AppUser, require_admin
 from services import MediaType, get_provider_router
-from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/providers", tags=["admin-providers"])
-
-
-# ============ Admin Check ============
-
-
-async def require_admin(user: GitHubUser = Depends(require_current_user)) -> GitHubUser:
-    """Require admin privileges."""
-    return user
 
 
 # ============ Endpoints ============
@@ -44,7 +35,7 @@ async def require_admin(user: GitHubUser = Depends(require_current_user)) -> Git
 
 @router.get("", response_model=ListProvidersResponse)
 async def list_providers(
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """List all providers with their status."""
     provider_router = get_provider_router()
@@ -103,7 +94,7 @@ async def list_providers(
 async def update_provider(
     provider_name: str,
     request: UpdateProviderRequest,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Update provider configuration."""
     # TODO: Implement provider config update
@@ -113,7 +104,7 @@ async def update_provider(
 @router.post("/{provider_name}/enable", response_model=ProviderActionResponse)
 async def enable_provider(
     provider_name: str,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Enable a provider."""
     # TODO: Implement provider enabling
@@ -123,7 +114,7 @@ async def enable_provider(
 @router.post("/{provider_name}/disable", response_model=ProviderActionResponse)
 async def disable_provider(
     provider_name: str,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Disable a provider."""
     # TODO: Implement provider disabling
@@ -133,7 +124,7 @@ async def disable_provider(
 @router.get("/{provider_name}/health")
 async def get_provider_health(
     provider_name: str,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Get detailed health information for a provider."""
     provider_router = get_provider_router()
@@ -151,7 +142,7 @@ async def get_provider_health(
 
 @router.post("/circuit-breakers/reset", response_model=ResetCircuitBreakersResponse)
 async def reset_circuit_breakers(
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Reset all circuit breakers."""
     # TODO: Implement circuit breaker reset

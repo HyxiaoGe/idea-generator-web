@@ -16,7 +16,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 
 from api.dependencies import get_image_repository, get_user_repository
-from api.routers.auth import require_current_user
 from api.schemas.analytics import (
     CostsResponse,
     ModeUsage,
@@ -27,8 +26,8 @@ from api.schemas.analytics import (
     TrendsResponse,
     UsageResponse,
 )
+from core.auth import AppUser, require_current_user
 from database.repositories import ImageRepository, UserRepository
-from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +38,14 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 async def get_db_user_id(
-    user: GitHubUser,
+    user: AppUser,
     user_repo: UserRepository | None,
 ) -> UUID | None:
     """Get database user ID from GitHub user."""
     if not user_repo:
         return None
 
-    db_user = await user_repo.get_by_github_id(int(user.id))
+    db_user = await user_repo.get_by_auth_id(user.id)
     return db_user.id if db_user else None
 
 
@@ -78,7 +77,7 @@ def get_date_range(time_range: TimeRange) -> tuple[datetime | None, datetime | N
 @router.get("/overview", response_model=OverviewResponse)
 async def get_overview(
     time_range: TimeRange = Query(default=TimeRange.MONTH),
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -138,7 +137,7 @@ async def get_overview(
 @router.get("/usage", response_model=UsageResponse)
 async def get_usage(
     time_range: TimeRange = Query(default=TimeRange.MONTH),
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -201,7 +200,7 @@ async def get_usage(
 @router.get("/costs", response_model=CostsResponse)
 async def get_costs(
     time_range: TimeRange = Query(default=TimeRange.MONTH),
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
 ):
     """
     Get cost analysis.
@@ -221,7 +220,7 @@ async def get_costs(
 @router.get("/providers", response_model=ProvidersResponse)
 async def get_providers_analytics(
     time_range: TimeRange = Query(default=TimeRange.MONTH),
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -254,7 +253,7 @@ async def get_providers_analytics(
 @router.get("/trends", response_model=TrendsResponse)
 async def get_trends(
     time_range: TimeRange = Query(default=TimeRange.MONTH),
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):

@@ -17,7 +17,6 @@ from datetime import datetime
 from fastapi import APIRouter, BackgroundTasks, Depends, Header
 
 from api.dependencies import get_image_repository, get_quota_repository, get_template_repository
-from api.routers.auth import get_current_user
 from api.schemas.generate import (
     BatchGenerateRequest,
     BatchGenerateResponse,
@@ -29,6 +28,7 @@ from api.schemas.generate import (
     SearchGenerateRequest,
     TaskProgress,
 )
+from core.auth import AppUser, get_current_user
 from core.config import get_settings
 from core.exceptions import (
     GenerationError,
@@ -51,7 +51,6 @@ from services import (
     get_provider_router,
     get_quota_service,
 )
-from services.auth_service import GitHubUser
 from services.prompt_pipeline import get_prompt_pipeline
 from services.storage import get_storage_manager
 
@@ -63,7 +62,7 @@ router = APIRouter(prefix="/generate", tags=["generation"])
 # ============ Helpers ============
 
 
-def get_user_id_from_user(user: GitHubUser | None) -> str:
+def get_user_id_from_user(user: AppUser | None) -> str:
     """Get user ID for quota tracking."""
     if user:
         return user.user_folder_id
@@ -136,7 +135,7 @@ def build_provider_request(
 @router.post("", response_model=GenerateImageResponse)
 async def generate_image(
     request: GenerateImageRequest,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
     quota_repo: QuotaRepository | None = Depends(get_quota_repository),
@@ -370,7 +369,7 @@ async def generate_image(
 async def batch_generate(
     request: BatchGenerateRequest,
     background_tasks: BackgroundTasks,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     x_api_key: str | None = Header(None, alias="X-API-Key"),
 ):
     """
@@ -561,7 +560,7 @@ async def get_task_progress(task_id: str):
 @router.post("/search", response_model=GenerateImageResponse)
 async def search_grounded_generate(
     request: SearchGenerateRequest,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
     quota_repo: QuotaRepository | None = Depends(get_quota_repository),

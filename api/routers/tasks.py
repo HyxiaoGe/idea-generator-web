@@ -11,12 +11,11 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends
 
-from api.routers.auth import get_current_user
 from api.schemas.tasks import TaskCancelResponse
+from core.auth import AppUser, get_current_user
 from core.exceptions import TaskNotFoundError, ValidationError
 from core.redis import get_redis
 from services import get_quota_service
-from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +24,7 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 
 
-def _get_user_id(user: GitHubUser | None) -> str:
+def _get_user_id(user: AppUser | None) -> str:
     if user:
         return user.user_folder_id
     return "anonymous"
@@ -34,7 +33,7 @@ def _get_user_id(user: GitHubUser | None) -> str:
 @router.post("/{task_id}/cancel", response_model=TaskCancelResponse)
 async def cancel_task(
     task_id: str,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
 ):
     """
     Cancel a running batch or video task and refund unused quota.

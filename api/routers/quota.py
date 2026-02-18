@@ -11,16 +11,15 @@ import logging
 
 from fastapi import APIRouter, Depends
 
-from api.routers.auth import get_current_user
 from api.schemas.quota import (
     QuotaCheckRequest,
     QuotaCheckResponse,
     QuotaConfigResponse,
     QuotaStatusResponse,
 )
+from core.auth import AppUser, get_current_user
 from core.redis import get_redis
 from services import COOLDOWN_SECONDS, DAILY_LIMIT, MAX_BATCH_SIZE, get_quota_service
-from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,7 @@ router = APIRouter(prefix="/quota", tags=["quota"])
 # ============ Helpers ============
 
 
-def get_user_id_from_user(user: GitHubUser | None) -> str:
+def get_user_id_from_user(user: AppUser | None) -> str:
     """Get user ID for quota tracking."""
     if user:
         return user.user_folder_id
@@ -42,7 +41,7 @@ def get_user_id_from_user(user: GitHubUser | None) -> str:
 
 @router.get("", response_model=QuotaStatusResponse)
 async def get_quota_status(
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
 ):
     """Get current quota status for the user."""
     user_id = get_user_id_from_user(user)
@@ -66,7 +65,7 @@ async def get_quota_status(
 @router.post("/check", response_model=QuotaCheckResponse)
 async def check_quota(
     request: QuotaCheckRequest,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
 ):
     """Check if quota is available. Does NOT consume quota."""
     user_id = get_user_id_from_user(user)

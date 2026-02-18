@@ -14,7 +14,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_template_repository, get_user_repository
-from api.routers.auth import get_current_user, require_current_user
 from api.schemas.templates import (
     BatchGenerateRequest,
     CategoryItem,
@@ -30,8 +29,8 @@ from api.schemas.templates import (
     VariantRequest,
     VariantResponse,
 )
+from core.auth import AppUser, get_current_user, require_admin, require_current_user
 from database.repositories import TemplateRepository, UserRepository
-from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
 
@@ -41,19 +40,14 @@ router = APIRouter(prefix="/templates", tags=["templates"])
 # ============ Helpers ============
 
 
-async def require_admin(user: GitHubUser = Depends(require_current_user)) -> GitHubUser:
-    """Require admin privileges (currently passes through authenticated user)."""
-    return user
-
-
 async def get_db_user_id(
-    user: GitHubUser | None,
+    user: AppUser | None,
     user_repo: UserRepository | None,
 ) -> UUID | None:
     """Resolve GitHub user to database user ID."""
     if not user or not user_repo:
         return None
-    db_user = await user_repo.get_by_github_id(int(user.id))
+    db_user = await user_repo.get_by_auth_id(user.id)
     return db_user.id if db_user else None
 
 
@@ -166,7 +160,7 @@ async def get_categories(
 async def get_user_favorites(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -223,7 +217,7 @@ async def get_recommendations(
 @router.post("/generate", response_model=GenerateResponse)
 async def generate_templates(
     data: GenerateRequest,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
 ):
     """Generate AI templates for a single category (admin only)."""
@@ -251,7 +245,7 @@ async def generate_templates(
 @router.post("/batch-generate", response_model=GenerateResponse)
 async def batch_generate(
     data: BatchGenerateRequest,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
 ):
     """Batch-generate AI templates across categories (admin only)."""
@@ -274,7 +268,7 @@ async def batch_generate(
 @router.post("", response_model=TemplateDetailResponse)
 async def create_template(
     data: TemplateCreateRequest,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -299,7 +293,7 @@ async def create_template(
 @router.get("/{template_id}", response_model=TemplateDetailResponse)
 async def get_template_detail(
     template_id: str,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -330,7 +324,7 @@ async def get_template_detail(
 @router.post("/{template_id}/use", response_model=TemplateDetailResponse)
 async def record_usage(
     template_id: str,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -354,7 +348,7 @@ async def record_usage(
 @router.post("/{template_id}/like", response_model=ToggleResponse)
 async def toggle_like(
     template_id: str,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -382,7 +376,7 @@ async def toggle_like(
 @router.post("/{template_id}/favorite", response_model=ToggleResponse)
 async def toggle_favorite(
     template_id: str,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -410,7 +404,7 @@ async def toggle_favorite(
 @router.post("/{template_id}/enhance", response_model=EnhanceResponse)
 async def enhance_template(
     template_id: str,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
 ):
     """Enhance a template's prompt using AI (admin only)."""
@@ -436,7 +430,7 @@ async def enhance_template(
 async def generate_variants(
     template_id: str,
     data: VariantRequest,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
 ):
     """Generate style variants of a template (admin only)."""
@@ -462,7 +456,7 @@ async def generate_variants(
 async def update_template(
     template_id: str,
     data: TemplateUpdateRequest,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
 ):
     """Update a template (admin only)."""
@@ -485,7 +479,7 @@ async def update_template(
 @router.delete("/{template_id}")
 async def delete_template(
     template_id: str,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
 ):
     """Soft-delete a template (admin only)."""

@@ -1,15 +1,12 @@
 """
-Authentication router for GitHub OAuth and API key management.
+Authentication router for user info and API key management.
 
-Endpoints:
-- GET /api/auth/login - Get GitHub authorization URL
-- POST /api/auth/callback - Handle OAuth callback
-- GET /api/auth/me - Get current user info
-- POST /api/auth/logout - Logout user
-- POST /api/auth/refresh - Refresh JWT token
-- GET /api/auth/api-keys - List API keys
-- POST /api/auth/api-keys - Create API key
-- DELETE /api/auth/api-keys/{id} - Delete API key
+OAuth flow (login, callback, refresh) is handled by auth-service directly.
+This router provides:
+- GET /api/auth/status - Auth service status
+- GET /api/auth/me - Get current user info (from JWT)
+- POST /api/auth/logout - Logout confirmation
+- GET/POST/DELETE /api/auth/api-keys - API key management
 """
 
 import hashlib
@@ -18,8 +15,7 @@ import secrets
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends
 
 from api.dependencies import get_api_key_repository, get_user_repository
 from api.schemas.auth import (
@@ -28,55 +24,17 @@ from api.schemas.auth import (
     CreateAPIKeyRequest,
     CreateAPIKeyResponse,
     DeleteAPIKeyResponse,
-    GitHubUserResponse,
     ListAPIKeysResponse,
-    LoginUrlResponse,
     LogoutResponse,
-    OAuthCallbackRequest,
-    RefreshTokenResponse,
-    TokenResponse,
+    UserResponse,
 )
+from core.auth import AppUser, require_current_user
 from core.exceptions import AuthenticationError
 from database.repositories import APIKeyRepository, UserRepository
-from services import GitHubUser, get_auth_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
-
-
-# ============ Dependencies ============
-
-
-async def get_current_user(authorization: str | None = Header(None)) -> GitHubUser | None:
-    """
-    Get current user from JWT token in Authorization header.
-
-    Returns None if not authenticated (allows unauthenticated access).
-    """
-    if not authorization:
-        return None
-
-    # Extract token from "Bearer <token>"
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        return None
-
-    token = parts[1]
-    auth_service = get_auth_service()
-    return auth_service.get_user_from_token(token)
-
-
-async def require_current_user(authorization: str | None = Header(None)) -> GitHubUser:
-    """
-    Require authenticated user.
-
-    Raises 401 if not authenticated.
-    """
-    user = await get_current_user(authorization)
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    return user
 
 
 # ============ Endpoints ============
@@ -85,151 +43,37 @@ async def require_current_user(authorization: str | None = Header(None)) -> GitH
 @router.get("/status", response_model=AuthStatusResponse)
 async def get_auth_status():
     """Get authentication service status."""
-    get_auth_service()
     return AuthStatusResponse(
         authenticated=False,
         user=None,
     )
 
 
-@router.get("/login", response_model=LoginUrlResponse)
-async def get_login_url(
-    redirect_uri: str | None = None,
-):
-    """
-    Get GitHub authorization URL.
-
-    Args:
-        redirect_uri: Optional override for callback URL
-    """
-    auth_service = get_auth_service()
-
-    if not auth_service.is_available:
-        raise HTTPException(status_code=503, detail="Authentication service not configured")
-
-    # Generate CSRF state token
-    state = secrets.token_urlsafe(32)
-
-    url = auth_service.get_authorization_url(
-        state=state,
-        redirect_uri=redirect_uri,
-    )
-
-    return LoginUrlResponse(url=url, state=state)
-
-
-async def _sync_user_to_db(user_data: dict, user_repo: UserRepository | None) -> None:
-    """Sync GitHub user to PostgreSQL users table after OAuth login."""
-    if not user_repo:
-        return
-    try:
-        await user_repo.create_or_update_from_github(
-            github_id=int(user_data["id"]),
-            username=user_data["login"],
-            email=user_data.get("email"),
-            avatar_url=user_data.get("avatar_url"),
-            display_name=user_data.get("name"),
-        )
-    except Exception:
-        logger.warning("Failed to sync user to database", exc_info=True)
-
-
-@router.post("/callback", response_model=TokenResponse)
-async def oauth_callback(
-    request: OAuthCallbackRequest,
-    user_repo: UserRepository | None = Depends(get_user_repository),
-):
-    """
-    Handle OAuth callback from GitHub.
-
-    Exchange authorization code for JWT token and sync user to database.
-    """
-    auth_service = get_auth_service()
-
-    if not auth_service.is_available:
-        raise HTTPException(status_code=503, detail="Authentication service not configured")
-
-    try:
-        result = await auth_service.authenticate(request.code)
-
-        user_data = result["user"]
-        await _sync_user_to_db(user_data, user_repo)
-
-        return TokenResponse(
-            access_token=result["access_token"],
-            token_type=result["token_type"],
-            user=GitHubUserResponse(
-                id=user_data["id"],
-                login=user_data["login"],
-                name=user_data.get("name"),
-                email=user_data.get("email"),
-                avatar_url=user_data.get("avatar_url"),
-                user_folder_id=user_data["user_folder_id"],
-            ),
-        )
-
-    except AuthenticationError as e:
-        logger.error(f"OAuth callback failed: {e}")
-        raise HTTPException(status_code=401, detail=str(e))
-
-
-@router.get("/callback")
-async def oauth_callback_redirect(
-    code: str,
-    state: str | None = None,
-    redirect_to: str | None = None,
-    user_repo: UserRepository | None = Depends(get_user_repository),
-):
-    """
-    Handle OAuth callback redirect from GitHub.
-
-    This endpoint receives the redirect from GitHub and can either:
-    1. Exchange code for token and redirect to frontend
-    2. Return token directly (for SPA flows)
-    """
-    auth_service = get_auth_service()
-
-    if not auth_service.is_available:
-        raise HTTPException(status_code=503, detail="Authentication service not configured")
-
-    try:
-        result = await auth_service.authenticate(code)
-        user_data = result["user"]
-        await _sync_user_to_db(user_data, user_repo)
-
-        # If redirect_to is provided, redirect with token as query param
-        if redirect_to:
-            return RedirectResponse(url=f"{redirect_to}?token={result['access_token']}")
-
-        # Otherwise return token directly
-        return TokenResponse(
-            access_token=result["access_token"],
-            token_type=result["token_type"],
-            user=GitHubUserResponse(
-                id=user_data["id"],
-                login=user_data["login"],
-                name=user_data.get("name"),
-                email=user_data.get("email"),
-                avatar_url=user_data.get("avatar_url"),
-                user_folder_id=user_data["user_folder_id"],
-            ),
-        )
-
-    except AuthenticationError as e:
-        logger.error(f"OAuth callback failed: {e}")
-        raise HTTPException(status_code=401, detail=str(e))
-
-
-@router.get("/me", response_model=GitHubUserResponse)
+@router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
+    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
-    """Get current authenticated user information."""
-    return GitHubUserResponse(
+    """Get current authenticated user information.
+
+    Also syncs the user to the database if DB is enabled.
+    """
+    # Sync user to DB on each /me call (lightweight upsert)
+    if user_repo:
+        try:
+            await user_repo.create_or_update_from_auth(
+                auth_id=user.id,
+                email=user.email,
+                name=user.name,
+                avatar_url=user.avatar_url,
+            )
+        except Exception:
+            logger.warning("Failed to sync user to database", exc_info=True)
+
+    return UserResponse(
         id=user.id,
-        login=user.login,
-        name=user.name,
         email=user.email,
+        name=user.name,
         avatar_url=user.avatar_url,
         user_folder_id=user.user_folder_id,
     )
@@ -237,41 +81,16 @@ async def get_current_user_info(
 
 @router.post("/logout", response_model=LogoutResponse)
 async def logout(
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
 ):
     """
     Logout current user.
 
-    Note: JWT tokens are stateless, so this just confirms logout.
-    Client should discard the token.
+    Frontend should also call auth-service /auth/token/revoke.
+    This endpoint just confirms logout on the backend side.
     """
-    logger.info(f"User logged out: {user.login}")
+    logger.info(f"User logged out: {user.display_name}")
     return LogoutResponse(success=True, message="Successfully logged out")
-
-
-# ============ Token Refresh ============
-
-
-@router.post("/refresh", response_model=RefreshTokenResponse)
-async def refresh_token(
-    user: GitHubUser = Depends(require_current_user),
-):
-    """
-    Refresh the current JWT token.
-
-    Returns a new token with extended expiration.
-    The current token must still be valid.
-    """
-    auth_service = get_auth_service()
-
-    # Create new token with same user data
-    new_token = auth_service.create_jwt_token(user.to_dict())
-
-    return RefreshTokenResponse(
-        access_token=new_token,
-        token_type="bearer",
-        expires_in=auth_service.token_expiry_hours * 3600,
-    )
 
 
 # ============ API Keys ============
@@ -283,22 +102,26 @@ def generate_api_key() -> tuple[str, str, str]:
 
     Returns (full_key, key_hash, key_prefix).
     """
-    # Generate random key
     random_part = secrets.token_urlsafe(32)
     full_key = f"nb_sk_{random_part}"
-
-    # Hash for storage
     key_hash = hashlib.sha256(full_key.encode()).hexdigest()
-
-    # Prefix for identification
     key_prefix = full_key[:16]
-
     return full_key, key_hash, key_prefix
+
+
+async def _get_db_user(
+    user: AppUser,
+    user_repo: UserRepository | None,
+):
+    """Look up DB user by auth_id."""
+    if not user_repo:
+        return None
+    return await user_repo.get_by_auth_id(user.id)
 
 
 @router.get("/api-keys", response_model=ListAPIKeysResponse)
 async def list_api_keys(
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     api_key_repo: APIKeyRepository | None = Depends(get_api_key_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -306,7 +129,7 @@ async def list_api_keys(
     if not api_key_repo or not user_repo:
         return ListAPIKeysResponse(keys=[], total=0)
 
-    db_user = await user_repo.get_by_github_id(int(user.id))
+    db_user = await user_repo.get_by_auth_id(user.id)
     if not db_user:
         return ListAPIKeysResponse(keys=[], total=0)
 
@@ -333,7 +156,7 @@ async def list_api_keys(
 @router.post("/api-keys", response_model=CreateAPIKeyResponse)
 async def create_api_key(
     request: CreateAPIKeyRequest,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     api_key_repo: APIKeyRepository | None = Depends(get_api_key_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -343,19 +166,16 @@ async def create_api_key(
     The full key is only returned once. Store it securely.
     """
     if not api_key_repo or not user_repo:
-        raise HTTPException(status_code=503, detail="Database not configured")
+        raise AuthenticationError(message="Database not configured")
 
-    db_user = await user_repo.get_by_github_id(int(user.id))
+    db_user = await user_repo.get_by_auth_id(user.id)
     if not db_user:
-        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
+        raise AuthenticationError(message="User record not synced. Please re-login.")
 
     # Check key limit (max 10 keys per user)
     current_count = await api_key_repo.count_by_user(db_user.id)
     if current_count >= 10:
-        raise HTTPException(
-            status_code=400,
-            detail="Maximum number of API keys (10) reached",
-        )
+        raise AuthenticationError(message="Maximum number of API keys (10) reached")
 
     # Generate key
     full_key, key_hash, key_prefix = generate_api_key()
@@ -378,7 +198,7 @@ async def create_api_key(
     return CreateAPIKeyResponse(
         id=str(api_key.id),
         name=api_key.name,
-        key=full_key,  # Only time the full key is returned
+        key=full_key,
         key_prefix=api_key.key_prefix,
         scopes=api_key.scopes,
         expires_at=api_key.expires_at.isoformat() if api_key.expires_at else None,
@@ -389,25 +209,25 @@ async def create_api_key(
 @router.delete("/api-keys/{key_id}", response_model=DeleteAPIKeyResponse)
 async def delete_api_key(
     key_id: str,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     api_key_repo: APIKeyRepository | None = Depends(get_api_key_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Delete an API key."""
     if not api_key_repo or not user_repo:
-        raise HTTPException(status_code=503, detail="Database not configured")
+        raise AuthenticationError(message="Database not configured")
 
-    db_user = await user_repo.get_by_github_id(int(user.id))
+    db_user = await user_repo.get_by_auth_id(user.id)
     if not db_user:
-        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
+        raise AuthenticationError(message="User record not synced. Please re-login.")
 
     try:
         key_uuid = UUID(key_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid key ID")
+        raise AuthenticationError(message="Invalid key ID")
 
     deleted = await api_key_repo.delete_by_user(db_user.id, key_uuid)
     if not deleted:
-        raise HTTPException(status_code=404, detail="API key not found")
+        raise AuthenticationError(message="API key not found")
 
     return DeleteAPIKeyResponse(success=True)

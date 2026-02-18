@@ -20,7 +20,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_project_repository, get_user_repository
-from api.routers.auth import get_current_user, require_current_user
 from api.schemas.projects import (
     AddProjectImageRequest,
     AddProjectImageResponse,
@@ -41,9 +40,9 @@ from api.schemas.projects import (
     UpdateProjectRequest,
     UpdateProjectResponse,
 )
+from core.auth import AppUser, get_current_user, require_current_user
 from database.models import Project, ProjectImage
 from database.repositories import ProjectRepository, UserRepository
-from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
 
@@ -100,14 +99,14 @@ def project_image_to_info(project_image: ProjectImage) -> ProjectImageInfo:
 
 
 async def get_db_user_id(
-    user: GitHubUser | None,
+    user: AppUser | None,
     user_repo: UserRepository | None,
 ) -> UUID | None:
     """Get database user ID from GitHub user."""
     if not user or not user_repo:
         return None
 
-    db_user = await user_repo.get_by_github_id(int(user.id))
+    db_user = await user_repo.get_by_auth_id(user.id)
     return db_user.id if db_user else None
 
 
@@ -118,7 +117,7 @@ async def get_db_user_id(
 async def list_projects(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -161,7 +160,7 @@ async def list_projects(
 @router.post("", response_model=CreateProjectResponse)
 async def create_project(
     request: CreateProjectRequest,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -190,7 +189,7 @@ async def create_project(
 @router.get("/{project_id}", response_model=GetProjectResponse)
 async def get_project(
     project_id: str,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -222,7 +221,7 @@ async def get_project(
 async def update_project(
     project_id: str,
     request: UpdateProjectRequest,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -264,7 +263,7 @@ async def update_project(
 @router.delete("/{project_id}", response_model=DeleteProjectResponse)
 async def delete_project(
     project_id: str,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -296,7 +295,7 @@ async def list_project_images(
     project_id: str,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -339,7 +338,7 @@ async def list_project_images(
 async def add_project_image(
     project_id: str,
     request: AddProjectImageRequest,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -389,7 +388,7 @@ async def add_project_image(
 async def remove_project_image(
     project_id: str,
     image_id: str,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -423,7 +422,7 @@ async def remove_project_image(
 async def bulk_add_project_images(
     project_id: str,
     request: BulkAddProjectImagesRequest,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -462,7 +461,7 @@ async def bulk_add_project_images(
 @router.get("/{project_id}/export", response_model=ExportProjectResponse)
 async def export_project(
     project_id: str,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):

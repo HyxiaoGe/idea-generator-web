@@ -21,21 +21,19 @@ def task_redis():
 def task_client(task_redis):
     """Create a test client with mocked Redis and dependency overrides."""
     from api.main import app
-    from api.routers.auth import get_current_user
+    from core.auth import AppUser, get_current_user
 
     async def get_mock_redis():
         return task_redis
 
-    mock_user = type(
-        "GitHubUser",
-        (),
-        {
-            "id": "12345",
-            "login": "testuser",
-            "user_folder_id": "test_user_abc",
-            "display_name": "Test User",
-        },
-    )()
+    mock_user = AppUser(
+        id="test-uuid-12345",
+        email="test@example.com",
+        name="Test User",
+        avatar_url=None,
+        scopes=["user"],
+        raw_payload={},
+    )
 
     # Use FastAPI dependency_overrides for proper injection
     app.dependency_overrides[get_current_user] = lambda: mock_user

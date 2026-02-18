@@ -270,38 +270,33 @@ def mock_quota_service():
 
 
 @pytest.fixture
-def mock_auth_service():
-    """Mock AuthService."""
-    from services.auth_service import GitHubUser
+def mock_app_user():
+    """Mock AppUser for testing."""
+    from core.auth import AppUser
 
-    mock = MagicMock()
-    mock.is_available = True
-    mock.is_configured = True
-    mock.get_authorization_url.return_value = (
-        "https://github.com/login/oauth/authorize?client_id=test"
-    )
-    mock.authenticate = AsyncMock(
-        return_value={
-            "access_token": "test_jwt_token",
-            "token_type": "bearer",
-            "user": {
-                "id": "12345",
-                "login": "testuser",
-                "name": "Test User",
-                "email": "test@example.com",
-                "avatar_url": "https://github.com/testuser.png",
-                "user_folder_id": "abc123",
-            },
-        }
-    )
-    mock.get_user_from_token.return_value = GitHubUser(
-        id="12345",
-        login="testuser",
-        name="Test User",
+    return AppUser(
+        id="test-uuid-12345",
         email="test@example.com",
+        name="Test User",
         avatar_url=None,
+        scopes=["user"],
+        raw_payload={},
     )
-    return mock
+
+
+@pytest.fixture
+def mock_admin_user():
+    """Mock AppUser with admin scopes."""
+    from core.auth import AppUser
+
+    return AppUser(
+        id="admin-uuid-99999",
+        email="admin@example.com",
+        name="Admin User",
+        avatar_url=None,
+        scopes=["user", "admin"],
+        raw_payload={},
+    )
 
 
 # ============ Test Settings ============

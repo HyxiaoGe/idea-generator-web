@@ -19,7 +19,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_favorite_repository, get_user_repository
-from api.routers.auth import require_current_user
 from api.schemas.favorites import (
     AddFavoriteRequest,
     AddFavoriteResponse,
@@ -37,9 +36,9 @@ from api.schemas.favorites import (
     UpdateFolderRequest,
     UpdateFolderResponse,
 )
+from core.auth import AppUser, require_current_user
 from database.models import Favorite, FavoriteFolder
 from database.repositories import FavoriteRepository, UserRepository
-from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +86,7 @@ def favorite_to_info(favorite: Favorite) -> FavoriteInfo:
 
 
 async def get_db_user_id(
-    user: GitHubUser,
+    user: AppUser,
     user_repo: UserRepository | None,
 ) -> UUID:
     """Get database user ID from GitHub user."""
@@ -97,7 +96,7 @@ async def get_db_user_id(
             detail="Database not configured",
         )
 
-    db_user = await user_repo.get_by_github_id(int(user.id))
+    db_user = await user_repo.get_by_auth_id(user.id)
     if not db_user:
         raise HTTPException(
             status_code=404,
@@ -112,7 +111,7 @@ async def get_db_user_id(
 
 @router.get("/folders", response_model=ListFoldersResponse)
 async def list_folders(
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -138,7 +137,7 @@ async def list_folders(
 @router.post("/folders", response_model=CreateFolderResponse)
 async def create_folder(
     request: CreateFolderRequest,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -164,7 +163,7 @@ async def create_folder(
 async def update_folder(
     folder_id: str,
     request: UpdateFolderRequest,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -201,7 +200,7 @@ async def update_folder(
 @router.delete("/folders/{folder_id}", response_model=DeleteFolderResponse)
 async def delete_folder(
     folder_id: str,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -234,7 +233,7 @@ async def list_favorites(
     folder_id: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -281,7 +280,7 @@ async def list_favorites(
 @router.post("", response_model=AddFavoriteResponse)
 async def add_favorite(
     request: AddFavoriteRequest,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -327,7 +326,7 @@ async def add_favorite(
 @router.delete("/{favorite_id}", response_model=DeleteFavoriteResponse)
 async def delete_favorite(
     favorite_id: str,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):
@@ -355,7 +354,7 @@ async def delete_favorite(
 @router.post("/bulk", response_model=BulkFavoriteResponse)
 async def bulk_favorite_operation(
     request: BulkFavoriteRequest,
-    user: GitHubUser = Depends(require_current_user),
+    user: AppUser = Depends(require_current_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
     user_repo: UserRepository | None = Depends(get_user_repository),
 ):

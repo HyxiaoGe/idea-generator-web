@@ -15,7 +15,6 @@ from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header
 
-from api.routers.auth import get_current_user
 from api.schemas.video import (
     GeneratedVideo,
     GenerateVideoRequest,
@@ -26,6 +25,7 @@ from api.schemas.video import (
     VideoTaskProgress,
     VideoTaskStatus,
 )
+from core.auth import AppUser, get_current_user
 from core.config import get_settings
 from core.exceptions import (
     AppException,
@@ -37,7 +37,6 @@ from core.exceptions import (
 )
 from core.redis import get_redis
 from services import get_quota_service
-from services.auth_service import GitHubUser
 from services.providers import (
     GenerationRequest as ProviderRequest,
 )
@@ -116,7 +115,7 @@ def get_video_provider(provider_name: str | None = None):
     return next(iter(providers.values()))
 
 
-def get_user_id_from_user(user: GitHubUser | None) -> str:
+def get_user_id_from_user(user: AppUser | None) -> str:
     """Get user ID for tracking."""
     if user:
         return user.user_folder_id
@@ -173,7 +172,7 @@ async def generate_video(
     background_tasks: BackgroundTasks,
     x_provider: str | None = Header(None, description="Preferred video provider"),
     x_model: str | None = Header(None, description="Specific model to use"),
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
 ):
     """
     Start video generation from text prompt.
@@ -279,7 +278,7 @@ async def image_to_video(
     background_tasks: BackgroundTasks,
     x_provider: str | None = Header(None, description="Preferred video provider"),
     x_model: str | None = Header(None, description="Specific model to use"),
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
 ):
     """
     Generate video from an image (image animation).
@@ -312,7 +311,7 @@ async def image_to_video(
 )
 async def get_task_progress(
     task_id: str,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
 ):
     """
     Get the progress of a video generation task.
@@ -464,7 +463,7 @@ async def check_provider_health(provider_name: str):
 )
 async def cancel_task(
     task_id: str,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
 ):
     """
     Cancel a video generation task.

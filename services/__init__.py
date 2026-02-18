@@ -8,13 +8,6 @@ Services are designed to be framework-agnostic and can be used with FastAPI.
 # Core generation services (legacy, for backward compatibility)
 from .ai_content_moderator import AIContentModerator, get_ai_moderator
 from .audit_logger import AuditLogger, get_audit_logger
-
-# Authentication (FastAPI compatible - uses httpx)
-from .auth_service import (
-    AuthService,
-    GitHubUser,
-    get_auth_service,
-)
 from .chat_session import ChatSession
 
 # Content moderation
@@ -114,10 +107,6 @@ __all__ = [
     "HealthCheckResult",
     "HealthStatus",
     "get_health_checker",
-    # Auth
-    "AuthService",
-    "GitHubUser",
-    "get_auth_service",
     # Quota
     "QuotaService",
     "get_quota_service",

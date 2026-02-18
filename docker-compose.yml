@@ -18,11 +18,10 @@ services:
       - DATABASE_URL=postgresql+asyncpg://prompthub:prompthub_dev@host.docker.internal:5432/idea_generator
       # Google Gemini API
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      # GitHub OAuth (optional)
+      # Auth Service
       - AUTH_ENABLED=${AUTH_ENABLED:-false}
-      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
-      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
-      - GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI}
+      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth-service:8100}
+      - AUTH_SERVICE_CLIENT_ID=${AUTH_SERVICE_CLIENT_ID}
       # Storage (MinIO on host)
       - MINIO_ENDPOINT=host.docker.internal:9000
       - STORAGE_PUBLIC_URL=http://localhost:9000/idea-generator

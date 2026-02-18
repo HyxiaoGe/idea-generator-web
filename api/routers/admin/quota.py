@@ -10,26 +10,17 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from api.routers.auth import require_current_user
 from api.schemas.admin import (
     ResetUserQuotaRequest,
     ResetUserQuotaResponse,
 )
+from core.auth import AppUser, require_admin
 from core.redis import get_redis
 from services import COOLDOWN_SECONDS, DAILY_LIMIT, MAX_BATCH_SIZE, get_quota_service
-from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/quota", tags=["admin-quota"])
-
-
-# ============ Admin Check ============
-
-
-async def require_admin(user: GitHubUser = Depends(require_current_user)) -> GitHubUser:
-    """Require admin privileges."""
-    return user
 
 
 # ============ Endpoints ============
@@ -37,7 +28,7 @@ async def require_admin(user: GitHubUser = Depends(require_current_user)) -> Git
 
 @router.get("/config")
 async def get_quota_config(
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Get current quota configuration."""
     return {
@@ -51,7 +42,7 @@ async def get_quota_config(
 async def reset_user_quota(
     user_id: str,
     request: ResetUserQuotaRequest | None = None,
-    admin: GitHubUser = Depends(require_admin),
+    admin: AppUser = Depends(require_admin),
 ):
     """Reset a user's daily quota."""
     redis = await get_redis()

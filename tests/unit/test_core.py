@@ -3,10 +3,7 @@ Unit tests for core module.
 """
 
 import os
-from datetime import timedelta
 from unittest.mock import patch
-
-import pytest
 
 
 class TestSettings:
@@ -69,86 +66,82 @@ class TestSettings:
 class TestSecurity:
     """Tests for core.security module."""
 
-    def test_create_access_token(self):
-        """Test JWT token creation."""
-        from core.security import create_access_token
+    def test_extract_token_from_header(self):
+        """Test token extraction from Authorization header."""
+        from core.security import extract_token_from_header
 
-        with patch.dict(
-            os.environ, {"SECRET_KEY": "test-secret-key-32-characters!!!!"}, clear=False
-        ):
-            token = create_access_token(data={"sub": "user123", "login": "testuser"})
+        assert extract_token_from_header("Bearer abc123") == "abc123"
+        assert extract_token_from_header("bearer abc123") == "abc123"
+        assert extract_token_from_header(None) is None
+        assert extract_token_from_header("") is None
+        assert extract_token_from_header("Basic abc123") is None
+        assert extract_token_from_header("Bearer") is None
 
-            assert token is not None
-            assert isinstance(token, str)
-            assert len(token) > 0
 
-    def test_verify_token_valid(self):
-        """Test JWT token verification with valid token."""
-        from core.security import create_access_token, verify_token
+class TestAppUser:
+    """Tests for core.auth AppUser."""
 
-        with patch.dict(
-            os.environ, {"SECRET_KEY": "test-secret-key-32-characters!!!!"}, clear=False
-        ):
-            token = create_access_token(data={"sub": "user123", "login": "testuser"})
-            payload = verify_token(token)
+    def test_app_user_properties(self):
+        """Test AppUser properties."""
+        from core.auth import AppUser
 
-            assert payload["sub"] == "user123"
-            assert payload["login"] == "testuser"
+        user = AppUser(
+            id="test-uuid-12345",
+            email="test@example.com",
+            name="Test User",
+            avatar_url="https://example.com/avatar.png",
+            scopes=["user"],
+            raw_payload={},
+        )
 
-    def test_verify_token_expired(self):
-        """Test JWT token verification with expired token."""
-        from core.exceptions import AuthenticationError
-        from core.security import create_access_token, verify_token
+        assert user.display_name == "Test User"
+        assert user.user_folder_id == "test-uuid-12345"
+        assert user.is_admin is False
 
-        with patch.dict(
-            os.environ, {"SECRET_KEY": "test-secret-key-32-characters!!!!"}, clear=False
-        ):
-            # Create token with negative expiry
-            token = create_access_token(
-                data={"sub": "user123"}, expires_delta=timedelta(seconds=-100)
-            )
+    def test_app_user_display_name_fallback(self):
+        """Test display name falls back to email."""
+        from core.auth import AppUser
 
-            with pytest.raises(AuthenticationError):
-                verify_token(token)
+        user = AppUser(
+            id="test-uuid-12345",
+            email="test@example.com",
+            name=None,
+            avatar_url=None,
+            scopes=[],
+            raw_payload={},
+        )
 
-    def test_verify_token_invalid(self):
-        """Test JWT token verification with invalid token."""
-        from core.exceptions import AuthenticationError
-        from core.security import verify_token
+        assert user.display_name == "test@example.com"
 
-        with patch.dict(
-            os.environ, {"SECRET_KEY": "test-secret-key-32-characters!!!!"}, clear=False
-        ):
-            with pytest.raises(AuthenticationError):
-                verify_token("invalid.token.here")
+    def test_app_user_admin_scope(self):
+        """Test admin scope check."""
+        from core.auth import AppUser
 
-    def test_generate_user_folder_id(self):
-        """Test user folder ID generation."""
-        from core.security import generate_user_folder_id
+        admin = AppUser(
+            id="admin-uuid",
+            email="admin@example.com",
+            name="Admin",
+            avatar_url=None,
+            scopes=["user", "admin"],
+            raw_payload={},
+        )
 
-        folder_id = generate_user_folder_id("12345", "github")
+        assert admin.is_admin is True
 
-        assert folder_id is not None
-        assert isinstance(folder_id, str)
-        assert len(folder_id) == 16  # First 16 chars of hash
+    def test_app_user_folder_id_is_sub(self):
+        """Test that user_folder_id is the auth-service sub (UUID)."""
+        from core.auth import AppUser
 
-    def test_generate_user_folder_id_consistency(self):
-        """Test that same input produces same folder ID."""
-        from core.security import generate_user_folder_id
+        user = AppUser(
+            id="550e8400-e29b-41d4-a716-446655440000",
+            email="test@example.com",
+            name=None,
+            avatar_url=None,
+            scopes=[],
+            raw_payload={},
+        )
 
-        id1 = generate_user_folder_id("12345", "github")
-        id2 = generate_user_folder_id("12345", "github")
-
-        assert id1 == id2
-
-    def test_generate_user_folder_id_uniqueness(self):
-        """Test that different inputs produce different folder IDs."""
-        from core.security import generate_user_folder_id
-
-        id1 = generate_user_folder_id("12345", "github")
-        id2 = generate_user_folder_id("67890", "github")
-
-        assert id1 != id2
+        assert user.user_folder_id == "550e8400-e29b-41d4-a716-446655440000"
 
 
 class TestExceptions:

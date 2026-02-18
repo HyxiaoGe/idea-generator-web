@@ -10,7 +10,7 @@ import logging
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
-from services import get_auth_service
+from core.auth import _to_app_user, get_validator
 from services.websocket_manager import get_websocket_manager
 
 logger = logging.getLogger(__name__)
@@ -28,11 +28,10 @@ async def authenticate_websocket(token: str | None) -> tuple[str | None, str | N
         return None, None  # Anonymous connection allowed
 
     try:
-        auth_service = get_auth_service()
-        user = auth_service.get_user_from_token(token)
-        if user:
-            return user.user_folder_id, None
-        return None, "Invalid token"
+        validator = get_validator()
+        auth_user = await validator.verify_async(token)
+        app_user = _to_app_user(auth_user)
+        return app_user.user_folder_id, None
     except Exception as e:
         logger.warning(f"WebSocket auth error: {e}")
         return None, str(e)
@@ -54,12 +53,12 @@ async def websocket_endpoint(
     - Client sends JSON messages with "type" and "payload" fields
     - Server responds with JSON messages with "type", "payload", and "timestamp" fields
 
-    Client → Server Messages:
+    Client -> Server Messages:
     - {"type": "ping"} - Heartbeat
     - {"type": "subscribe", "payload": {"channel": "task", "task_id": "xxx"}}
     - {"type": "unsubscribe", "payload": {"channel": "task", "task_id": "xxx"}}
 
-    Server → Client Messages:
+    Server -> Client Messages:
     - {"type": "connected", "payload": {"connection_id": "...", "user_id": "..."}}
     - {"type": "pong", "payload": {"server_time": 1234567890}}
     - {"type": "task:progress", "payload": {...}}

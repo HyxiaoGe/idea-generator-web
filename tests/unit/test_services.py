@@ -2,8 +2,6 @@
 Unit tests for services module.
 """
 
-from unittest.mock import patch
-
 import pytest
 
 
@@ -198,100 +196,55 @@ class TestQuotaService:
         assert status_b["used"] == 1
 
 
-class TestAuthService:
-    """Tests for AuthService."""
+class TestAppUser:
+    """Tests for AppUser (from core.auth)."""
 
-    def test_auth_service_not_configured(self):
-        """Test auth service when not configured."""
-        with patch.dict(
-            "os.environ", {"GITHUB_CLIENT_ID": "", "GITHUB_CLIENT_SECRET": ""}, clear=False
-        ):
-            from services.auth_service import AuthService
+    def test_app_user_properties(self):
+        """Test AppUser basic properties."""
+        from core.auth import AppUser
 
-            service = AuthService()
-
-            assert service.is_configured is False
-
-    def test_auth_service_configured(self):
-        """Test auth service when properly configured."""
-        with patch.dict(
-            "os.environ",
-            {
-                "GITHUB_CLIENT_ID": "test_client_id",
-                "GITHUB_CLIENT_SECRET": "test_secret",
-                "AUTH_ENABLED": "true",
-            },
-            clear=False,
-        ):
-            from services.auth_service import AuthService
-
-            service = AuthService()
-
-            assert service.is_configured is True
-
-    def test_get_authorization_url(self):
-        """Test authorization URL generation."""
-        with patch.dict(
-            "os.environ",
-            {
-                "GITHUB_CLIENT_ID": "test_client_id",
-                "GITHUB_CLIENT_SECRET": "test_secret",
-                "GITHUB_REDIRECT_URI": "http://localhost:8000/callback",
-            },
-            clear=False,
-        ):
-            from services.auth_service import AuthService
-
-            service = AuthService()
-
-            url = service.get_authorization_url(state="test_state")
-
-            assert "github.com" in url
-            assert "client_id=test_client_id" in url
-            assert "state=test_state" in url
-
-    def test_github_user_properties(self):
-        """Test GitHubUser properties."""
-        from services.auth_service import GitHubUser
-
-        user = GitHubUser(
-            id="12345",
-            login="testuser",
-            name="Test User",
+        user = AppUser(
+            id="test-uuid",
             email="test@example.com",
-            avatar_url="https://github.com/testuser.png",
+            name="Test User",
+            avatar_url="https://example.com/avatar.png",
+            scopes=["user"],
+            raw_payload={},
         )
 
         assert user.display_name == "Test User"
-        assert user.user_folder_id is not None
-        assert len(user.user_folder_id) == 16
+        assert user.user_folder_id == "test-uuid"
+        assert user.is_admin is False
 
-    def test_github_user_display_name_fallback(self):
-        """Test display name falls back to login."""
-        from services.auth_service import GitHubUser
+    def test_app_user_admin(self):
+        """Test AppUser admin detection."""
+        from core.auth import AppUser
 
-        user = GitHubUser(id="12345", login="testuser", name=None, email=None, avatar_url=None)
-
-        assert user.display_name == "testuser"
-
-    def test_github_user_to_dict(self):
-        """Test GitHubUser serialization."""
-        from services.auth_service import GitHubUser
-
-        user = GitHubUser(
-            id="12345",
-            login="testuser",
-            name="Test User",
-            email="test@example.com",
+        admin = AppUser(
+            id="admin-uuid",
+            email="admin@example.com",
+            name="Admin",
             avatar_url=None,
+            scopes=["user", "admin"],
+            raw_payload={},
         )
 
-        data = user.to_dict()
+        assert admin.is_admin is True
 
-        assert data["id"] == "12345"
-        assert data["login"] == "testuser"
-        assert data["name"] == "Test User"
-        assert "user_folder_id" in data
+    def test_app_user_display_name_fallback(self):
+        """Test display name falls back to email."""
+        from core.auth import AppUser
+
+        user = AppUser(
+            id="test-uuid",
+            email="test@example.com",
+            name=None,
+            avatar_url=None,
+            scopes=[],
+            raw_payload={},
+        )
+
+        assert user.display_name == "test@example.com"
 
 
 class TestCostEstimator:

@@ -17,7 +17,6 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Header
 
 from api.dependencies import get_chat_repository, get_quota_repository
-from api.routers.auth import get_current_user
 from api.schemas.chat import (
     ChatHistoryResponse,
     ChatMessage,
@@ -29,6 +28,7 @@ from api.schemas.chat import (
     SendMessageResponse,
 )
 from api.schemas.generate import GeneratedImage
+from core.auth import AppUser, get_current_user
 from core.config import get_settings
 from core.exceptions import (
     GenerationError,
@@ -44,7 +44,6 @@ from services import (
     get_quota_service,
     get_storage_manager,
 )
-from services.auth_service import GitHubUser
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +56,7 @@ CHAT_SESSION_TTL = 86400
 # ============ Helpers ============
 
 
-def get_user_id_from_user(user: GitHubUser | None) -> str:
+def get_user_id_from_user(user: AppUser | None) -> str:
     """Get user ID for session storage."""
     if user:
         return user.user_folder_id
@@ -96,7 +95,7 @@ async def check_chat_quota(user_id: str):
 @router.post("", response_model=CreateChatResponse)
 async def create_chat_session(
     request: CreateChatRequest,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     chat_repo: ChatRepository | None = Depends(get_chat_repository),
 ):
     """
@@ -133,7 +132,7 @@ async def create_chat_session(
                 initial_prompt=None,
                 aspect_ratio=request.aspect_ratio.value,
                 resolution="1K",
-                user_id=None,  # TODO: map GitHubUser to DB user UUID
+                user_id=None,  # TODO: map AppUser to DB user UUID
             )
             # Override session_id to match what we stored in Redis
             # The repo auto-generates a UUID, but we need our own
@@ -152,7 +151,7 @@ async def create_chat_session(
 async def send_message(
     session_id: str,
     request: SendMessageRequest,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     chat_repo: ChatRepository | None = Depends(get_chat_repository),
     quota_repo: QuotaRepository | None = Depends(get_quota_repository),
     x_api_key: str | None = Header(None, alias="X-API-Key"),
@@ -334,7 +333,7 @@ async def send_message(
 @router.get("/{session_id}", response_model=ChatHistoryResponse)
 async def get_chat_history(
     session_id: str,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     chat_repo: ChatRepository | None = Depends(get_chat_repository),
 ):
     """
@@ -416,7 +415,7 @@ async def get_chat_history(
 
 @router.get("", response_model=ListChatsResponse)
 async def list_chat_sessions(
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     chat_repo: ChatRepository | None = Depends(get_chat_repository),
 ):
     """
@@ -428,7 +427,7 @@ async def list_chat_sessions(
     if chat_repo:
         try:
             db_sessions = await chat_repo.list_sessions_by_user(
-                user_id=None,  # TODO: map GitHubUser to DB user UUID
+                user_id=None,  # TODO: map AppUser to DB user UUID
             )
             sessions = [
                 ChatSessionInfo(
@@ -482,7 +481,7 @@ async def list_chat_sessions(
 @router.delete("/{session_id}")
 async def delete_chat_session(
     session_id: str,
-    user: GitHubUser | None = Depends(get_current_user),
+    user: AppUser | None = Depends(get_current_user),
     chat_repo: ChatRepository | None = Depends(get_chat_repository),
 ):
     """
