@@ -58,6 +58,11 @@ class UserRepository:
         await self.session.flush()
         return user
 
+    async def get_by_email(self, email: str) -> User | None:
+        """Get user by email."""
+        result = await self.session.execute(select(User).where(User.email == email))
+        return result.scalar_one_or_none()
+
     async def create_or_update_from_auth(
         self,
         auth_id: str,
@@ -68,15 +73,25 @@ class UserRepository:
         """
         Create or update user from auth-service JWT data.
 
-        If user exists, updates their info and last login time.
-        If user doesn't exist, creates a new user.
+        Lookup order:
+        1. By auth_id (already linked)
+        2. By email (legacy user migration — links auth_id)
+        3. Create new user
         """
         user = await self.get_by_auth_id(auth_id)
 
+        if not user and email:
+            user = await self.get_by_email(email)
+            if user:
+                user.auth_id = auth_id
+
         if user:
-            user.email = email
-            user.display_name = name
-            user.avatar_url = avatar_url
+            if email:
+                user.email = email
+            if name:
+                user.display_name = name
+            if avatar_url:
+                user.avatar_url = avatar_url
             user.last_login_at = datetime.now()
         else:
             user = User(

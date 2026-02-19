@@ -20,7 +20,7 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       # Auth Service
       - AUTH_ENABLED=${AUTH_ENABLED:-false}
-      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth-service:8100}
+      - AUTH_SERVICE_URL=http://host.docker.internal:8100
       - AUTH_SERVICE_CLIENT_ID=${AUTH_SERVICE_CLIENT_ID}
       # Storage (MinIO on host)
       - MINIO_ENDPOINT=host.docker.internal:9000

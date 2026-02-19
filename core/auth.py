@@ -94,7 +94,8 @@ async def get_current_user(authorization: str | None = Header(None)) -> AppUser 
         validator = get_validator()
         auth_user = await validator.verify_async(parts[1])
         return _to_app_user(auth_user)
-    except Exception:
+    except Exception as e:
+        logger.warning("JWT verification failed: %s", e)
         return None
 
 

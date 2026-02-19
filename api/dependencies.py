@@ -2,11 +2,13 @@
 FastAPI dependency injection for database sessions and repositories.
 """
 
+import logging
 from collections.abc import AsyncGenerator
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.auth import AppUser, require_current_user
 from database import get_session, is_database_available
 from database.repositories import (
     APIKeyRepository,
@@ -21,6 +23,8 @@ from database.repositories import (
     TemplateRepository,
     UserRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession | None, None]:
@@ -134,3 +138,25 @@ async def get_notification_repository(
     if session is None:
         return None
     return NotificationRepository(session)
+
+
+async def ensure_db_user(
+    user: AppUser = Depends(require_current_user),
+    user_repo: UserRepository | None = Depends(get_user_repository),
+) -> str | None:
+    """
+    Ensure the authenticated user exists in the database.
+
+    Auto-syncs from auth-service JWT on first access.
+    Returns the database user UUID string, or None if DB is unavailable.
+    """
+    if not user_repo:
+        return None
+
+    db_user = await user_repo.create_or_update_from_auth(
+        auth_id=user.id,
+        email=user.email,
+        name=user.name,
+        avatar_url=user.avatar_url,
+    )
+    return str(db_user.id)
