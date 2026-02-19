@@ -15,7 +15,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.dependencies import get_notification_repository, get_user_repository
+from api.dependencies import ensure_db_user, get_notification_repository
 from api.schemas.notifications import (
     DeleteNotificationResponse,
     GetNotificationResponse,
@@ -27,9 +27,8 @@ from api.schemas.notifications import (
     NotificationType,
     UnreadCountResponse,
 )
-from core.auth import AppUser, require_current_user
 from database.models import Notification
-from database.repositories import NotificationRepository, UserRepository
+from database.repositories import NotificationRepository
 
 logger = logging.getLogger(__name__)
 
@@ -53,27 +52,6 @@ def notification_to_info(notification: Notification) -> NotificationInfo:
     )
 
 
-async def get_db_user_id(
-    user: AppUser,
-    user_repo: UserRepository | None,
-) -> UUID:
-    """Get database user ID from GitHub user."""
-    if not user_repo:
-        raise HTTPException(
-            status_code=503,
-            detail="Database not configured",
-        )
-
-    db_user = await user_repo.get_by_auth_id(user.id)
-    if not db_user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found",
-        )
-
-    return db_user.id
-
-
 # ============ Endpoints ============
 
 
@@ -83,12 +61,11 @@ async def list_notifications(
     type: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     notification_repo: NotificationRepository | None = Depends(get_notification_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """List notifications for the current user."""
-    if not notification_repo:
+    if not notification_repo or not user_id:
         return ListNotificationsResponse(
             notifications=[],
             total=0,
@@ -97,8 +74,6 @@ async def list_notifications(
             offset=offset,
             has_more=False,
         )
-
-    user_id = await get_db_user_id(user, user_repo)
 
     notifications = await notification_repo.list_by_user(
         user_id=user_id,
@@ -126,15 +101,13 @@ async def list_notifications(
 
 @router.get("/unread-count", response_model=UnreadCountResponse)
 async def get_unread_count(
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     notification_repo: NotificationRepository | None = Depends(get_notification_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Get the count of unread notifications."""
-    if not notification_repo:
+    if not notification_repo or not user_id:
         return UnreadCountResponse(unread_count=0)
 
-    user_id = await get_db_user_id(user, user_repo)
     count = await notification_repo.count_unread(user_id)
 
     return UnreadCountResponse(unread_count=count)
@@ -143,20 +116,17 @@ async def get_unread_count(
 @router.get("/{notification_id}", response_model=GetNotificationResponse)
 async def get_notification(
     notification_id: str,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     notification_repo: NotificationRepository | None = Depends(get_notification_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Get a specific notification."""
-    if not notification_repo:
+    if not notification_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
 
     try:
         notification_uuid = UUID(notification_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid notification ID")
-
-    user_id = await get_db_user_id(user, user_repo)
 
     notification = await notification_repo.get_by_id(notification_uuid)
     if not notification or notification.user_id != user_id:
@@ -168,15 +138,12 @@ async def get_notification(
 @router.post("/mark-read", response_model=MarkReadResponse)
 async def mark_read(
     request: MarkReadRequest,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     notification_repo: NotificationRepository | None = Depends(get_notification_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Mark specific notifications as read."""
-    if not notification_repo:
+    if not notification_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
-
-    user_id = await get_db_user_id(user, user_repo)
 
     notification_uuids = []
     for nid in request.notification_ids:
@@ -193,15 +160,13 @@ async def mark_read(
 
 @router.post("/mark-all-read", response_model=MarkAllReadResponse)
 async def mark_all_read(
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     notification_repo: NotificationRepository | None = Depends(get_notification_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Mark all notifications as read."""
-    if not notification_repo:
+    if not notification_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
 
-    user_id = await get_db_user_id(user, user_repo)
     marked = await notification_repo.mark_all_read(user_id)
 
     return MarkAllReadResponse(
@@ -213,20 +178,17 @@ async def mark_all_read(
 @router.delete("/{notification_id}", response_model=DeleteNotificationResponse)
 async def delete_notification(
     notification_id: str,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     notification_repo: NotificationRepository | None = Depends(get_notification_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Delete a notification."""
-    if not notification_repo:
+    if not notification_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
 
     try:
         notification_uuid = UUID(notification_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid notification ID")
-
-    user_id = await get_db_user_id(user, user_repo)
 
     deleted = await notification_repo.delete_by_user(user_id, notification_uuid)
     if not deleted:

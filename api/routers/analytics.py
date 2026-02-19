@@ -15,7 +15,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from api.dependencies import get_image_repository, get_user_repository
+from api.dependencies import ensure_db_user, get_image_repository
 from api.schemas.analytics import (
     CostsResponse,
     ModeUsage,
@@ -27,7 +27,7 @@ from api.schemas.analytics import (
     UsageResponse,
 )
 from core.auth import AppUser, require_current_user
-from database.repositories import ImageRepository, UserRepository
+from database.repositories import ImageRepository
 
 logger = logging.getLogger(__name__)
 
@@ -35,18 +35,6 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 # ============ Helpers ============
-
-
-async def get_db_user_id(
-    user: AppUser,
-    user_repo: UserRepository | None,
-) -> UUID | None:
-    """Get database user ID from GitHub user."""
-    if not user_repo:
-        return None
-
-    db_user = await user_repo.get_by_auth_id(user.id)
-    return db_user.id if db_user else None
 
 
 def get_date_range(time_range: TimeRange) -> tuple[datetime | None, datetime | None]:
@@ -77,29 +65,15 @@ def get_date_range(time_range: TimeRange) -> tuple[datetime | None, datetime | N
 @router.get("/overview", response_model=OverviewResponse)
 async def get_overview(
     time_range: TimeRange = Query(default=TimeRange.MONTH),
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """
     Get overall analytics overview.
 
     Includes total generations, credits used, success rate, etc.
     """
-    if not image_repo:
-        return OverviewResponse(
-            total_generations=0,
-            total_credits_used=0.0,
-            average_duration_ms=0.0,
-            success_rate=100.0,
-            favorite_provider=None,
-            favorite_mode=None,
-            period_start=None,
-            period_end=None,
-        )
-
-    user_id = await get_db_user_id(user, user_repo)
-    if not user_id:
+    if not image_repo or not user_id:
         return OverviewResponse(
             total_generations=0,
             total_credits_used=0.0,
@@ -137,28 +111,15 @@ async def get_overview(
 @router.get("/usage", response_model=UsageResponse)
 async def get_usage(
     time_range: TimeRange = Query(default=TimeRange.MONTH),
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """
     Get detailed usage statistics.
 
     Includes daily breakdown, usage by mode and resolution.
     """
-    if not image_repo:
-        return UsageResponse(
-            daily_usage=[],
-            total_generations=0,
-            average_daily=0.0,
-            peak_day=None,
-            peak_count=0,
-            by_mode=[],
-            by_resolution=[],
-        )
-
-    user_id = await get_db_user_id(user, user_repo)
-    if not user_id:
+    if not image_repo or not user_id:
         return UsageResponse(
             daily_usage=[],
             total_generations=0,
@@ -222,7 +183,6 @@ async def get_providers_analytics(
     time_range: TimeRange = Query(default=TimeRange.MONTH),
     user: AppUser = Depends(require_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """
     Get provider usage statistics.
@@ -236,8 +196,6 @@ async def get_providers_analytics(
             fallback_count=0,
             fallback_rate=0.0,
         )
-
-    await get_db_user_id(user, user_repo)
 
     # TODO: Implement provider statistics
     # This requires tracking provider usage per image
@@ -254,8 +212,6 @@ async def get_providers_analytics(
 async def get_trends(
     time_range: TimeRange = Query(default=TimeRange.MONTH),
     user: AppUser = Depends(require_current_user),
-    image_repo: ImageRepository | None = Depends(get_image_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """
     Get trend analysis.

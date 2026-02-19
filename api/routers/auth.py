@@ -17,7 +17,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends
 
-from api.dependencies import get_api_key_repository, get_user_repository
+from api.dependencies import ensure_db_user, get_api_key_repository, get_user_repository
 from api.schemas.auth import (
     APIKeyInfo,
     AuthStatusResponse,
@@ -109,31 +109,16 @@ def generate_api_key() -> tuple[str, str, str]:
     return full_key, key_hash, key_prefix
 
 
-async def _get_db_user(
-    user: AppUser,
-    user_repo: UserRepository | None,
-):
-    """Look up DB user by auth_id."""
-    if not user_repo:
-        return None
-    return await user_repo.get_by_auth_id(user.id)
-
-
 @router.get("/api-keys", response_model=ListAPIKeysResponse)
 async def list_api_keys(
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     api_key_repo: APIKeyRepository | None = Depends(get_api_key_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """List all API keys for the current user."""
-    if not api_key_repo or not user_repo:
+    if not api_key_repo or not user_id:
         return ListAPIKeysResponse(keys=[], total=0)
 
-    db_user = await user_repo.get_by_auth_id(user.id)
-    if not db_user:
-        return ListAPIKeysResponse(keys=[], total=0)
-
-    api_keys = await api_key_repo.list_by_user(db_user.id)
+    api_keys = await api_key_repo.list_by_user(user_id)
 
     keys = []
     for key in api_keys:
@@ -156,24 +141,19 @@ async def list_api_keys(
 @router.post("/api-keys", response_model=CreateAPIKeyResponse)
 async def create_api_key(
     request: CreateAPIKeyRequest,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     api_key_repo: APIKeyRepository | None = Depends(get_api_key_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """
     Create a new API key.
 
     The full key is only returned once. Store it securely.
     """
-    if not api_key_repo or not user_repo:
+    if not api_key_repo or not user_id:
         raise AuthenticationError(message="Database not configured")
 
-    db_user = await user_repo.get_by_auth_id(user.id)
-    if not db_user:
-        raise AuthenticationError(message="User record not synced. Please re-login.")
-
     # Check key limit (max 10 keys per user)
-    current_count = await api_key_repo.count_by_user(db_user.id)
+    current_count = await api_key_repo.count_by_user(user_id)
     if current_count >= 10:
         raise AuthenticationError(message="Maximum number of API keys (10) reached")
 
@@ -187,7 +167,7 @@ async def create_api_key(
 
     # Create in database
     api_key = await api_key_repo.create(
-        user_id=db_user.id,
+        user_id=user_id,
         name=request.name,
         key_hash=key_hash,
         key_prefix=key_prefix,
@@ -209,24 +189,19 @@ async def create_api_key(
 @router.delete("/api-keys/{key_id}", response_model=DeleteAPIKeyResponse)
 async def delete_api_key(
     key_id: str,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     api_key_repo: APIKeyRepository | None = Depends(get_api_key_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Delete an API key."""
-    if not api_key_repo or not user_repo:
+    if not api_key_repo or not user_id:
         raise AuthenticationError(message="Database not configured")
-
-    db_user = await user_repo.get_by_auth_id(user.id)
-    if not db_user:
-        raise AuthenticationError(message="User record not synced. Please re-login.")
 
     try:
         key_uuid = UUID(key_id)
     except ValueError:
         raise AuthenticationError(message="Invalid key ID")
 
-    deleted = await api_key_repo.delete_by_user(db_user.id, key_uuid)
+    deleted = await api_key_repo.delete_by_user(user_id, key_uuid)
     if not deleted:
         raise AuthenticationError(message="API key not found")
 

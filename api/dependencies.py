@@ -4,11 +4,12 @@ FastAPI dependency injection for database sessions and repositories.
 
 import logging
 from collections.abc import AsyncGenerator
+from uuid import UUID
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.auth import AppUser, require_current_user
+from core.auth import AppUser, get_current_user, require_current_user
 from database import get_session, is_database_available
 from database.repositories import (
     APIKeyRepository,
@@ -140,23 +141,43 @@ async def get_notification_repository(
     return NotificationRepository(session)
 
 
-async def ensure_db_user(
-    user: AppUser = Depends(require_current_user),
-    user_repo: UserRepository | None = Depends(get_user_repository),
-) -> str | None:
-    """
-    Ensure the authenticated user exists in the database.
-
-    Auto-syncs from auth-service JWT on first access.
-    Returns the database user UUID string, or None if DB is unavailable.
-    """
-    if not user_repo:
-        return None
-
+async def _sync_user(
+    user: AppUser,
+    user_repo: UserRepository,
+) -> UUID:
+    """Sync auth-service user to local DB, return DB user UUID."""
     db_user = await user_repo.create_or_update_from_auth(
         auth_id=user.id,
         email=user.email,
         name=user.name,
         avatar_url=user.avatar_url,
     )
-    return str(db_user.id)
+    return db_user.id
+
+
+async def ensure_db_user(
+    user: AppUser = Depends(require_current_user),
+    user_repo: UserRepository | None = Depends(get_user_repository),
+) -> UUID | None:
+    """
+    Ensure the authenticated user exists in the database (login required).
+
+    Returns the database user UUID, or None if DB is unavailable.
+    """
+    if not user_repo:
+        return None
+    return await _sync_user(user, user_repo)
+
+
+async def ensure_db_user_optional(
+    user: AppUser | None = Depends(get_current_user),
+    user_repo: UserRepository | None = Depends(get_user_repository),
+) -> UUID | None:
+    """
+    Ensure the authenticated user exists in the database (login optional).
+
+    Returns the database user UUID, or None if not logged in or DB unavailable.
+    """
+    if not user or not user_repo:
+        return None
+    return await _sync_user(user, user_repo)

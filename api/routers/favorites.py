@@ -18,7 +18,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.dependencies import get_favorite_repository, get_user_repository
+from api.dependencies import ensure_db_user, get_favorite_repository
 from api.schemas.favorites import (
     AddFavoriteRequest,
     AddFavoriteResponse,
@@ -36,9 +36,8 @@ from api.schemas.favorites import (
     UpdateFolderRequest,
     UpdateFolderResponse,
 )
-from core.auth import AppUser, require_current_user
 from database.models import Favorite, FavoriteFolder
-from database.repositories import FavoriteRepository, UserRepository
+from database.repositories import FavoriteRepository
 
 logger = logging.getLogger(__name__)
 
@@ -85,41 +84,18 @@ def favorite_to_info(favorite: Favorite) -> FavoriteInfo:
     )
 
 
-async def get_db_user_id(
-    user: AppUser,
-    user_repo: UserRepository | None,
-) -> UUID:
-    """Get database user ID from GitHub user."""
-    if not user_repo:
-        raise HTTPException(
-            status_code=503,
-            detail="Database not configured",
-        )
-
-    db_user = await user_repo.get_by_auth_id(user.id)
-    if not db_user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found",
-        )
-
-    return db_user.id
-
-
 # ============ Folder Endpoints ============
 
 
 @router.get("/folders", response_model=ListFoldersResponse)
 async def list_folders(
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """List all favorite folders for the current user."""
-    if not favorite_repo:
+    if not favorite_repo or not user_id:
         return ListFoldersResponse(folders=[], total=0)
 
-    user_id = await get_db_user_id(user, user_repo)
     folders = await favorite_repo.list_folders_by_user(user_id)
 
     # Get counts for each folder
@@ -137,15 +113,12 @@ async def list_folders(
 @router.post("/folders", response_model=CreateFolderResponse)
 async def create_folder(
     request: CreateFolderRequest,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Create a new favorite folder."""
-    if not favorite_repo:
+    if not favorite_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
-
-    user_id = await get_db_user_id(user, user_repo)
 
     folder = await favorite_repo.create_folder(
         user_id=user_id,
@@ -163,15 +136,12 @@ async def create_folder(
 async def update_folder(
     folder_id: str,
     request: UpdateFolderRequest,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Update a favorite folder."""
-    if not favorite_repo:
+    if not favorite_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
-
-    user_id = await get_db_user_id(user, user_repo)
 
     try:
         folder_uuid = UUID(folder_id)
@@ -200,15 +170,12 @@ async def update_folder(
 @router.delete("/folders/{folder_id}", response_model=DeleteFolderResponse)
 async def delete_folder(
     folder_id: str,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Delete a favorite folder."""
-    if not favorite_repo:
+    if not favorite_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
-
-    user_id = await get_db_user_id(user, user_repo)
 
     try:
         folder_uuid = UUID(folder_id)
@@ -233,12 +200,11 @@ async def list_favorites(
     folder_id: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """List favorites for the current user."""
-    if not favorite_repo:
+    if not favorite_repo or not user_id:
         return ListFavoritesResponse(
             favorites=[],
             total=0,
@@ -246,8 +212,6 @@ async def list_favorites(
             offset=offset,
             has_more=False,
         )
-
-    user_id = await get_db_user_id(user, user_repo)
 
     folder_uuid = None
     if folder_id:
@@ -280,15 +244,12 @@ async def list_favorites(
 @router.post("", response_model=AddFavoriteResponse)
 async def add_favorite(
     request: AddFavoriteRequest,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Add an image to favorites."""
-    if not favorite_repo:
+    if not favorite_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
-
-    user_id = await get_db_user_id(user, user_repo)
 
     try:
         image_uuid = UUID(request.image_id)
@@ -326,15 +287,12 @@ async def add_favorite(
 @router.delete("/{favorite_id}", response_model=DeleteFavoriteResponse)
 async def delete_favorite(
     favorite_id: str,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Remove a favorite."""
-    if not favorite_repo:
+    if not favorite_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
-
-    user_id = await get_db_user_id(user, user_repo)
 
     try:
         favorite_uuid = UUID(favorite_id)
@@ -354,15 +312,12 @@ async def delete_favorite(
 @router.post("/bulk", response_model=BulkFavoriteResponse)
 async def bulk_favorite_operation(
     request: BulkFavoriteRequest,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     favorite_repo: FavoriteRepository | None = Depends(get_favorite_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Perform bulk operations on favorites."""
-    if not favorite_repo:
+    if not favorite_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
-
-    user_id = await get_db_user_id(user, user_repo)
 
     folder_uuid = None
     if request.folder_id:

@@ -13,7 +13,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.dependencies import get_template_repository, get_user_repository
+from api.dependencies import (
+    ensure_db_user,
+    ensure_db_user_optional,
+    get_template_repository,
+)
 from api.schemas.templates import (
     BatchGenerateRequest,
     CategoryItem,
@@ -29,8 +33,8 @@ from api.schemas.templates import (
     VariantRequest,
     VariantResponse,
 )
-from core.auth import AppUser, get_current_user, require_admin, require_current_user
-from database.repositories import TemplateRepository, UserRepository
+from core.auth import AppUser, require_admin
+from database.repositories import TemplateRepository
 
 logger = logging.getLogger(__name__)
 
@@ -38,17 +42,6 @@ router = APIRouter(prefix="/templates", tags=["templates"])
 
 
 # ============ Helpers ============
-
-
-async def get_db_user_id(
-    user: AppUser | None,
-    user_repo: UserRepository | None,
-) -> UUID | None:
-    """Resolve GitHub user to database user ID."""
-    if not user or not user_repo:
-        return None
-    db_user = await user_repo.get_by_auth_id(user.id)
-    return db_user.id if db_user else None
 
 
 def template_to_list_item(t) -> TemplateListItem:
@@ -160,17 +153,12 @@ async def get_categories(
 async def get_user_favorites(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Get current user's favorited templates."""
-    if not template_repo or not user_repo:
+    if not template_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
-
-    user_id = await get_db_user_id(user, user_repo)
-    if not user_id:
-        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     templates, total = await template_repo.get_user_favorites(
         user_id=user_id,
@@ -269,14 +257,12 @@ async def batch_generate(
 async def create_template(
     data: TemplateCreateRequest,
     admin: AppUser = Depends(require_admin),
+    user_id: UUID | None = Depends(ensure_db_user),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Create a new template (admin only)."""
-    if not template_repo or not user_repo:
+    if not template_repo:
         raise HTTPException(status_code=503, detail="Database not configured")
-
-    user_id = await get_db_user_id(admin, user_repo)
 
     template = await template_repo.create(
         **data.model_dump(),
@@ -293,9 +279,8 @@ async def create_template(
 @router.get("/{template_id}", response_model=TemplateDetailResponse)
 async def get_template_detail(
     template_id: str,
-    user: AppUser | None = Depends(get_current_user),
+    user_id: UUID | None = Depends(ensure_db_user_optional),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Get full template detail."""
     if not template_repo:
@@ -310,8 +295,6 @@ async def get_template_detail(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    user_id = await get_db_user_id(user, user_repo)
-
     is_liked = False
     is_favorited = False
     if user_id:
@@ -324,9 +307,8 @@ async def get_template_detail(
 @router.post("/{template_id}/use", response_model=TemplateDetailResponse)
 async def record_usage(
     template_id: str,
-    user: AppUser | None = Depends(get_current_user),
+    user_id: UUID | None = Depends(ensure_db_user_optional),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Record that a template was used."""
     if not template_repo:
@@ -337,7 +319,6 @@ async def record_usage(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid template ID")
 
-    user_id = await get_db_user_id(user, user_repo)
     template = await template_repo.record_usage(tid, user_id=user_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -348,22 +329,17 @@ async def record_usage(
 @router.post("/{template_id}/like", response_model=ToggleResponse)
 async def toggle_like(
     template_id: str,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Toggle like on a template."""
-    if not template_repo or not user_repo:
+    if not template_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
 
     try:
         tid = UUID(template_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid template ID")
-
-    user_id = await get_db_user_id(user, user_repo)
-    if not user_id:
-        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     try:
         action, count = await template_repo.toggle_like(tid, user_id)
@@ -376,22 +352,17 @@ async def toggle_like(
 @router.post("/{template_id}/favorite", response_model=ToggleResponse)
 async def toggle_favorite(
     template_id: str,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Toggle favorite on a template."""
-    if not template_repo or not user_repo:
+    if not template_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
 
     try:
         tid = UUID(template_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid template ID")
-
-    user_id = await get_db_user_id(user, user_repo)
-    if not user_id:
-        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     try:
         action, count = await template_repo.toggle_favorite(tid, user_id)

@@ -14,9 +14,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 
 from api.dependencies import (
+    ensure_db_user_optional,
     get_image_repository,
     get_template_repository,
-    get_user_repository,
 )
 from api.schemas.search import (
     GlobalSearchResponse,
@@ -31,7 +31,6 @@ from core.auth import AppUser, get_current_user
 from database.repositories import (
     ImageRepository,
     TemplateRepository,
-    UserRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,18 +39,6 @@ router = APIRouter(prefix="/search", tags=["search"])
 
 
 # ============ Helpers ============
-
-
-async def get_db_user_id(
-    user: AppUser | None,
-    user_repo: UserRepository | None,
-) -> UUID | None:
-    """Get database user ID from GitHub user."""
-    if not user or not user_repo:
-        return None
-
-    db_user = await user_repo.get_by_auth_id(user.id)
-    return db_user.id if db_user else None
 
 
 def highlight_match(text: str, query: str, context_chars: int = 50) -> str:
@@ -84,10 +71,9 @@ async def global_search(
     types: str | None = Query(default=None, description="Comma-separated types to search"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    user: AppUser | None = Depends(get_current_user),
+    user_id: UUID | None = Depends(ensure_db_user_optional),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """
     Global search across all content types.
@@ -96,8 +82,6 @@ async def global_search(
     """
     results: list[SearchResult] = []
     facets: dict[str, int] = {}
-
-    user_id = await get_db_user_id(user, user_repo)
 
     # Parse types filter
     search_types = None
@@ -178,9 +162,8 @@ async def search_images(
     provider: str | None = Query(default=None, description="Filter by provider"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    user: AppUser | None = Depends(get_current_user),
+    user_id: UUID | None = Depends(ensure_db_user_optional),
     image_repo: ImageRepository | None = Depends(get_image_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Search images by prompt text."""
     if not image_repo:
@@ -192,8 +175,6 @@ async def search_images(
             offset=offset,
             has_more=False,
         )
-
-    user_id = await get_db_user_id(user, user_repo)
 
     images = await image_repo.list_by_user(
         user_id=user_id,

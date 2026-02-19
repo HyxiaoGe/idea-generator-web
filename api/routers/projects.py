@@ -19,7 +19,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.dependencies import get_project_repository, get_user_repository
+from api.dependencies import (
+    ensure_db_user,
+    ensure_db_user_optional,
+    get_project_repository,
+)
 from api.schemas.projects import (
     AddProjectImageRequest,
     AddProjectImageResponse,
@@ -40,9 +44,8 @@ from api.schemas.projects import (
     UpdateProjectRequest,
     UpdateProjectResponse,
 )
-from core.auth import AppUser, get_current_user, require_current_user
 from database.models import Project, ProjectImage
-from database.repositories import ProjectRepository, UserRepository
+from database.repositories import ProjectRepository
 
 logger = logging.getLogger(__name__)
 
@@ -98,18 +101,6 @@ def project_image_to_info(project_image: ProjectImage) -> ProjectImageInfo:
     )
 
 
-async def get_db_user_id(
-    user: AppUser | None,
-    user_repo: UserRepository | None,
-) -> UUID | None:
-    """Get database user ID from GitHub user."""
-    if not user or not user_repo:
-        return None
-
-    db_user = await user_repo.get_by_auth_id(user.id)
-    return db_user.id if db_user else None
-
-
 # ============ Endpoints ============
 
 
@@ -117,12 +108,11 @@ async def get_db_user_id(
 async def list_projects(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """List projects for the current user."""
-    if not project_repo or not user_repo:
+    if not project_repo or not user_id:
         return ListProjectsResponse(
             projects=[],
             total=0,
@@ -130,10 +120,6 @@ async def list_projects(
             offset=offset,
             has_more=False,
         )
-
-    user_id = await get_db_user_id(user, user_repo)
-    if not user_id:
-        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     projects = await project_repo.list_by_user(user_id, limit=limit + 1, offset=offset)
 
@@ -160,17 +146,12 @@ async def list_projects(
 @router.post("", response_model=CreateProjectResponse)
 async def create_project(
     request: CreateProjectRequest,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Create a new project."""
-    if not project_repo or not user_repo:
+    if not project_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
-
-    user_id = await get_db_user_id(user, user_repo)
-    if not user_id:
-        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     project = await project_repo.create(
         user_id=user_id,
@@ -189,9 +170,8 @@ async def create_project(
 @router.get("/{project_id}", response_model=GetProjectResponse)
 async def get_project(
     project_id: str,
-    user: AppUser | None = Depends(get_current_user),
+    user_id: UUID | None = Depends(ensure_db_user_optional),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Get a specific project."""
     if not project_repo:
@@ -206,8 +186,6 @@ async def get_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    user_id = await get_db_user_id(user, user_repo)
-
     # Check access
     if not project.is_public and project.user_id != user_id:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -221,22 +199,17 @@ async def get_project(
 async def update_project(
     project_id: str,
     request: UpdateProjectRequest,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Update a project."""
-    if not project_repo or not user_repo:
+    if not project_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
 
     try:
         project_uuid = UUID(project_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid project ID")
-
-    user_id = await get_db_user_id(user, user_repo)
-    if not user_id:
-        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     # Verify ownership
     project = await project_repo.get_by_id(project_uuid)
@@ -263,22 +236,17 @@ async def update_project(
 @router.delete("/{project_id}", response_model=DeleteProjectResponse)
 async def delete_project(
     project_id: str,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Delete a project."""
-    if not project_repo or not user_repo:
+    if not project_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
 
     try:
         project_uuid = UUID(project_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid project ID")
-
-    user_id = await get_db_user_id(user, user_repo)
-    if not user_id:
-        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     deleted = await project_repo.delete_by_user(user_id, project_uuid)
     if not deleted:
@@ -295,9 +263,8 @@ async def list_project_images(
     project_id: str,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    user: AppUser | None = Depends(get_current_user),
+    user_id: UUID | None = Depends(ensure_db_user_optional),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """List images in a project."""
     if not project_repo:
@@ -311,8 +278,6 @@ async def list_project_images(
     project = await project_repo.get_by_id(project_uuid)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-
-    user_id = await get_db_user_id(user, user_repo)
 
     # Check access
     if not project.is_public and project.user_id != user_id:
@@ -338,12 +303,11 @@ async def list_project_images(
 async def add_project_image(
     project_id: str,
     request: AddProjectImageRequest,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Add an image to a project."""
-    if not project_repo or not user_repo:
+    if not project_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
 
     try:
@@ -351,10 +315,6 @@ async def add_project_image(
         image_uuid = UUID(request.image_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid ID")
-
-    user_id = await get_db_user_id(user, user_repo)
-    if not user_id:
-        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     # Verify ownership
     project = await project_repo.get_by_id(project_uuid)
@@ -388,12 +348,11 @@ async def add_project_image(
 async def remove_project_image(
     project_id: str,
     image_id: str,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Remove an image from a project."""
-    if not project_repo or not user_repo:
+    if not project_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
 
     try:
@@ -401,10 +360,6 @@ async def remove_project_image(
         image_uuid = UUID(image_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid ID")
-
-    user_id = await get_db_user_id(user, user_repo)
-    if not user_id:
-        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     # Verify ownership
     project = await project_repo.get_by_id(project_uuid)
@@ -422,22 +377,17 @@ async def remove_project_image(
 async def bulk_add_project_images(
     project_id: str,
     request: BulkAddProjectImagesRequest,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Add multiple images to a project."""
-    if not project_repo or not user_repo:
+    if not project_repo or not user_id:
         raise HTTPException(status_code=503, detail="Database not configured")
 
     try:
         project_uuid = UUID(project_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid project ID")
-
-    user_id = await get_db_user_id(user, user_repo)
-    if not user_id:
-        raise HTTPException(status_code=500, detail="User record not synced. Please re-login.")
 
     # Verify ownership
     project = await project_repo.get_by_id(project_uuid)
@@ -461,9 +411,8 @@ async def bulk_add_project_images(
 @router.get("/{project_id}/export", response_model=ExportProjectResponse)
 async def export_project(
     project_id: str,
-    user: AppUser = Depends(require_current_user),
+    user_id: UUID | None = Depends(ensure_db_user),
     project_repo: ProjectRepository | None = Depends(get_project_repository),
-    user_repo: UserRepository | None = Depends(get_user_repository),
 ):
     """Export a project as a ZIP file."""
     # TODO: Implement actual export
