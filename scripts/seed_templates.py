@@ -1,4 +1,4 @@
-"""Seed script: Insert 150 high-quality prompt templates into the database.
+"""Seed script: Insert prompt templates (150 image + 80 video) into the database.
 
 Usage:
     python scripts/seed_templates.py               # Full: clear DB → insert data → generate images
@@ -11,7 +11,6 @@ import asyncio
 import logging
 import sys
 import time
-from io import BytesIO
 from pathlib import Path
 
 # Add project root to path
@@ -20,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from datetime import UTC, datetime, timedelta  # noqa: E402
 from uuid import uuid4  # noqa: E402
 
-from sqlalchemy import delete, func, select, update  # noqa: E402
+from sqlalchemy import delete, func, select  # noqa: E402
 
 from database import get_session, init_database  # noqa: E402
 from database.models.template import PromptTemplate  # noqa: E402
@@ -28,28 +27,13 @@ from database.models.template import PromptTemplate  # noqa: E402
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-# ── Category aspect ratios (matches template_generator.py) ──
-
-CATEGORY_ASPECT_RATIOS: dict[str, str] = {
-    "portrait": "3:4",
-    "landscape": "16:9",
-    "illustration": "1:1",
-    "product": "1:1",
-    "architecture": "16:9",
-    "anime": "3:4",
-    "fantasy": "16:9",
-    "graphic-design": "1:1",
-    "food": "1:1",
-    "abstract": "1:1",
-}
-
 
 def compute_trending(like: int, use: int, fav: int, hours_ago: float) -> float:
     return (like * 3 + use * 1 + fav * 2) / (hours_ago + 2) ** 1.5
 
 
 # ═══════════════════════════════════════════════════════════════
-#  TEMPLATE DATA — 150 hand-crafted templates (15 × 10 categories)
+#  TEMPLATE DATA — 150 image + 80 video hand-crafted templates
 # ═══════════════════════════════════════════════════════════════
 
 TEMPLATES: list[dict] = [
@@ -3375,6 +3359,1639 @@ TEMPLATES: list[dict] = [
         "like_count": 230,
         "favorite_count": 130,
     },
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  VIDEO — LANDSCAPE (10)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    {
+        "prompt_text": (
+            "Aerial drone shot slowly pushing forward over a glacial river delta in Iceland, "
+            "braided turquoise streams weaving across volcanic black sand. The camera drifts "
+            "from high altitude gradually descending toward the water surface, revealing intricate "
+            "branching patterns. Wispy clouds cast moving shadows across the landscape. "
+            "Late afternoon golden light rakes across the terrain at a low angle."
+        ),
+        "display_name_en": "Glacial Delta Flyover",
+        "display_name_zh": "冰川三角洲飞越",
+        "description_en": "Aerial push-in over Iceland's braided glacial rivers, descending from altitude to reveal turquoise streams on black volcanic sand",
+        "description_zh": "航拍前推掠过冰岛辫状冰川河，从高空渐降揭示火山黑沙上的碧绿溪流",
+        "category": "landscape",
+        "media_type": "video",
+        "tags": ["landscape", "aerial", "drone", "iceland", "glacial", "timelapse"],
+        "style_keywords": ["aerial push-in", "braided river pattern", "golden hour raking light"],
+        "difficulty": "intermediate",
+        "use_count": 580,
+        "like_count": 210,
+        "favorite_count": 120,
+    },
+    {
+        "prompt_text": (
+            "Time-lapse of a massive thunderstorm cell rolling across the Great Plains at dusk, "
+            "mammatus clouds bulging beneath the anvil top. Lightning flickers inside the supercell "
+            "in rhythmic pulses while the camera holds a wide static frame. The horizon transitions "
+            "from amber to deep violet as day surrenders to night. Wheat fields in the foreground "
+            "sway gently under increasing wind."
+        ),
+        "display_name_en": "Supercell at Dusk",
+        "display_name_zh": "暮色超级单体",
+        "description_en": "Time-lapse of a lightning-pulsing supercell rolling across wheat fields, day fading to violet night on the Great Plains",
+        "description_zh": "大平原上超级单体雷暴延时摄影，闪电在砧状云中脉动，黄昏渐变为深紫夜色",
+        "category": "landscape",
+        "media_type": "video",
+        "tags": ["landscape", "storm", "timelapse", "lightning", "dramatic-sky", "plains"],
+        "style_keywords": ["static wide frame", "mammatus texture", "day-to-night transition"],
+        "difficulty": "advanced",
+        "use_count": 720,
+        "like_count": 260,
+        "favorite_count": 145,
+    },
+    {
+        "prompt_text": (
+            "Slow dolly forward through a bamboo forest in Kyoto, morning mist drifting between "
+            "towering green stalks. Shafts of sunlight pierce the canopy and shift as the camera "
+            "advances, creating moving god rays. A narrow stone path leads the eye into the depth "
+            "of the grove. Leaves rustle softly, and a few bamboo stalks creak in the breeze."
+        ),
+        "display_name_en": "Bamboo Forest Walk",
+        "display_name_zh": "竹林漫行",
+        "description_en": "Gentle dolly through misty Kyoto bamboo, god rays shifting as the camera glides along a stone path into green depth",
+        "description_zh": "缓慢推进穿越京都竹林，晨雾中光束随镜头移动而变幻，石径通向幽深翠色",
+        "category": "landscape",
+        "media_type": "video",
+        "tags": ["landscape", "bamboo", "kyoto", "mist", "god-rays", "dolly"],
+        "style_keywords": ["slow dolly forward", "volumetric god rays", "depth layering"],
+        "difficulty": "beginner",
+        "use_count": 890,
+        "like_count": 320,
+        "favorite_count": 180,
+    },
+    {
+        "prompt_text": (
+            "Sunrise time-lapse over Zhangjiajie sandstone pillars shrouded in a sea of clouds. "
+            "The camera is fixed on a cliff edge looking across the valley. Clouds churn and flow "
+            "between the pillars like slow rivers of cotton, occasionally revealing stone peaks. "
+            "The sky transitions from deep rose through gold to pale blue as the sun climbs."
+        ),
+        "display_name_en": "Zhangjiajie Cloud Sea",
+        "display_name_zh": "张家界云海日出",
+        "description_en": "Fixed-frame sunrise time-lapse as clouds churn between Zhangjiajie's sandstone pillars, sky shifting rose-gold-blue",
+        "description_zh": "固定机位拍摄张家界砂岩石柱间云海翻涌，天空从玫红渐变金色再到淡蓝",
+        "category": "landscape",
+        "media_type": "video",
+        "tags": ["landscape", "timelapse", "clouds", "sunrise", "zhangjiajie", "mountains"],
+        "style_keywords": ["fixed tripod frame", "cloud river motion", "color gradient sky"],
+        "difficulty": "intermediate",
+        "use_count": 650,
+        "like_count": 240,
+        "favorite_count": 135,
+    },
+    {
+        "prompt_text": (
+            "Slow-motion ocean wave crashing against a rocky shore at golden hour, "
+            "the camera positioned low at water level. Water explodes upward in a curtain of spray "
+            "backlit by the setting sun, each droplet catching amber light like suspended jewels. "
+            "The wave retreats in foaming sheets across textured basalt, "
+            "pulling pebbles in a chattering cascade."
+        ),
+        "display_name_en": "Golden Wave Impact",
+        "display_name_zh": "金浪撞岸",
+        "description_en": "Low-angle slow-motion wave crash at golden hour, backlit spray suspended like amber jewels against the setting sun",
+        "description_zh": "低机位慢动作拍摄金色时分海浪撞击礁石，逆光水雾如琥珀宝石悬浮空中",
+        "category": "landscape",
+        "media_type": "video",
+        "tags": ["landscape", "ocean", "slow-motion", "golden-hour", "waves", "backlit"],
+        "style_keywords": ["low-angle water level", "backlit spray", "slow-motion impact"],
+        "difficulty": "intermediate",
+        "use_count": 760,
+        "like_count": 280,
+        "favorite_count": 155,
+    },
+    {
+        "prompt_text": (
+            "Hyperlapse along a winding mountain road in the Swiss Alps during autumn, "
+            "the camera mounted to a vehicle moving steadily forward. Golden larch forests "
+            "line the road on both sides, snow-capped peaks tower ahead. Clouds move quickly "
+            "overhead in accelerated time while the road unspools like a ribbon through the valley."
+        ),
+        "display_name_en": "Alpine Road Hyperlapse",
+        "display_name_zh": "阿尔卑斯公路穿行",
+        "description_en": "Vehicle-mounted hyperlapse winding through golden larch forests toward snow peaks, fast clouds overhead",
+        "description_zh": "车载超级延时沿蜿蜒山路穿越金色落叶松林，快速流云下雪峰在前方展开",
+        "category": "landscape",
+        "media_type": "video",
+        "tags": ["landscape", "hyperlapse", "alps", "autumn", "driving", "mountains"],
+        "style_keywords": ["vehicle-mount hyperlapse", "winding road perspective", "accelerated clouds"],
+        "difficulty": "advanced",
+        "use_count": 540,
+        "like_count": 195,
+        "favorite_count": 110,
+    },
+    {
+        "prompt_text": (
+            "Northern lights dancing over a frozen lake in Norway, camera on a slow motorized pan "
+            "from left to right. Green and violet aurora curtains ripple and fold across the sky, "
+            "their reflections shimmering on the ice surface below. Scattered stars pierce through "
+            "gaps in the aurora. A lone cabin with a warm window glow sits at the lake edge."
+        ),
+        "display_name_en": "Aurora over Frozen Lake",
+        "display_name_zh": "冰湖极光",
+        "description_en": "Slow pan across aurora curtains rippling over a Norwegian frozen lake, green and violet light reflected on ice",
+        "description_zh": "缓慢水平摇摄挪威冰湖上空翻卷的极光帷幕，绿紫光芒倒映在冰面上",
+        "category": "landscape",
+        "media_type": "video",
+        "tags": ["landscape", "aurora", "night", "norway", "frozen-lake", "pan"],
+        "style_keywords": ["motorized slow pan", "aurora curtain ripple", "ice reflection"],
+        "difficulty": "beginner",
+        "use_count": 920,
+        "like_count": 350,
+        "favorite_count": 200,
+    },
+    {
+        "prompt_text": (
+            "Time-lapse of cherry blossom petals falling like snow in a Tokyo park, "
+            "the camera tilting slowly upward from a carpet of pink petals on the ground "
+            "to the canopy of blossoming branches overhead. Pedestrians move as blurred ghosts "
+            "through the frame. Afternoon light filters through translucent petals, "
+            "creating a soft pink glow across the entire scene."
+        ),
+        "display_name_en": "Sakura Petal Rain",
+        "display_name_zh": "樱吹雪",
+        "description_en": "Tilt-up time-lapse from pink petal carpet to cherry blossom canopy, ghostly pedestrians drifting through soft pink light",
+        "description_zh": "从地面粉色花瓣毯缓慢仰拍至樱花树冠，行人化作虚影穿过柔粉光晕",
+        "category": "landscape",
+        "media_type": "video",
+        "tags": ["landscape", "sakura", "timelapse", "tokyo", "spring", "petals"],
+        "style_keywords": ["slow tilt up", "petal particle rain", "ghosted pedestrians"],
+        "difficulty": "beginner",
+        "use_count": 980,
+        "like_count": 370,
+        "favorite_count": 210,
+    },
+    {
+        "prompt_text": (
+            "Aerial orbit shot circling a volcanic crater lake in Indonesia, "
+            "the water an otherworldly turquoise against charcoal slopes. Steam vents along the rim "
+            "release plumes that drift across the frame as the drone completes a slow 180-degree arc. "
+            "Morning light catches the mineral-stained shoreline in bands of yellow and white."
+        ),
+        "display_name_en": "Crater Lake Orbit",
+        "display_name_zh": "火山口湖环绕",
+        "description_en": "Aerial orbit around a turquoise volcanic crater lake, steam plumes drifting across mineral-stained slopes",
+        "description_zh": "航拍环绕印尼碧绿火山口湖，蒸汽羽流飘过矿物质染色的焦炭色山坡",
+        "category": "landscape",
+        "media_type": "video",
+        "tags": ["landscape", "aerial", "volcano", "crater-lake", "orbit", "indonesia"],
+        "style_keywords": ["aerial orbit 180°", "mineral color contrast", "steam drift"],
+        "difficulty": "advanced",
+        "use_count": 480,
+        "like_count": 175,
+        "favorite_count": 95,
+    },
+    {
+        "prompt_text": (
+            "Day-to-night time-lapse of the Sahara desert, camera fixed on a single crescent dune. "
+            "Shadows sweep across rippled sand as the sun arcs overhead, then stars emerge in a "
+            "deep indigo sky. The Milky Way rotates slowly above the dune crest. "
+            "Wind subtly reshapes the sand ripple patterns throughout the sequence."
+        ),
+        "display_name_en": "Desert Day to Night",
+        "display_name_zh": "沙漠昼夜轮转",
+        "description_en": "Fixed-frame day-to-night time-lapse on a Sahara dune — sweeping shadows, emerging stars, Milky Way rotation",
+        "description_zh": "固定机位撒哈拉沙丘昼夜延时，影子扫过波纹沙面，星空渐现，银河缓缓旋转",
+        "category": "landscape",
+        "media_type": "video",
+        "tags": ["landscape", "desert", "timelapse", "milky-way", "day-to-night", "sahara"],
+        "style_keywords": ["fixed frame holy grail", "shadow sweep", "star rotation"],
+        "difficulty": "advanced",
+        "use_count": 610,
+        "like_count": 225,
+        "favorite_count": 125,
+    },
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  VIDEO — ANIME (10)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    {
+        "prompt_text": (
+            "Anime-style scene of a girl running through a field of sunflowers in summer, "
+            "camera tracking alongside her at matching speed. Her straw hat flies off and tumbles "
+            "behind her in slow motion. Sunflower heads bob as she brushes past them. "
+            "Bright cel-shaded colors, lens flare from the high sun, wind rippling her white dress."
+        ),
+        "display_name_en": "Sunflower Sprint",
+        "display_name_zh": "向日葵奔跑",
+        "description_en": "Side-tracking shot of an anime girl sprinting through sunflowers, straw hat flying off in slow motion under bright summer sun",
+        "description_zh": "动漫少女在向日葵花田中奔跑的侧面跟拍，草帽飞起慢动作，夏日阳光耀眼",
+        "category": "anime",
+        "media_type": "video",
+        "tags": ["anime", "running", "summer", "sunflower", "slow-motion", "tracking"],
+        "style_keywords": ["side tracking shot", "cel-shaded bright", "slow-motion detail"],
+        "difficulty": "beginner",
+        "use_count": 850,
+        "like_count": 310,
+        "favorite_count": 175,
+    },
+    {
+        "prompt_text": (
+            "Anime warrior drawing a katana in a bamboo grove, the blade emerging inch by inch "
+            "with a gleaming reflection sliding along the steel. Cherry blossom petals freeze "
+            "in mid-air during the draw. Camera circles the character in a slow 360-degree orbit "
+            "at waist height. Dramatic ink-wash style shadows and volumetric light shafts."
+        ),
+        "display_name_en": "Katana Unsheathed",
+        "display_name_zh": "拔刀一瞬",
+        "description_en": "360-degree orbit around an anime warrior drawing a katana, petals frozen mid-air, ink-wash shadows and light shafts",
+        "description_zh": "动漫武士竹林拔刀的360度环绕镜头，樱花瓣凝固空中，水墨风光影交织",
+        "category": "anime",
+        "media_type": "video",
+        "tags": ["anime", "samurai", "katana", "cherry-blossom", "orbit-shot", "dramatic"],
+        "style_keywords": ["360 orbit at waist", "frozen particle moment", "ink-wash volumetric"],
+        "difficulty": "advanced",
+        "use_count": 690,
+        "like_count": 255,
+        "favorite_count": 140,
+    },
+    {
+        "prompt_text": (
+            "Cozy anime scene of a cat curled up on a windowsill as rain streams down the glass, "
+            "camera slowly zooming in from room interior toward the window. Raindrops trace paths "
+            "on the pane, refracting blurred city lights outside. The cat's tail twitches gently "
+            "in sleep. Warm indoor lamp light contrasts with the cool blue rain outside."
+        ),
+        "display_name_en": "Rainy Day Cat Nap",
+        "display_name_zh": "雨天猫眠",
+        "description_en": "Slow zoom toward a sleeping cat on a rainy windowsill, raindrops refracting city lights in warm-cool contrast",
+        "description_zh": "缓慢推近窗台上酣睡的猫，雨滴在玻璃上折射城市灯光，暖冷色调对比",
+        "category": "anime",
+        "media_type": "video",
+        "tags": ["anime", "cat", "rain", "cozy", "lofi", "slow-zoom"],
+        "style_keywords": ["slow zoom in", "rain refraction bokeh", "warm-cool contrast"],
+        "difficulty": "beginner",
+        "use_count": 1050,
+        "like_count": 390,
+        "favorite_count": 220,
+    },
+    {
+        "prompt_text": (
+            "Mecha anime battle sequence: a giant robot slides backward on a city street "
+            "leaving sparking gouges in the asphalt, then plants its feet and launches forward. "
+            "Camera follows from a low Dutch angle, buildings blurring past. "
+            "Neon signs shatter from the shockwave. Cyberpunk color palette of teal and magenta."
+        ),
+        "display_name_en": "Mecha Street Clash",
+        "display_name_zh": "机甲街头冲击",
+        "description_en": "Low Dutch angle tracking a mecha sliding and launching on a city street, neon signs shattering from the shockwave",
+        "description_zh": "低角度荷兰倾斜跟拍机甲在城市街道上滑行反击，霓虹招牌被冲击波震碎",
+        "category": "anime",
+        "media_type": "video",
+        "tags": ["anime", "mecha", "action", "cyberpunk", "dutch-angle", "shockwave"],
+        "style_keywords": ["low Dutch angle tracking", "motion blur streaks", "teal-magenta palette"],
+        "difficulty": "advanced",
+        "use_count": 620,
+        "like_count": 230,
+        "favorite_count": 125,
+    },
+    {
+        "prompt_text": (
+            "Anime-style magical girl transformation sequence, the character spinning in mid-air "
+            "as ribbons of light spiral around her forming an elaborate costume. Camera rotates "
+            "around her in the opposite direction. Sparkle particles burst outward in concentric rings. "
+            "Pastel gradient background shifts from pink to lavender to gold."
+        ),
+        "display_name_en": "Magical Transformation",
+        "display_name_zh": "魔法变身",
+        "description_en": "Counter-rotating camera around a magical girl mid-transformation, light ribbons spiraling, sparkles bursting in rings",
+        "description_zh": "魔法少女变身中的反向旋转镜头，光带螺旋缠绕，闪光粒子同心圆绽放",
+        "category": "anime",
+        "media_type": "video",
+        "tags": ["anime", "magical-girl", "transformation", "sparkle", "rotation", "pastel"],
+        "style_keywords": ["counter-rotation camera", "spiral light ribbons", "concentric particle burst"],
+        "difficulty": "intermediate",
+        "use_count": 770,
+        "like_count": 285,
+        "favorite_count": 160,
+    },
+    {
+        "prompt_text": (
+            "Anime train window scene: countryside scrolling past as viewed from inside a moving train, "
+            "rice paddies and distant mountains reflected on the glass. A schoolgirl sits by the window, "
+            "her hair gently swaying with the train's rhythm. Camera holds steady on her profile. "
+            "Afternoon light creates moving shadow bars from window frames across her face."
+        ),
+        "display_name_en": "Train Window Daydream",
+        "display_name_zh": "列车窗边遐想",
+        "description_en": "Static profile shot of a schoolgirl by a moving train window, countryside scrolling past, light bars sweeping across her face",
+        "description_zh": "少女靠列车窗边的侧面静止镜头，田园风景滚动流过，光影条纹掠过面庞",
+        "category": "anime",
+        "media_type": "video",
+        "tags": ["anime", "train", "slice-of-life", "countryside", "contemplative", "light-bars"],
+        "style_keywords": ["static interior profile", "parallax scroll background", "moving window light"],
+        "difficulty": "beginner",
+        "use_count": 920,
+        "like_count": 340,
+        "favorite_count": 190,
+    },
+    {
+        "prompt_text": (
+            "Anime night market scene bustling with activity, camera on a slow crane-up from "
+            "street level through hanging paper lanterns to reveal the full market stretching "
+            "into the distance. Steam rises from food stalls, neon signage flickers, "
+            "dozens of characters move through the crowd. Warm amber and red dominant palette."
+        ),
+        "display_name_en": "Night Market Reveal",
+        "display_name_zh": "夜市灯火升起",
+        "description_en": "Crane-up through paper lanterns revealing a bustling anime night market, steam and neon in warm amber tones",
+        "description_zh": "从街道水平缓缓升起穿过灯笼，展现热闹动漫夜市全景，蒸汽与霓虹暖色交织",
+        "category": "anime",
+        "media_type": "video",
+        "tags": ["anime", "night-market", "crane-shot", "lanterns", "crowd", "neon"],
+        "style_keywords": ["slow crane up reveal", "layered crowd motion", "warm ambient glow"],
+        "difficulty": "intermediate",
+        "use_count": 810,
+        "like_count": 295,
+        "favorite_count": 165,
+    },
+    {
+        "prompt_text": (
+            "Anime sword duel on a moonlit rooftop, two figures exchanging rapid strikes "
+            "with motion-blur trails on each swing. Camera cuts between close-ups of clashing blades "
+            "and a wide shot showing their silhouettes against a full moon. "
+            "Sparks fly on each parry. Wind whips their cloaks. Dark blue and silver color scheme."
+        ),
+        "display_name_en": "Moonlit Blade Duel",
+        "display_name_zh": "月下对剑",
+        "description_en": "Rapid cuts between close blade clashes and wide moonlit silhouettes in a rooftop anime sword duel",
+        "description_zh": "屋顶动漫剑斗的快速剪辑，近景刀锋碰撞与满月剪影交替，火花与风共舞",
+        "category": "anime",
+        "media_type": "video",
+        "tags": ["anime", "sword-fight", "moonlight", "rooftop", "action", "silhouette"],
+        "style_keywords": ["rapid cut montage", "motion-blur blade trails", "moon silhouette wide"],
+        "difficulty": "advanced",
+        "use_count": 580,
+        "like_count": 215,
+        "favorite_count": 120,
+    },
+    {
+        "prompt_text": (
+            "Studio Ghibli-inspired scene of a child riding a giant fluffy creature flying above "
+            "a patchwork countryside, camera pulling back to reveal the vast landscape below. "
+            "Cotton-ball clouds drift past at eye level. The child's scarf flutters behind them. "
+            "Watercolor-soft edges and dappled sunlight on rolling green hills."
+        ),
+        "display_name_en": "Sky Ride Adventure",
+        "display_name_zh": "天空骑行",
+        "description_en": "Pull-back reveal of a child riding a flying creature over Ghibli-style patchwork countryside, clouds drifting at eye level",
+        "description_zh": "拉远镜头展现孩子骑巨大飞行生物飞越吉卜力风田园，棉花云在眼前飘过",
+        "category": "anime",
+        "media_type": "video",
+        "tags": ["anime", "ghibli", "flying", "countryside", "whimsical", "pull-back"],
+        "style_keywords": ["pull-back reveal", "watercolor soft edges", "eye-level cloud layer"],
+        "difficulty": "intermediate",
+        "use_count": 870,
+        "like_count": 325,
+        "favorite_count": 185,
+    },
+    {
+        "prompt_text": (
+            "Anime cooking scene: close-up of a wok toss in a steaming kitchen, vegetables and "
+            "shrimp arcing through the air in slow motion with flames licking underneath. "
+            "Camera follows the food arc upward then back down. Oil droplets sparkle. "
+            "The chef's confident hand flick is frozen at the peak of the toss."
+        ),
+        "display_name_en": "Wok Toss Spectacle",
+        "display_name_zh": "颠锅瞬间",
+        "description_en": "Slow-motion close-up of an anime wok toss, food arcing through flames, oil sparkles frozen at the peak",
+        "description_zh": "动漫颠锅慢动作特写，食材在火焰上飞弧，油珠在最高点闪烁凝固",
+        "category": "anime",
+        "media_type": "video",
+        "tags": ["anime", "cooking", "slow-motion", "food", "close-up", "flames"],
+        "style_keywords": ["food arc tracking", "slow-motion sparkle", "flame underlighting"],
+        "difficulty": "intermediate",
+        "use_count": 740,
+        "like_count": 270,
+        "favorite_count": 150,
+    },
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  VIDEO — FANTASY (10)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    {
+        "prompt_text": (
+            "A dragon bursts through a cloud bank, wings fully extended, the camera matching its "
+            "dive speed from above. Scales shimmer from emerald to gold as sunlight catches "
+            "each ridge. Cloud vapor trails off the wingtips in spiraling vortices. "
+            "Below, a mountain kingdom grows larger as the dragon descends."
+        ),
+        "display_name_en": "Dragon Dive",
+        "display_name_zh": "龙之俯冲",
+        "description_en": "Camera-matched dive alongside a dragon bursting through clouds, scales shimmering, mountain kingdom growing below",
+        "description_zh": "跟随巨龙破云俯冲的同步镜头，鳞片在日光下闪烁变幻，山间王国在下方渐近",
+        "category": "fantasy",
+        "media_type": "video",
+        "tags": ["fantasy", "dragon", "dive", "clouds", "aerial", "epic"],
+        "style_keywords": ["speed-matched aerial", "scale iridescence shift", "growing reveal below"],
+        "difficulty": "advanced",
+        "use_count": 780,
+        "like_count": 290,
+        "favorite_count": 160,
+    },
+    {
+        "prompt_text": (
+            "A wizard opens a portal in a dark stone chamber, the circular rift expanding from "
+            "a pinpoint of light to a full doorway revealing a sunlit meadow on the other side. "
+            "Camera pushes slowly through the portal threshold. Energy crackles along the rim. "
+            "Dust and loose parchment pages are sucked toward the opening."
+        ),
+        "display_name_en": "Portal Opening",
+        "display_name_zh": "传送门开启",
+        "description_en": "Push-through shot as a portal expands from pinpoint to full doorway, energy crackling, debris drawn inward",
+        "description_zh": "推进镜头穿过从光点扩展为大门的传送门，能量在边缘噼啪作响，碎片被吸入",
+        "category": "fantasy",
+        "media_type": "video",
+        "tags": ["fantasy", "portal", "magic", "push-through", "energy", "dimensional"],
+        "style_keywords": ["push-through threshold", "expanding circle rift", "debris suction"],
+        "difficulty": "intermediate",
+        "use_count": 830,
+        "like_count": 305,
+        "favorite_count": 170,
+    },
+    {
+        "prompt_text": (
+            "An ancient tree awakens, its bark cracking and splitting as glowing amber veins of "
+            "magic spread from roots to crown. Camera tilts upward following the light climbing "
+            "the trunk. Branches begin to sway with purpose, leaves ignite in golden luminescence. "
+            "Fireflies swarm around the tree in synchronized spirals."
+        ),
+        "display_name_en": "Treant Awakening",
+        "display_name_zh": "古树苏醒",
+        "description_en": "Tilt-up tracking golden magic veins climbing an ancient tree from roots to crown, bark splitting, leaves igniting",
+        "description_zh": "仰拍跟踪金色魔力脉络从根部攀升至树冠，树皮开裂，叶片燃起金光",
+        "category": "fantasy",
+        "media_type": "video",
+        "tags": ["fantasy", "tree", "magic", "awakening", "tilt-up", "glow"],
+        "style_keywords": ["tilt-up growth tracking", "spreading vein illumination", "synchronized fireflies"],
+        "difficulty": "intermediate",
+        "use_count": 710,
+        "like_count": 260,
+        "favorite_count": 145,
+    },
+    {
+        "prompt_text": (
+            "A phoenix erupts from a pile of ash, flames spiraling upward in a double helix pattern "
+            "as the bird takes form. Camera holds a medium shot then slowly orbits as the phoenix "
+            "spreads its wings, each feather trailing sparks. The surrounding darkness is pushed back "
+            "by expanding waves of warm light. Ash particles rain down like inverse snow."
+        ),
+        "display_name_en": "Phoenix Rebirth",
+        "display_name_zh": "凤凰涅槃",
+        "description_en": "Medium shot orbiting a phoenix emerging from ash, double-helix flames, feather sparks pushing back darkness",
+        "description_zh": "中景环绕凤凰从灰烬中重生，双螺旋火焰上升，羽毛火星驱退周围黑暗",
+        "category": "fantasy",
+        "media_type": "video",
+        "tags": ["fantasy", "phoenix", "fire", "rebirth", "orbit", "particles"],
+        "style_keywords": ["medium orbit shot", "double helix flame spiral", "inverse particle rain"],
+        "difficulty": "advanced",
+        "use_count": 690,
+        "like_count": 255,
+        "favorite_count": 140,
+    },
+    {
+        "prompt_text": (
+            "A crystal ball sits on a velvet cloth, the camera slowly pushing in until the sphere "
+            "fills the frame. Inside, swirling mist parts to reveal a miniature stormy ocean with "
+            "tiny lightning bolts and waves. The reflection of the viewer's eye is visible on the "
+            "glass surface. Candlelight flickers around the edges of the frame."
+        ),
+        "display_name_en": "Crystal Vision",
+        "display_name_zh": "水晶预言",
+        "description_en": "Slow push-in to a crystal ball revealing a miniature storm ocean inside, candlelight flickering, eye reflected on glass",
+        "description_zh": "缓慢推近水晶球直至充满画面，球内迷雾散开露出微型风暴海洋，烛光摇曳",
+        "category": "fantasy",
+        "media_type": "video",
+        "tags": ["fantasy", "crystal-ball", "divination", "push-in", "miniature", "storm"],
+        "style_keywords": ["macro push-in", "contained world reveal", "surface reflection layer"],
+        "difficulty": "beginner",
+        "use_count": 860,
+        "like_count": 315,
+        "favorite_count": 180,
+    },
+    {
+        "prompt_text": (
+            "An enchanted forge: a blacksmith hammers a glowing rune-inscribed blade, "
+            "each strike sending showers of magical sparks that form brief runic symbols in the air "
+            "before fading. Camera in close-up on the anvil, rack-focusing between the hammer strike "
+            "and the floating runes. The forge fire burns an unnatural blue-white."
+        ),
+        "display_name_en": "Runic Forging",
+        "display_name_zh": "符文铸剑",
+        "description_en": "Close-up anvil view of a rune-blade being forged, sparks forming runic symbols, rack focus between hammer and floating glyphs",
+        "description_zh": "铁砧特写拍摄符文剑锻造，火花在空中凝成符文字形，焦点在锤击与浮空符文间切换",
+        "category": "fantasy",
+        "media_type": "video",
+        "tags": ["fantasy", "forge", "runes", "sparks", "close-up", "rack-focus"],
+        "style_keywords": ["close-up rack focus", "spark-to-symbol formation", "blue-white forge fire"],
+        "difficulty": "intermediate",
+        "use_count": 640,
+        "like_count": 235,
+        "favorite_count": 130,
+    },
+    {
+        "prompt_text": (
+            "An underwater elven city glimmers beneath a tropical sea, bioluminescent corals lining "
+            "marble colonnades. Camera glides forward through an arched gateway as schools of fish "
+            "scatter. Sunbeams lance through the water from above, creating moving caustic patterns "
+            "on the white stone. Air bubble streams rise from hidden vents."
+        ),
+        "display_name_en": "Sunken Elven City",
+        "display_name_zh": "沉没精灵城",
+        "description_en": "Gliding forward through a bioluminescent underwater elven city, caustic light patterns dancing on marble, fish scattering",
+        "description_zh": "镜头滑行穿过水下精灵城的拱门，焦散光纹在白色大理石上舞动，鱼群散开",
+        "category": "fantasy",
+        "media_type": "video",
+        "tags": ["fantasy", "underwater", "elven", "bioluminescent", "glide", "caustics"],
+        "style_keywords": ["forward glide through arch", "caustic light dance", "bioluminescent coral glow"],
+        "difficulty": "intermediate",
+        "use_count": 720,
+        "like_count": 265,
+        "favorite_count": 148,
+    },
+    {
+        "prompt_text": (
+            "A spell book floats open in mid-air, pages turning by themselves as illustrated creatures "
+            "leap off the pages and become three-dimensional. Camera watches from a reading-desk "
+            "perspective. A tiny painted dragon flaps off the parchment, gaining color and depth "
+            "as it transitions from 2D illustration to 3D creature. Ink trails behind it like smoke."
+        ),
+        "display_name_en": "Living Spell Book",
+        "display_name_zh": "活页魔典",
+        "description_en": "Desk-perspective view of a floating spell book whose illustrated creatures leap off pages into 3D life, trailing ink smoke",
+        "description_zh": "书桌视角看浮空魔典中绘画生物跃出页面变为立体，身后拖曳墨烟",
+        "category": "fantasy",
+        "media_type": "video",
+        "tags": ["fantasy", "spell-book", "2d-to-3d", "creatures", "ink", "floating"],
+        "style_keywords": ["desk POV static", "2D-to-3D transition", "trailing ink particle"],
+        "difficulty": "advanced",
+        "use_count": 560,
+        "like_count": 205,
+        "favorite_count": 115,
+    },
+    {
+        "prompt_text": (
+            "A frozen throne room with ice pillars thawing in real time: water trickles down carved "
+            "surfaces, icicles drip, and frost recedes from stained glass windows revealing color beneath. "
+            "Camera on a slow push-in toward the empty throne. "
+            "Warm light gradually replaces cold blue as the thaw progresses."
+        ),
+        "display_name_en": "Thawing Throne",
+        "display_name_zh": "冰殿融化",
+        "description_en": "Slow push-in toward an ice throne room thawing in real time, frost receding from stained glass, cold blue warming",
+        "description_zh": "缓慢推近正在融化的冰霜王座大厅，霜从彩色玻璃上退去，冷蓝渐变暖光",
+        "category": "fantasy",
+        "media_type": "video",
+        "tags": ["fantasy", "ice", "throne", "thawing", "push-in", "transformation"],
+        "style_keywords": ["slow push-in reveal", "real-time thaw texture", "cold-to-warm transition"],
+        "difficulty": "beginner",
+        "use_count": 750,
+        "like_count": 275,
+        "favorite_count": 155,
+    },
+    {
+        "prompt_text": (
+            "A floating island drifts across a sunset sky, waterfalls pouring off its edges into "
+            "misty nothingness below. Camera slowly pans around the island revealing a small village "
+            "with glowing windows perched on top. Chains and roots dangle from the underside. "
+            "Flocks of birds circle the island. Warm orange and purple sky gradient."
+        ),
+        "display_name_en": "Floating Island Village",
+        "display_name_zh": "浮岛村落",
+        "description_en": "Slow pan around a floating island at sunset, waterfalls spilling into void, a glowing village perched on top",
+        "description_zh": "缓慢摇摄日落天空中的浮岛，瀑布倾泻入虚空，顶部小村落窗灯温暖",
+        "category": "fantasy",
+        "media_type": "video",
+        "tags": ["fantasy", "floating-island", "sunset", "village", "waterfalls", "pan"],
+        "style_keywords": ["slow orbit pan", "edge waterfall cascade", "sunset gradient sky"],
+        "difficulty": "beginner",
+        "use_count": 900,
+        "like_count": 335,
+        "favorite_count": 190,
+    },
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  VIDEO — PORTRAIT (10)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    {
+        "prompt_text": (
+            "Close-up of a woman's face, a gentle breeze lifts strands of dark hair across her eyes. "
+            "She reaches up slowly to brush the hair aside, revealing a half-smile. "
+            "Soft golden-hour backlight creates a halo rim around her head. "
+            "Camera holds steady in a tight frame, shallow depth of field blurs a lavender field behind her."
+        ),
+        "display_name_en": "Wind-Swept Portrait",
+        "display_name_zh": "微风拂面",
+        "description_en": "Tight static portrait as wind lifts hair across her face, golden-hour halo rim light, lavender field bokeh behind",
+        "description_zh": "紧凑静止人像，微风将发丝吹过面颊，金色时分逆光光环，薰衣草田背景虚化",
+        "category": "portrait",
+        "media_type": "video",
+        "tags": ["portrait", "wind", "golden-hour", "close-up", "hair", "backlit"],
+        "style_keywords": ["tight static frame", "rim light halo", "shallow DOF lavender"],
+        "difficulty": "beginner",
+        "use_count": 940,
+        "like_count": 345,
+        "favorite_count": 195,
+    },
+    {
+        "prompt_text": (
+            "An elderly man sits at a window in a dimly lit room, afternoon light painting "
+            "half his face in warm amber while the other half falls into shadow. He slowly turns "
+            "his head toward the camera, light sliding across his features revealing deep wrinkles "
+            "and bright eyes. Dust motes drift in the light beam. Camera on a very slow push-in."
+        ),
+        "display_name_en": "Turning to Light",
+        "display_name_zh": "转向光明",
+        "description_en": "Slow push-in as an elderly man turns toward window light, illumination sliding across weathered features, dust motes floating",
+        "description_zh": "老人缓缓转向窗光的慢推镜头，光线滑过沧桑面容，尘埃在光柱中飘浮",
+        "category": "portrait",
+        "media_type": "video",
+        "tags": ["portrait", "elderly", "window-light", "chiaroscuro", "push-in", "dust"],
+        "style_keywords": ["slow push-in", "sliding chiaroscuro", "floating dust motes"],
+        "difficulty": "intermediate",
+        "use_count": 680,
+        "like_count": 250,
+        "favorite_count": 138,
+    },
+    {
+        "prompt_text": (
+            "A dancer spins in place under a single overhead spotlight on a dark stage, "
+            "camera circling her in slow orbit. Her flowing red dress fans outward creating a "
+            "disc of fabric. Captured at high frame rate so every fold and ripple is visible. "
+            "The spotlight catches fabric texture and skin in stark contrast against pure black."
+        ),
+        "display_name_en": "Spinning Red Dress",
+        "display_name_zh": "旋转红裙",
+        "description_en": "Slow orbit around a spinning dancer under a spotlight, red dress fanning outward in high-frame-rate detail against black",
+        "description_zh": "聚光灯下旋转舞者的慢速环绕镜头，红裙张开如盘，高帧率捕捉每一褶皱",
+        "category": "portrait",
+        "media_type": "video",
+        "tags": ["portrait", "dance", "spin", "spotlight", "red-dress", "slow-motion"],
+        "style_keywords": ["slow orbit circle", "single spotlight isolation", "high-fps fabric detail"],
+        "difficulty": "intermediate",
+        "use_count": 810,
+        "like_count": 300,
+        "favorite_count": 168,
+    },
+    {
+        "prompt_text": (
+            "Split-screen portrait transitioning from a young woman applying traditional Japanese "
+            "geisha makeup to the finished look. Time compresses as white foundation is applied, "
+            "lips painted red, and wig secured. Camera fixed in a centered front-facing frame. "
+            "The background remains static while only the face transforms."
+        ),
+        "display_name_en": "Geisha Transformation",
+        "display_name_zh": "艺伎妆变",
+        "description_en": "Fixed centered time-lapse of traditional geisha makeup application, face transforming while background stays static",
+        "description_zh": "固定正面居中延时拍摄传统艺伎化妆过程，面容渐变而背景静止不动",
+        "category": "portrait",
+        "media_type": "video",
+        "tags": ["portrait", "geisha", "makeup", "timelapse", "transformation", "japanese"],
+        "style_keywords": ["fixed centered frame", "time-lapse makeup", "static-dynamic contrast"],
+        "difficulty": "beginner",
+        "use_count": 870,
+        "like_count": 320,
+        "favorite_count": 180,
+    },
+    {
+        "prompt_text": (
+            "A street musician plays saxophone on a rainy sidewalk at night, camera slowly dollying "
+            "in from across the street. Neon reflections shimmer in puddles around his feet. "
+            "Rain catches the glow of a streetlamp directly above. His fingers move fluidly on the keys. "
+            "Shallow depth of field isolates him from passing car headlight streaks."
+        ),
+        "display_name_en": "Rain Saxophone",
+        "display_name_zh": "雨中萨克斯",
+        "description_en": "Slow dolly-in toward a night saxophonist in the rain, neon puddle reflections, headlight streaks in bokeh",
+        "description_zh": "雨夜缓慢推近街头萨克斯手，霓虹在积水中闪烁，车灯在虚化中划过",
+        "category": "portrait",
+        "media_type": "video",
+        "tags": ["portrait", "musician", "rain", "night", "neon", "dolly-in"],
+        "style_keywords": ["slow dolly approach", "neon puddle reflection", "bokeh headlight streaks"],
+        "difficulty": "intermediate",
+        "use_count": 750,
+        "like_count": 278,
+        "favorite_count": 155,
+    },
+    {
+        "prompt_text": (
+            "Extreme close-up of an eye, the camera so close the iris fills the frame. "
+            "The pupil dilates slowly as light changes. Reflected in the iris is a miniature scene "
+            "of a sunset over the ocean. Tiny blood vessels are visible in the sclera. "
+            "A single tear forms at the lower lid and rolls down in slow motion."
+        ),
+        "display_name_en": "Iris Landscape",
+        "display_name_zh": "瞳中风景",
+        "description_en": "Macro shot of a dilating iris reflecting a miniature ocean sunset, a slow-motion tear rolling from the lower lid",
+        "description_zh": "瞳孔微距镜头映出微型海上日落，虹膜缓缓扩张，一滴泪从下眼睑慢速滑落",
+        "category": "portrait",
+        "media_type": "video",
+        "tags": ["portrait", "macro", "eye", "iris", "reflection", "tear"],
+        "style_keywords": ["extreme macro iris", "reflected miniature scene", "slow-motion tear roll"],
+        "difficulty": "advanced",
+        "use_count": 590,
+        "like_count": 220,
+        "favorite_count": 122,
+    },
+    {
+        "prompt_text": (
+            "A blacksmith wipes sweat from his brow with a leather-gloved hand, forge fire glowing "
+            "behind him. Camera holds a medium close-up as he exhales, breath visible in cool air "
+            "contrasting the heat behind. Embers float past his face. He lifts his gaze directly "
+            "into the lens with tired but satisfied eyes."
+        ),
+        "display_name_en": "Forge-Lit Craftsman",
+        "display_name_zh": "炉火匠人",
+        "description_en": "Medium close-up of a blacksmith pausing before his forge, visible breath mixing with floating embers, direct gaze into lens",
+        "description_zh": "铁匠在锻炉前歇息的中近景，呼出的白气与飘浮火星交融，目光直视镜头",
+        "category": "portrait",
+        "media_type": "video",
+        "tags": ["portrait", "blacksmith", "forge", "embers", "gaze", "breath"],
+        "style_keywords": ["medium close-up hold", "backlit forge glow", "direct lens address"],
+        "difficulty": "intermediate",
+        "use_count": 640,
+        "like_count": 238,
+        "favorite_count": 132,
+    },
+    {
+        "prompt_text": (
+            "Twin sisters stand back to back, the camera rotating around them as each turns to "
+            "face the lens in sequence. One lit in cool blue from the left, the other in warm orange "
+            "from the right. As the camera completes a full rotation, the lighting swaps between them. "
+            "Minimal dark background, emphasis on symmetry and contrast."
+        ),
+        "display_name_en": "Twin Light Swap",
+        "display_name_zh": "双子光影交换",
+        "description_en": "Rotating camera around back-to-back twins, blue and orange lighting swapping between them over a full 360-degree orbit",
+        "description_zh": "镜头环绕背靠背双胞胎旋转，蓝橙灯光在360度中互换，强调对称与对比",
+        "category": "portrait",
+        "media_type": "video",
+        "tags": ["portrait", "twins", "lighting", "rotation", "symmetry", "color-contrast"],
+        "style_keywords": ["360 rotation orbit", "blue-orange swap lighting", "symmetry emphasis"],
+        "difficulty": "advanced",
+        "use_count": 520,
+        "like_count": 195,
+        "favorite_count": 108,
+    },
+    {
+        "prompt_text": (
+            "A child blows dandelion seeds toward the camera, the seeds drifting in extreme slow motion "
+            "directly into the lens. Each seed parachute is individually visible, backlit by afternoon sun. "
+            "The child's face goes out of focus as the seeds approach. Soft green meadow background. "
+            "Warm, nostalgic color grading."
+        ),
+        "display_name_en": "Dandelion Wish",
+        "display_name_zh": "蒲公英心愿",
+        "description_en": "Slow-motion dandelion seeds floating toward the lens, backlit and individually sharp, child drifting out of focus behind",
+        "description_zh": "蒲公英种子慢动作飘向镜头，逆光下每朵清晰可见，身后孩子渐渐失焦",
+        "category": "portrait",
+        "media_type": "video",
+        "tags": ["portrait", "child", "dandelion", "slow-motion", "backlit", "nostalgic"],
+        "style_keywords": ["toward-lens slow motion", "backlit seed detail", "focus rack to particles"],
+        "difficulty": "beginner",
+        "use_count": 960,
+        "like_count": 355,
+        "favorite_count": 200,
+    },
+    {
+        "prompt_text": (
+            "A calligrapher writes a single Chinese character with a large brush on rice paper, "
+            "camera positioned directly overhead looking down. The ink flows from the brush tip "
+            "in confident strokes, bleeding slightly at the edges into the paper grain. "
+            "The character completes stroke by stroke. Ink-stained fingers and a stone inkwell "
+            "visible at the frame edges."
+        ),
+        "display_name_en": "Calligraphy Overhead",
+        "display_name_zh": "俯瞰挥毫",
+        "description_en": "Top-down view of a calligrapher completing a Chinese character stroke by stroke, ink bleeding into rice paper grain",
+        "description_zh": "正上方俯拍书法家逐笔完成汉字，墨汁在宣纸纹理中晕染，墨手与砚台入画",
+        "category": "portrait",
+        "media_type": "video",
+        "tags": ["portrait", "calligraphy", "overhead", "ink", "chinese", "process"],
+        "style_keywords": ["top-down overhead", "ink bleed on grain", "stroke-by-stroke process"],
+        "difficulty": "beginner",
+        "use_count": 880,
+        "like_count": 328,
+        "favorite_count": 185,
+    },
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  VIDEO — FOOD (10)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    {
+        "prompt_text": (
+            "Red wine poured into a crystal glass in extreme slow motion, the liquid hitting "
+            "the bowl and splashing upward in a crown formation. Camera at glass-rim height. "
+            "Deep ruby color catches overhead studio light. The splash settles into a swirling vortex "
+            "as the glass fills. Black background, single key light."
+        ),
+        "display_name_en": "Wine Crown Splash",
+        "display_name_zh": "红酒皇冠溅花",
+        "description_en": "Extreme slow-motion red wine pour forming a crown splash inside a crystal glass, single key light on black",
+        "description_zh": "极致慢动作红酒倒入水晶杯形成皇冠溅花，单一主光源映衬纯黑背景",
+        "category": "food",
+        "media_type": "video",
+        "tags": ["food", "wine", "slow-motion", "splash", "close-up", "studio"],
+        "style_keywords": ["rim-height close-up", "crown splash formation", "single key light studio"],
+        "difficulty": "intermediate",
+        "use_count": 820,
+        "like_count": 300,
+        "favorite_count": 170,
+    },
+    {
+        "prompt_text": (
+            "A sharp knife slices through a ripe mango in one smooth motion, the blade revealing "
+            "the bright orange flesh inside. Captured in slow motion at 240fps. "
+            "Juice beads form instantly along the cut surface. The two halves separate and fall "
+            "onto a marble cutting board. Soft side lighting from the left."
+        ),
+        "display_name_en": "Mango Slice Reveal",
+        "display_name_zh": "芒果切开瞬间",
+        "description_en": "240fps slow-motion knife slicing through a mango, juice beading on fresh orange flesh, halves falling onto marble",
+        "description_zh": "240帧慢动作刀切芒果，鲜橙果肉上立即冒出汁珠，两半落在大理石案板上",
+        "category": "food",
+        "media_type": "video",
+        "tags": ["food", "fruit", "slow-motion", "knife", "cutting", "juice"],
+        "style_keywords": ["240fps extreme slow-mo", "juice bead formation", "side-lit marble surface"],
+        "difficulty": "beginner",
+        "use_count": 910,
+        "like_count": 335,
+        "favorite_count": 188,
+    },
+    {
+        "prompt_text": (
+            "Steam rising from a freshly baked sourdough loaf as it's pulled from a Dutch oven, "
+            "the crust crackling audibly. Camera tight on the bread surface showing ear expansion "
+            "and caramelized crust texture. The baker's hands tilt the loaf to reveal the scoring "
+            "pattern. Warm kitchen light from the oven interior. Flour dust in the air."
+        ),
+        "display_name_en": "Sourdough Steam Reveal",
+        "display_name_zh": "酸面团出炉",
+        "description_en": "Tight shot of sourdough pulled from a Dutch oven, steam pouring, crust crackling, scoring pattern revealed under warm oven light",
+        "description_zh": "新出炉酸面包特写，蒸汽涌出铸铁锅，脆皮噼啪作响，划痕纹路在炉光下展现",
+        "category": "food",
+        "media_type": "video",
+        "tags": ["food", "bread", "baking", "steam", "close-up", "texture"],
+        "style_keywords": ["tight surface detail", "steam pour reveal", "oven interior warm light"],
+        "difficulty": "beginner",
+        "use_count": 870,
+        "like_count": 320,
+        "favorite_count": 178,
+    },
+    {
+        "prompt_text": (
+            "Overhead time-lapse of a sushi chef assembling a platter: hands moving with precise "
+            "speed placing nigiri pieces in a circular pattern on a wooden board. "
+            "Each piece appears in its place almost magically as time compresses. "
+            "Pickled ginger and wasabi are positioned last. The hands withdraw and the completed "
+            "platter sits for a beat in the final frame."
+        ),
+        "display_name_en": "Sushi Assembly",
+        "display_name_zh": "寿司拼盘成型",
+        "description_en": "Top-down time-lapse of a sushi platter being assembled piece by piece, hands moving with compressed precision",
+        "description_zh": "俯拍延时寿司拼盘逐件组装，双手在压缩时间中精确放置每一贯握寿司",
+        "category": "food",
+        "media_type": "video",
+        "tags": ["food", "sushi", "timelapse", "overhead", "assembly", "japanese"],
+        "style_keywords": ["top-down timelapse", "precision hand choreography", "circular arrangement build"],
+        "difficulty": "intermediate",
+        "use_count": 780,
+        "like_count": 288,
+        "favorite_count": 160,
+    },
+    {
+        "prompt_text": (
+            "Chocolate ganache being poured over a layered cake, the dark glossy liquid cascading "
+            "over the edges in thick rivulets. Camera orbits slowly around the cake on a turntable. "
+            "The ganache coats the sides in a smooth curtain. Overhead diffused light catches the "
+            "mirror-like surface. A few fresh raspberries garnish the top."
+        ),
+        "display_name_en": "Ganache Cascade",
+        "display_name_zh": "巧克力瀑流",
+        "description_en": "Orbiting shot of glossy ganache cascading over a cake on a turntable, mirror-like surface under diffused overhead light",
+        "description_zh": "环绕拍摄旋转台上蛋糕的巧克力甘纳许淋面，亮泽如镜面在柔光下流淌",
+        "category": "food",
+        "media_type": "video",
+        "tags": ["food", "chocolate", "cake", "ganache", "orbit", "turntable"],
+        "style_keywords": ["turntable orbit", "viscous cascade flow", "mirror-gloss surface"],
+        "difficulty": "intermediate",
+        "use_count": 750,
+        "like_count": 276,
+        "favorite_count": 154,
+    },
+    {
+        "prompt_text": (
+            "A bartender torches the surface of a crème brûlée, the sugar bubbling and caramelizing "
+            "under the blue flame. Extreme close-up shows the sugar transitioning from white crystals "
+            "to amber liquid to hardened caramel. Camera slowly pulls back to reveal the full ramekin. "
+            "A spoon taps the surface and cracks through the glassy top."
+        ),
+        "display_name_en": "Brûlée Torch & Crack",
+        "display_name_zh": "焦糖炙烤与敲裂",
+        "description_en": "Macro view of sugar caramelizing under a torch, then pulling back as a spoon cracks through the glassy brûlée top",
+        "description_zh": "微距拍摄焰枪下糖霜从白色结晶变为琥珀焦糖，拉远后汤匙敲裂玻璃般的表面",
+        "category": "food",
+        "media_type": "video",
+        "tags": ["food", "dessert", "brulee", "torch", "macro", "crack"],
+        "style_keywords": ["macro caramelization", "pull-back reveal", "crack impact moment"],
+        "difficulty": "intermediate",
+        "use_count": 700,
+        "like_count": 258,
+        "favorite_count": 143,
+    },
+    {
+        "prompt_text": (
+            "A hand pulls a slice of pizza away from the pie, mozzarella stretching in long gooey "
+            "strings that refuse to break. Slow motion captures the cheese stretch in detail. "
+            "Camera positioned low at table level. Steam rises from the fresh slice. "
+            "The cheese strings finally snap and recoil. Rustic wooden table, checkered tablecloth."
+        ),
+        "display_name_en": "Pizza Cheese Pull",
+        "display_name_zh": "披萨拉丝",
+        "description_en": "Low-angle slow-motion pizza slice pull with endless mozzarella stretch, strings snapping and recoiling over a rustic table",
+        "description_zh": "低角度慢动作拉起披萨，马苏里拉长丝不断拉伸直到弹断回缩，质朴木桌背景",
+        "category": "food",
+        "media_type": "video",
+        "tags": ["food", "pizza", "cheese", "slow-motion", "stretch", "low-angle"],
+        "style_keywords": ["table-level low angle", "cheese stretch slow-mo", "snap recoil moment"],
+        "difficulty": "beginner",
+        "use_count": 1020,
+        "like_count": 380,
+        "favorite_count": 215,
+    },
+    {
+        "prompt_text": (
+            "Espresso extraction from a bottomless portafilter, the camera positioned directly underneath "
+            "looking up. Dark brown streams emerge, merge into a single flow, then develop tiger-stripe "
+            "crema patterns. The liquid collects in a white ceramic cup below. "
+            "Drops catch the light like caramel jewels. Entire shot lasts the 25-second extraction."
+        ),
+        "display_name_en": "Bottomless Espresso",
+        "display_name_zh": "无底手柄萃取",
+        "description_en": "Bottom-up view of espresso extraction through a naked portafilter, tiger-stripe crema forming, drops like caramel jewels",
+        "description_zh": "从下方仰拍无底手柄咖啡萃取，虎纹油脂渐显，液滴如焦糖宝石闪耀",
+        "category": "food",
+        "media_type": "video",
+        "tags": ["food", "coffee", "espresso", "extraction", "close-up", "crema"],
+        "style_keywords": ["bottom-up POV", "tiger-stripe crema flow", "real-time extraction"],
+        "difficulty": "intermediate",
+        "use_count": 840,
+        "like_count": 310,
+        "favorite_count": 172,
+    },
+    {
+        "prompt_text": (
+            "A hot pot bubbling vigorously at a round table, steam billowing upward. "
+            "Camera starts overhead looking down into the churning red broth with visible chili peppers "
+            "and Sichuan peppercorns, then slowly descends to table level showing chopsticks "
+            "lowering thin-sliced beef into the roiling liquid. The meat curls instantly on contact."
+        ),
+        "display_name_en": "Hot Pot Plunge",
+        "display_name_zh": "火锅涮肉",
+        "description_en": "Overhead-to-table-level descent into a bubbling hot pot, chopsticks lowering beef that curls on contact with chili broth",
+        "description_zh": "从俯拍降至桌面高度看翻滚的红汤火锅，筷子夹薄牛肉片入锅瞬间卷曲",
+        "category": "food",
+        "media_type": "video",
+        "tags": ["food", "hotpot", "sichuan", "steam", "descent-shot", "cooking"],
+        "style_keywords": ["overhead-to-level descent", "rolling broth texture", "instant meat curl"],
+        "difficulty": "beginner",
+        "use_count": 930,
+        "like_count": 342,
+        "favorite_count": 192,
+    },
+    {
+        "prompt_text": (
+            "A waffle iron opens to reveal a perfectly golden Belgian waffle, steam escaping in a burst. "
+            "Camera tight on the waffle surface showing deep grid indentations. "
+            "Maple syrup is drizzled from above in a thin stream, filling each pocket. "
+            "A pat of butter melts on top, spreading outward. Warm morning window light."
+        ),
+        "display_name_en": "Golden Waffle Morning",
+        "display_name_zh": "金色华夫晨光",
+        "description_en": "Tight shot of a waffle iron opening with a steam burst, syrup filling grid pockets, butter melting under morning light",
+        "description_zh": "华夫饼机打开的特写，蒸汽涌出，枫糖浆注满每个格子，黄油在晨光中融化",
+        "category": "food",
+        "media_type": "video",
+        "tags": ["food", "waffle", "breakfast", "syrup", "steam", "butter-melt"],
+        "style_keywords": ["tight surface reveal", "syrup fill sequence", "butter melt spread"],
+        "difficulty": "beginner",
+        "use_count": 890,
+        "like_count": 328,
+        "favorite_count": 184,
+    },
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  VIDEO — ARCHITECTURE (10)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    {
+        "prompt_text": (
+            "Drone flythrough of an abandoned Gothic cathedral, entering through a shattered "
+            "rose window and descending into the nave. Shafts of colored light from remaining "
+            "stained glass paint the stone floor. Pigeons scatter as the camera glides past "
+            "crumbling pillars. Ivy creeps up the walls. Dust particles float in the light beams."
+        ),
+        "display_name_en": "Cathedral Flythrough",
+        "display_name_zh": "哥特教堂穿越",
+        "description_en": "FPV drone entering an abandoned Gothic cathedral through a shattered rose window, colored light shafts on crumbling stone",
+        "description_zh": "FPV无人机穿过破碎玫瑰窗进入废弃哥特教堂，彩色光柱投射在碎裂石地上",
+        "category": "architecture",
+        "media_type": "video",
+        "tags": ["architecture", "gothic", "drone", "flythrough", "abandoned", "stained-glass"],
+        "style_keywords": ["FPV flythrough entry", "colored light shaft painting", "decay texture detail"],
+        "difficulty": "advanced",
+        "use_count": 680,
+        "like_count": 250,
+        "favorite_count": 140,
+    },
+    {
+        "prompt_text": (
+            "Time-lapse of sunlight moving across a minimalist concrete interior throughout the day, "
+            "a rectangular skylight casting a sharp geometric shadow that slowly tracks across the floor "
+            "and up the opposite wall. The shadow shape warps as it climbs. "
+            "Clean Tadao Ando-inspired space with smooth walls and water features."
+        ),
+        "display_name_en": "Concrete Light Clock",
+        "display_name_zh": "混凝土光钟",
+        "description_en": "Day-long time-lapse of a skylight shadow tracking across a minimalist concrete interior, warping as it climbs the wall",
+        "description_zh": "全天延时拍摄天窗光影在极简混凝土空间中游移，投影攀上对面墙壁时变形",
+        "category": "architecture",
+        "media_type": "video",
+        "tags": ["architecture", "minimalist", "concrete", "timelapse", "shadow", "skylight"],
+        "style_keywords": ["shadow tracking timelapse", "geometric warp progression", "Ando-inspired minimal"],
+        "difficulty": "intermediate",
+        "use_count": 620,
+        "like_count": 228,
+        "favorite_count": 128,
+    },
+    {
+        "prompt_text": (
+            "Steadicam walk through a traditional Moroccan riad, entering from a dark narrow corridor "
+            "that opens into a sunlit courtyard with a central fountain. The camera follows the path "
+            "of zellige tilework on the floor. Orange trees frame the courtyard. "
+            "Water in the fountain catches sunlight. The transition from dark to bright is dramatic."
+        ),
+        "display_name_en": "Riad Courtyard Reveal",
+        "display_name_zh": "摩洛哥庭院现身",
+        "description_en": "Steadicam walk from dark corridor into a sunlit Moroccan riad courtyard, zellige tiles guiding the path to a fountain",
+        "description_zh": "斯坦尼康从暗窄走廊走入阳光摩洛哥庭院，马赛克地砖引路至中央喷泉",
+        "category": "architecture",
+        "media_type": "video",
+        "tags": ["architecture", "moroccan", "riad", "steadicam", "courtyard", "reveal"],
+        "style_keywords": ["dark-to-light steadicam", "tile-line path follow", "courtyard reveal"],
+        "difficulty": "beginner",
+        "use_count": 790,
+        "like_count": 292,
+        "favorite_count": 162,
+    },
+    {
+        "prompt_text": (
+            "Aerial descent along the exterior of a twisting parametric skyscraper, the camera hugging "
+            "the glass facade as it spirals downward. Reflections of clouds and neighboring buildings "
+            "warp on the curved surface. The twist of the structure creates an optical illusion. "
+            "Sunset light turns the glass into panels of gold and copper."
+        ),
+        "display_name_en": "Twisted Tower Descent",
+        "display_name_zh": "扭旋塔楼滑降",
+        "description_en": "Aerial spiral descent along a parametric skyscraper facade, cloud reflections warping on twisted glass, sunset-gilded panels",
+        "description_zh": "航拍沿参数化摩天楼立面螺旋下降，云的倒影在扭曲玻璃上变形，夕阳镀金",
+        "category": "architecture",
+        "media_type": "video",
+        "tags": ["architecture", "parametric", "skyscraper", "spiral", "descent", "sunset"],
+        "style_keywords": ["facade-hugging spiral descent", "reflection warp on curve", "sunset glass gilding"],
+        "difficulty": "advanced",
+        "use_count": 540,
+        "like_count": 198,
+        "favorite_count": 110,
+    },
+    {
+        "prompt_text": (
+            "Camera walks slowly through a Japanese torii gate tunnel, hundreds of vermillion gates "
+            "creating a rhythmic repeating corridor. Dappled forest light flickers between the gates. "
+            "The perspective compression makes the tunnel seem infinite. "
+            "A figure in the far distance walks ahead, barely visible."
+        ),
+        "display_name_en": "Torii Gate Passage",
+        "display_name_zh": "千本鸟居穿行",
+        "description_en": "Slow walk through a vermillion torii gate tunnel, flickering forest light, infinite perspective compression, distant lone figure",
+        "description_zh": "缓慢穿行朱红千本鸟居隧道，树林光影闪烁，透视压缩似无尽延伸",
+        "category": "architecture",
+        "media_type": "video",
+        "tags": ["architecture", "torii", "japanese", "tunnel", "perspective", "walk-through"],
+        "style_keywords": ["rhythmic gate repetition", "perspective compression infinity", "dappled flicker light"],
+        "difficulty": "beginner",
+        "use_count": 950,
+        "like_count": 348,
+        "favorite_count": 198,
+    },
+    {
+        "prompt_text": (
+            "A construction time-lapse showing a modern glass building rising floor by floor over months, "
+            "cranes swinging, workers moving like ants. Clouds race overhead in accelerated time. "
+            "The surrounding cityscape remains static while the building grows. "
+            "Night and day cycle rapidly, the building skeleton lit by work lights at night."
+        ),
+        "display_name_en": "Building Rise Timelapse",
+        "display_name_zh": "楼宇崛起",
+        "description_en": "Months-compressed time-lapse of a glass building rising floor by floor, day-night cycling, cranes swinging",
+        "description_zh": "数月压缩延时拍摄玻璃建筑逐层升起，昼夜快速交替，塔吊不停旋转",
+        "category": "architecture",
+        "media_type": "video",
+        "tags": ["architecture", "construction", "timelapse", "progress", "day-night", "crane"],
+        "style_keywords": ["months-to-seconds compression", "day-night rapid cycle", "floor-by-floor growth"],
+        "difficulty": "intermediate",
+        "use_count": 660,
+        "like_count": 242,
+        "favorite_count": 135,
+    },
+    {
+        "prompt_text": (
+            "A slow elevator ride up a glass shaft inside a futuristic atrium, the camera looking "
+            "outward through the glass at each floor passing by — gardens, offices, restaurants, "
+            "a library, all visible in cross-section. The ride ends emerging through the roof "
+            "onto a sky terrace with a panoramic city view."
+        ),
+        "display_name_en": "Atrium Elevator Rise",
+        "display_name_zh": "中庭电梯升空",
+        "description_en": "Glass elevator POV rising through a futuristic atrium, each floor visible in cross-section, emerging onto a sky terrace",
+        "description_zh": "玻璃电梯视角穿越未来感中庭，每层横截面尽收眼底，最终升至天空露台",
+        "category": "architecture",
+        "media_type": "video",
+        "tags": ["architecture", "elevator", "atrium", "futuristic", "POV", "vertical"],
+        "style_keywords": ["vertical POV ascent", "cross-section floor reveal", "rooftop emergence"],
+        "difficulty": "intermediate",
+        "use_count": 710,
+        "like_count": 262,
+        "favorite_count": 146,
+    },
+    {
+        "prompt_text": (
+            "FPV drone racing through a brutalist parking garage, swooping between concrete pillars "
+            "and spiraling down ramps at speed. Fluorescent lights streak past. "
+            "Tire marks and graffiti flash by on walls. The drone exits through an open barrier "
+            "into bright daylight, the exposure blooming then adjusting."
+        ),
+        "display_name_en": "Brutalist Garage Sprint",
+        "display_name_zh": "野兽派车库飞驰",
+        "description_en": "FPV drone racing through a brutalist parking garage, spiraling ramps, fluorescent streaks, bursting into daylight",
+        "description_zh": "FPV无人机穿越野兽派停车场，螺旋下坡道，荧光灯拉丝，冲出闸门迎接日光",
+        "category": "architecture",
+        "media_type": "video",
+        "tags": ["architecture", "brutalist", "FPV", "drone", "garage", "speed"],
+        "style_keywords": ["FPV speed run", "fluorescent light streak", "dark-to-bright exposure bloom"],
+        "difficulty": "advanced",
+        "use_count": 580,
+        "like_count": 215,
+        "favorite_count": 120,
+    },
+    {
+        "prompt_text": (
+            "A traditional Chinese moon gate frames a Suzhou garden, camera positioned to look through "
+            "the circular opening. A gentle rain falls, creating ripples in the pond beyond. "
+            "Raindrops bead on lotus leaves. The scene through the moon gate is like a living painting "
+            "that changes with each ripple. Muted green and grey palette."
+        ),
+        "display_name_en": "Moon Gate Rain Garden",
+        "display_name_zh": "月洞门听雨",
+        "description_en": "Static frame through a circular moon gate as rain falls on a Suzhou garden pond, ripples and lotus beads in muted greens",
+        "description_zh": "透过月洞门的静止画面，雨落苏州园林池塘，涟漪与荷叶水珠在灰绿色中摇曳",
+        "category": "architecture",
+        "media_type": "video",
+        "tags": ["architecture", "chinese-garden", "moon-gate", "rain", "suzhou", "tranquil"],
+        "style_keywords": ["circular frame composition", "rain ripple animation", "muted ink-wash palette"],
+        "difficulty": "beginner",
+        "use_count": 850,
+        "like_count": 312,
+        "favorite_count": 175,
+    },
+    {
+        "prompt_text": (
+            "Interior tracking shot through Frank Lloyd Wright's Fallingwater, following the horizontal "
+            "concrete cantilevers as the camera moves from the living room over the waterfall. "
+            "Through floor-to-ceiling windows, autumn foliage is visible. The sound of rushing water "
+            "grows louder. Natural stone walls and warm wood tones inside."
+        ),
+        "display_name_en": "Fallingwater Flow",
+        "display_name_zh": "流水别墅行走",
+        "description_en": "Interior tracking through Fallingwater's cantilevered spaces, autumn trees through glass, waterfall presence growing",
+        "description_zh": "室内跟拍穿越流水别墅悬挑空间，玻璃外秋叶可见，瀑布水声渐强",
+        "category": "architecture",
+        "media_type": "video",
+        "tags": ["architecture", "fallingwater", "wright", "cantilever", "tracking", "autumn"],
+        "style_keywords": ["horizontal tracking shot", "cantilever space flow", "nature-architecture fusion"],
+        "difficulty": "intermediate",
+        "use_count": 730,
+        "like_count": 268,
+        "favorite_count": 150,
+    },
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  VIDEO — PRODUCT (10)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    {
+        "prompt_text": (
+            "A luxury watch rotates on an invisible turntable, camera orbiting in the opposite direction "
+            "for a double-rotation effect. The polished case catches studio lights in moving reflections. "
+            "The second hand sweeps smoothly. Focus racks from the dial to the crown detail. "
+            "Dark gradient background, two-tone warm and cool lighting."
+        ),
+        "display_name_en": "Watch Double Orbit",
+        "display_name_zh": "腕表双向旋转",
+        "description_en": "Counter-rotating camera and turntable showcasing a luxury watch, focus racking from dial to crown, two-tone studio lighting",
+        "description_zh": "镜头与转台反向旋转展示奢华腕表，焦点从表盘切换至表冠，双色调影棚灯光",
+        "category": "product",
+        "media_type": "video",
+        "tags": ["product", "watch", "luxury", "rotation", "studio", "rack-focus"],
+        "style_keywords": ["counter-rotation orbit", "moving reflection catch", "two-tone lighting"],
+        "difficulty": "intermediate",
+        "use_count": 740,
+        "like_count": 272,
+        "favorite_count": 152,
+    },
+    {
+        "prompt_text": (
+            "Unboxing sequence of a premium smartphone: hands lift the lid off a matte black box, "
+            "revealing the device nestled in a molded insert. Camera positioned directly overhead. "
+            "The phone is lifted out, plastic film peeled away in a satisfying strip revealing the glossy screen. "
+            "Accessories are laid out one by one. Clean white desk, natural window light."
+        ),
+        "display_name_en": "Premium Unboxing",
+        "display_name_zh": "旗舰开箱",
+        "description_en": "Overhead unboxing of a premium smartphone, film peel reveal, accessories laid out on a clean white desk in natural light",
+        "description_zh": "俯拍旗舰手机开箱，揭膜露出光亮屏幕，配件逐一摆放在白色桌面自然光下",
+        "category": "product",
+        "media_type": "video",
+        "tags": ["product", "unboxing", "smartphone", "overhead", "peel", "premium"],
+        "style_keywords": ["overhead unboxing POV", "film peel satisfaction", "sequential layout"],
+        "difficulty": "beginner",
+        "use_count": 960,
+        "like_count": 352,
+        "favorite_count": 198,
+    },
+    {
+        "prompt_text": (
+            "A sneaker floats in mid-air and slowly disassembles into its component layers — outsole, "
+            "midsole foam, insole, upper mesh, laces — each layer separating and spreading apart "
+            "vertically. Camera orbits the exploded view. Each material texture is clearly visible. "
+            "Neutral grey background, even studio lighting from all sides."
+        ),
+        "display_name_en": "Sneaker Exploded View",
+        "display_name_zh": "运动鞋分解视图",
+        "description_en": "Orbiting exploded-view animation of a sneaker, layers separating vertically, each material texture highlighted",
+        "description_zh": "运动鞋爆炸分解视图环绕展示，各层材料垂直分离，每种材质纹理清晰可见",
+        "category": "product",
+        "media_type": "video",
+        "tags": ["product", "sneaker", "exploded-view", "materials", "orbit", "3D"],
+        "style_keywords": ["vertical exploded separation", "material texture showcase", "neutral orbit studio"],
+        "difficulty": "advanced",
+        "use_count": 620,
+        "like_count": 228,
+        "favorite_count": 128,
+    },
+    {
+        "prompt_text": (
+            "A perfume bottle emerges from water in slow motion, droplets cascading off the glass surface. "
+            "The camera follows the bottle as it rises, water sheeting away to reveal the label. "
+            "Colored light refracts through the liquid inside — amber and rose tones. "
+            "A single remaining droplet rolls down the bottle and falls off the base."
+        ),
+        "display_name_en": "Perfume Water Rise",
+        "display_name_zh": "香水破水而出",
+        "description_en": "Slow-motion perfume bottle rising from water, droplets cascading, colored light refracting through the liquid inside",
+        "description_zh": "慢动作香水瓶从水中升起，水珠倾泻而下，琥珀玫瑰色光线穿透瓶中液体",
+        "category": "product",
+        "media_type": "video",
+        "tags": ["product", "perfume", "water", "slow-motion", "refraction", "luxury"],
+        "style_keywords": ["water emergence slow-mo", "cascade droplet sheet", "colored light refraction"],
+        "difficulty": "intermediate",
+        "use_count": 810,
+        "like_count": 298,
+        "favorite_count": 166,
+    },
+    {
+        "prompt_text": (
+            "A laptop opens from closed to fully flat in one smooth motion, the screen illuminating "
+            "as the lid passes 45 degrees. Camera positioned at hinge level, tracking the lid arc. "
+            "The keyboard backlight fades on in sequence from center outward. "
+            "A dark desk surface reflects the screen glow. Minimal, premium aesthetic."
+        ),
+        "display_name_en": "Laptop Open Sequence",
+        "display_name_zh": "笔电开合仪式",
+        "description_en": "Hinge-level tracking shot of a laptop opening, screen illuminating at 45 degrees, keyboard backlight cascading outward",
+        "description_zh": "铰链高度跟拍笔记本电脑打开，屏幕在45度时亮起，键盘背光从中心向外扩散",
+        "category": "product",
+        "media_type": "video",
+        "tags": ["product", "laptop", "tech", "open-sequence", "backlight", "minimal"],
+        "style_keywords": ["hinge-level arc tracking", "sequential backlight cascade", "screen illuminate reveal"],
+        "difficulty": "beginner",
+        "use_count": 880,
+        "like_count": 324,
+        "favorite_count": 182,
+    },
+    {
+        "prompt_text": (
+            "Macro shot of a fountain pen nib touching paper, ink flowing from the slit as the pen "
+            "writes a cursive word in real time. Camera so close the paper fibers are visible. "
+            "The ink spreads microscopically into the paper grain. A small ink pool forms at "
+            "each pen lift. Warm desk lamp lighting from the upper left."
+        ),
+        "display_name_en": "Nib on Paper",
+        "display_name_zh": "笔尖触纸",
+        "description_en": "Extreme macro of a fountain pen nib writing on paper, ink flowing through the slit, spreading into visible paper fibers",
+        "description_zh": "钢笔笔尖书写的极致微距，墨水从笔缝流出渗入可见的纸张纤维中",
+        "category": "product",
+        "media_type": "video",
+        "tags": ["product", "fountain-pen", "macro", "ink", "writing", "stationery"],
+        "style_keywords": ["extreme macro nib", "ink capillary spread", "real-time writing"],
+        "difficulty": "intermediate",
+        "use_count": 700,
+        "like_count": 258,
+        "favorite_count": 144,
+    },
+    {
+        "prompt_text": (
+            "A pair of wireless earbuds levitates out of their charging case, the case lid opening "
+            "on its own. The buds float to ear height and rotate to show all angles. "
+            "A subtle LED pulse on the case indicates charging status. "
+            "Camera starts on the case and tilts up to follow the floating buds. "
+            "Clean white background, soft shadowless lighting."
+        ),
+        "display_name_en": "Earbuds Levitation",
+        "display_name_zh": "耳机悬浮出仓",
+        "description_en": "Case-to-float sequence of wireless earbuds levitating and rotating, LED pulse, camera tilting up on white shadowless background",
+        "description_zh": "无线耳机从充电仓悬浮升起并旋转展示各角度，LED脉冲指示，无影白色背景",
+        "category": "product",
+        "media_type": "video",
+        "tags": ["product", "earbuds", "tech", "levitation", "tilt-up", "clean"],
+        "style_keywords": ["levitation float reveal", "tilt-up follow", "shadowless white studio"],
+        "difficulty": "beginner",
+        "use_count": 850,
+        "like_count": 312,
+        "favorite_count": 175,
+    },
+    {
+        "prompt_text": (
+            "A ceramic mug being formed on a potter's wheel, hands shaping wet clay as it spins. "
+            "Camera in close-up profile view. Water and slip fly off in centrifugal arcs. "
+            "Fingers press and the clay walls rise. Time-lapse compresses the full forming process "
+            "into ten seconds. Earthy warm tones, shallow depth of field on the hands."
+        ),
+        "display_name_en": "Pottery Wheel Creation",
+        "display_name_zh": "陶轮塑形",
+        "description_en": "Profile close-up time-lapse of hands shaping a mug on a potter's wheel, clay rising, water arcing, earthy warm tones",
+        "description_zh": "侧面特写延时拍摄双手在陶轮上塑造杯子，陶土升起，水花飞溅，泥土暖色调",
+        "category": "product",
+        "media_type": "video",
+        "tags": ["product", "pottery", "ceramic", "timelapse", "hands", "craft"],
+        "style_keywords": ["profile close-up timelapse", "centrifugal water arc", "clay wall rise"],
+        "difficulty": "intermediate",
+        "use_count": 720,
+        "like_count": 265,
+        "favorite_count": 148,
+    },
+    {
+        "prompt_text": (
+            "A sports car drives through a water curtain in slow motion, sheets of water parting "
+            "over the aerodynamic body. Camera tracks alongside at wheel height. "
+            "Water droplets bead on the waxed paint surface. The headlights cut through the spray. "
+            "Dark tunnel environment with dramatic directional lighting from above."
+        ),
+        "display_name_en": "Car Water Curtain",
+        "display_name_zh": "跑车破水帘",
+        "description_en": "Wheel-height slow-motion tracking of a sports car slicing through a water curtain, droplets beading on waxed paint",
+        "description_zh": "轮高慢动作跟拍跑车穿越水帘，水珠在蜡面车漆上凝结，前灯切开水雾",
+        "category": "product",
+        "media_type": "video",
+        "tags": ["product", "car", "automotive", "slow-motion", "water", "tracking"],
+        "style_keywords": ["wheel-height tracking", "water curtain parting", "wax bead surface detail"],
+        "difficulty": "advanced",
+        "use_count": 670,
+        "like_count": 248,
+        "favorite_count": 138,
+    },
+    {
+        "prompt_text": (
+            "A leather bag is assembled in stop-motion: cut pieces fly into position, stitching "
+            "appears thread by thread, hardware clasps click into place, and the final bag "
+            "stands upright. Camera holds a fixed front-on studio frame throughout. "
+            "Each component arrival is punctuated by a brief pause. "
+            "Craft paper background, warm directional light."
+        ),
+        "display_name_en": "Bag Assembly Stop Motion",
+        "display_name_zh": "皮包定格组装",
+        "description_en": "Stop-motion assembly of a leather bag — pieces flying in, stitching appearing, hardware clicking — on a craft paper background",
+        "description_zh": "皮包定格动画组装——皮片飞入就位、缝线逐针出现、五金扣合——牛皮纸背景",
+        "category": "product",
+        "media_type": "video",
+        "tags": ["product", "leather-bag", "stop-motion", "assembly", "craft", "studio"],
+        "style_keywords": ["stop-motion assembly", "fixed front-on frame", "component arrival rhythm"],
+        "difficulty": "advanced",
+        "use_count": 560,
+        "like_count": 205,
+        "favorite_count": 115,
+    },
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  VIDEO — ABSTRACT (10)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    {
+        "prompt_text": (
+            "Thick streams of colored ink dropped into water, the camera capturing the underwater "
+            "expansion in slow motion. Crimson, indigo, and gold plumes billow and intertwine "
+            "like underwater auroras. The camera slowly rotates, shifting the orientation of gravity "
+            "in the viewer's perception. Black background, backlit from behind the tank."
+        ),
+        "display_name_en": "Ink Aurora Underwater",
+        "display_name_zh": "水中墨极光",
+        "description_en": "Slow-motion ink plumes billowing underwater in crimson, indigo and gold, camera rotating to shift gravity perception",
+        "description_zh": "慢动作墨水在水中扩散如极光，深红靛蓝与金色翻卷交织，镜头旋转颠覆重力感",
+        "category": "abstract",
+        "media_type": "video",
+        "tags": ["abstract", "ink", "underwater", "slow-motion", "rotation", "color"],
+        "style_keywords": ["underwater ink billow", "gravity-shift rotation", "backlit tank silhouette"],
+        "difficulty": "intermediate",
+        "use_count": 780,
+        "like_count": 288,
+        "favorite_count": 160,
+    },
+    {
+        "prompt_text": (
+            "A kaleidoscope pattern generated from reflections of moving colored glass, "
+            "the symmetry shifting and morphing in real time. The pattern breathes — expanding "
+            "and contracting rhythmically. Colors cycle through warm to cool spectrums. "
+            "Camera pushes slowly into the center of the pattern creating an infinite tunnel effect."
+        ),
+        "display_name_en": "Living Kaleidoscope",
+        "display_name_zh": "活体万花筒",
+        "description_en": "Morphing kaleidoscope of colored glass reflections breathing rhythmically, camera pushing into an infinite tunnel center",
+        "description_zh": "彩色玻璃反射形成的万花筒图案有节奏地呼吸变幻，镜头推入中心形成无尽隧道",
+        "category": "abstract",
+        "media_type": "video",
+        "tags": ["abstract", "kaleidoscope", "symmetry", "tunnel", "color-cycle", "mesmerizing"],
+        "style_keywords": ["breathing symmetry morph", "center push tunnel", "warm-cool color cycle"],
+        "difficulty": "beginner",
+        "use_count": 870,
+        "like_count": 320,
+        "favorite_count": 180,
+    },
+    {
+        "prompt_text": (
+            "Ferrofluid responding to a moving magnet beneath a glass surface, spikes forming "
+            "and collapsing in organic wave patterns. Camera in extreme macro looking down. "
+            "The magnetic liquid creates impossible-looking shapes that defy surface tension. "
+            "Iridescent rainbow sheen on the black fluid. The magnet traces a slow circle."
+        ),
+        "display_name_en": "Ferrofluid Dance",
+        "display_name_zh": "磁流体之舞",
+        "description_en": "Macro top-down view of ferrofluid spiking and flowing in response to a circling magnet, iridescent sheen on black liquid",
+        "description_zh": "俯拍微距磁流体随圆形磁场运动尖刺涌动，黑色液面上虹彩光泽闪烁",
+        "category": "abstract",
+        "media_type": "video",
+        "tags": ["abstract", "ferrofluid", "magnetic", "macro", "iridescent", "organic"],
+        "style_keywords": ["macro top-down", "spike-collapse organic wave", "iridescent surface sheen"],
+        "difficulty": "intermediate",
+        "use_count": 720,
+        "like_count": 265,
+        "favorite_count": 148,
+    },
+    {
+        "prompt_text": (
+            "Particles simulating a murmuration of starlings, thousands of white dots swirling "
+            "in coordinated patterns against a black void. The swarm compresses into a tight sphere, "
+            "then explodes outward, then reforms into a flowing ribbon. "
+            "Camera slowly pulls back to reveal the full scale of the formation."
+        ),
+        "display_name_en": "Digital Murmuration",
+        "display_name_zh": "数字椋鸟风暴",
+        "description_en": "Particle swarm murmuration — compress, explode, reform into ribbon — camera pulling back to reveal full scale against black",
+        "description_zh": "粒子群模拟椋鸟风暴——压缩、爆散、重组为飘带——拉远镜头展现完整规模",
+        "category": "abstract",
+        "media_type": "video",
+        "tags": ["abstract", "particles", "murmuration", "swarm", "pull-back", "formation"],
+        "style_keywords": ["swarm behavior simulation", "compress-explode-reform cycle", "scale reveal pull-back"],
+        "difficulty": "advanced",
+        "use_count": 640,
+        "like_count": 235,
+        "favorite_count": 132,
+    },
+    {
+        "prompt_text": (
+            "A single drop of water falls onto a vibrating speaker surface covered in cornstarch mixture, "
+            "creating concentric ripple patterns that interact with standing wave nodes. "
+            "The non-Newtonian fluid dances between liquid and solid states. "
+            "High-speed camera captures the moment of impact. Colored LED lighting from below."
+        ),
+        "display_name_en": "Cymatics Drop Impact",
+        "display_name_zh": "声波水滴冲击",
+        "description_en": "High-speed capture of a water drop hitting a vibrating non-Newtonian surface, cymatics patterns forming under colored LEDs",
+        "description_zh": "高速拍摄水滴击中振动非牛顿流体表面，声波图案在彩色LED底光下成形",
+        "category": "abstract",
+        "media_type": "video",
+        "tags": ["abstract", "cymatics", "high-speed", "non-newtonian", "vibration", "impact"],
+        "style_keywords": ["high-speed impact capture", "standing wave interaction", "LED underlighting"],
+        "difficulty": "advanced",
+        "use_count": 560,
+        "like_count": 208,
+        "favorite_count": 115,
+    },
+    {
+        "prompt_text": (
+            "A gradient color field that slowly morphs and breathes, transitioning from deep ocean blue "
+            "through emerald green to sunset orange over 10 seconds. The colors blend in organic, "
+            "cloud-like formations rather than linear gradients. Subtle grain texture overlays the "
+            "smooth color. Meditative and hypnotic in its simplicity."
+        ),
+        "display_name_en": "Breathing Color Field",
+        "display_name_zh": "呼吸色域",
+        "description_en": "Slowly morphing color field breathing from ocean blue through emerald to sunset orange in organic cloud formations",
+        "description_zh": "缓慢变幻的色域从深海蓝经翡翠绿到日落橙，以有机云状形态呼吸流动",
+        "category": "abstract",
+        "media_type": "video",
+        "tags": ["abstract", "color-field", "gradient", "meditative", "minimal", "breathing"],
+        "style_keywords": ["organic gradient morph", "cloud-form color blend", "meditative simplicity"],
+        "difficulty": "beginner",
+        "use_count": 940,
+        "like_count": 345,
+        "favorite_count": 195,
+    },
+    {
+        "prompt_text": (
+            "Macro footage of ice crystals forming on a glass surface in real time, fractal branches "
+            "extending outward from nucleation points. The camera holds still as the frost pattern "
+            "grows to fill the frame. Backlit from behind the glass, each crystal edge glows. "
+            "Time is slightly accelerated to make the growth visible."
+        ),
+        "display_name_en": "Frost Crystal Growth",
+        "display_name_zh": "霜晶生长",
+        "description_en": "Real-time macro of ice crystals branching across glass, backlit edges glowing, fractal pattern filling the frame",
+        "description_zh": "微距实时拍摄冰晶在玻璃上分枝生长，逆光边缘发光，分形图案逐渐填满画面",
+        "category": "abstract",
+        "media_type": "video",
+        "tags": ["abstract", "ice", "crystal", "macro", "growth", "fractal"],
+        "style_keywords": ["macro static growth", "backlit edge glow", "fractal branch expansion"],
+        "difficulty": "beginner",
+        "use_count": 830,
+        "like_count": 305,
+        "favorite_count": 172,
+    },
+    {
+        "prompt_text": (
+            "Two high-viscosity paint colors — electric blue and hot pink — colliding in mid-air "
+            "in extreme slow motion. The collision creates a mushroom-cloud shape as the paints merge "
+            "and spiral around each other. Individual paint ligaments stretch and snap. "
+            "Camera captures from the side, dark background, studio strobe frozen lighting."
+        ),
+        "display_name_en": "Paint Collision",
+        "display_name_zh": "颜料对撞",
+        "description_en": "Extreme slow-motion mid-air collision of blue and pink paint forming a mushroom cloud, ligaments stretching and snapping",
+        "description_zh": "极致慢动作蓝色与粉色颜料在空中对撞形成蘑菇云，颜料丝拉伸断裂",
+        "category": "abstract",
+        "media_type": "video",
+        "tags": ["abstract", "paint", "collision", "slow-motion", "color", "strobe"],
+        "style_keywords": ["mid-air collision capture", "mushroom cloud formation", "strobe freeze lighting"],
+        "difficulty": "advanced",
+        "use_count": 610,
+        "like_count": 225,
+        "favorite_count": 125,
+    },
+    {
+        "prompt_text": (
+            "A Möbius strip made of translucent material rotating slowly in space, "
+            "the camera following an ant-like particle traveling along its surface to demonstrate "
+            "the single-sided topology. Light refracts through the strip creating rainbow caustics "
+            "on the surrounding dark space. The strip breathes — slightly flexing as it turns."
+        ),
+        "display_name_en": "Möbius Light Loop",
+        "display_name_zh": "莫比乌斯光环",
+        "description_en": "Slowly rotating translucent Möbius strip with a particle tracing its surface, rainbow caustics refracting into dark space",
+        "description_zh": "半透明莫比乌斯带缓缓旋转，粒子沿单面拓扑行走，彩虹焦散投射到暗空间",
+        "category": "abstract",
+        "media_type": "video",
+        "tags": ["abstract", "mobius", "topology", "refraction", "rotation", "particle"],
+        "style_keywords": ["topology surface trace", "translucent caustic refraction", "breathing flex rotation"],
+        "difficulty": "intermediate",
+        "use_count": 690,
+        "like_count": 254,
+        "favorite_count": 142,
+    },
+    {
+        "prompt_text": (
+            "Soap film stretched across a wire frame, iridescent colors flowing and swirling "
+            "across the thin membrane as air currents disturb it. Camera in macro, the film "
+            "occupies the entire frame. Thickness variations create moving bands of color — "
+            "magenta, cyan, gold. The film thins at one edge, and a hole opens, "
+            "expanding rapidly as the film retracts and snaps."
+        ),
+        "display_name_en": "Soap Film Burst",
+        "display_name_zh": "皂膜虹彩破裂",
+        "description_en": "Macro view of iridescent soap film swirling with color bands, thinning at one edge, then rupturing and snapping shut",
+        "description_zh": "微距拍摄虹彩皂膜上色带流转，薄膜在一侧变薄后破裂，迅速收缩消失",
+        "category": "abstract",
+        "media_type": "video",
+        "tags": ["abstract", "soap-film", "iridescence", "macro", "burst", "thin-film"],
+        "style_keywords": ["full-frame macro film", "thin-film interference color", "rupture propagation"],
+        "difficulty": "intermediate",
+        "use_count": 750,
+        "like_count": 276,
+        "favorite_count": 154,
+    },
 ]
 
 
@@ -3383,17 +5000,12 @@ TEMPLATES: list[dict] = [
 # ═══════════════════════════════════════════════════════════════
 
 
-def _slugify(name: str) -> str:
-    """Convert display_name_en to a URL-friendly slug."""
-    import re
-
-    slug = name.lower().strip()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    return slug.strip("-")
-
-
 async def clear_templates(session) -> int:
-    """Delete all existing templates (cascades to likes/favorites/usages)."""
+    """Delete all existing templates (cascades to likes/favorites/usages).
+
+    WARNING: This destroys preview_image_url and engagement data.
+    Only use with --force-reset flag.
+    """
     result = await session.execute(delete(PromptTemplate))
     count = result.rowcount
     await session.flush()
@@ -3402,11 +5014,28 @@ async def clear_templates(session) -> int:
 
 
 async def seed_data(session) -> int:
-    """Insert 150 templates with pre-computed engagement metrics."""
+    """Incremental seed: only insert templates that don't already exist.
+
+    Uses display_name_en as the dedup key. Existing templates (and their
+    preview_image_url, engagement metrics, etc.) are preserved.
+    """
+    # Build set of existing display_name_en for fast lookup
+    result = await session.execute(
+        select(PromptTemplate.display_name_en).where(PromptTemplate.deleted_at.is_(None))
+    )
+    existing_names: set[str] = {row[0] for row in result.all()}
+    logger.info("Found %d existing templates in DB", len(existing_names))
+
     now = datetime.now(UTC)
     total = len(TEMPLATES)
+    inserted = 0
+    skipped = 0
 
     for i, tpl in enumerate(TEMPLATES):
+        if tpl["display_name_en"] in existing_names:
+            skipped += 1
+            continue
+
         tpl_data = dict(tpl)
 
         # Spread creation times over last 30 days
@@ -3433,118 +5062,22 @@ async def seed_data(session) -> int:
             created_at=created_at,
         )
         session.add(template)
+        inserted += 1
 
     await session.flush()
-    logger.info("Inserted %d templates", total)
-    return total
+    logger.info("Inserted %d new templates, skipped %d existing", inserted, skipped)
+    return inserted
 
 
-async def generate_preview_images(session) -> tuple[int, int]:
+async def generate_preview_images(session, *, delay: float = 5.0) -> tuple[int, int]:
     """Generate preview images for templates with NULL preview_image_url.
 
-    Returns (success_count, fail_count).
+    Delegates to the shared PreviewGenerator service (services/preview_generator.py).
     """
-    from services.providers.base import GenerationRequest as ProviderRequest
-    from services.providers.google import GoogleProvider
-    from services.storage import get_storage_manager
+    from services.preview_generator import PreviewGenerator
 
-    # Initialize Google provider
-    provider = GoogleProvider()
-    if not provider.is_available:
-        logger.error("Google provider not available — check GOOGLE_API_KEY")
-        return 0, 0
-
-    # Get storage manager (no user_id — shared/system storage)
-    storage = get_storage_manager()
-    if not storage.is_available:
-        logger.error("Storage not available — check storage configuration")
-        return 0, 0
-
-    # Query templates needing images
-    stmt = (
-        select(PromptTemplate)
-        .where(PromptTemplate.preview_image_url.is_(None))
-        .where(PromptTemplate.deleted_at.is_(None))
-        .order_by(PromptTemplate.created_at)
-    )
-    result = await session.execute(stmt)
-    templates = list(result.scalars().all())
-
-    if not templates:
-        logger.info("All templates already have preview images")
-        return 0, 0
-
-    total = len(templates)
-    success = 0
-    fail = 0
-
-    for i, tpl in enumerate(templates):
-        slug = _slugify(tpl.display_name_en)
-        category = tpl.category
-        key = f"templates/preview/{category}/{slug}.png"
-
-        print(f"[{i + 1}/{total}] Generating: {category}/{slug}...")
-
-        try:
-            # Build generation request
-            aspect_ratio = CATEGORY_ASPECT_RATIOS.get(category, "1:1")
-            request = ProviderRequest(
-                prompt=tpl.prompt_text,
-                aspect_ratio=aspect_ratio,
-                resolution="1K",
-                safety_level="moderate",
-            )
-
-            # Generate image
-            gen_result = await provider.generate(request)
-
-            if not gen_result.success or gen_result.image is None:
-                error = gen_result.error or "No image in result"
-                logger.warning("  SKIP [%s/%s]: %s", category, slug, error)
-                fail += 1
-                continue
-
-            # Save to storage with custom key
-            image = gen_result.image
-            buf = BytesIO()
-            image.save(buf, format="PNG")
-            image_bytes = buf.getvalue()
-
-            storage_obj = await storage.provider.save(
-                key=key,
-                data=image_bytes,
-                content_type="image/png",
-            )
-
-            # Get public URL
-            public_url = storage.provider.get_public_url(key)
-
-            # Update template in DB
-            await session.execute(
-                update(PromptTemplate)
-                .where(PromptTemplate.id == tpl.id)
-                .values(preview_image_url=public_url)
-            )
-            await session.flush()
-
-            success += 1
-            print(f"  OK -> {public_url}")
-
-            # Small delay to avoid rate limits
-            await asyncio.sleep(2)
-
-        except Exception as e:
-            logger.exception("  FAIL [%s/%s]: %s", category, slug, e)
-            fail += 1
-            continue
-
-    logger.info(
-        "Preview generation complete: %d success, %d failed out of %d",
-        success,
-        fail,
-        total,
-    )
-    return success, fail
+    generator = PreviewGenerator()
+    return await generator.run(session, delay=delay)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -3553,28 +5086,32 @@ async def generate_preview_images(session) -> tuple[int, int]:
 
 
 async def main(args) -> None:
-    """Main entry point with three execution modes."""
+    """Main entry point.
+
+    Default mode is incremental: insert only new templates, preserve existing data.
+    Use --force-reset to wipe and re-seed from scratch (destroys preview URLs!).
+    """
     await init_database()
 
     async for session in get_session():
         if not args.images_only:
-            # Clear + insert data
-            cleared = await clear_templates(session)
-            if cleared:
-                print(f"Cleared {cleared} existing templates.")
+            if args.force_reset:
+                cleared = await clear_templates(session)
+                if cleared:
+                    print(f"Force-reset: cleared {cleared} existing templates.")
 
             inserted = await seed_data(session)
-            print(f"Seeded {inserted} prompt templates successfully.")
+            print(f"Seeded {inserted} new prompt templates (incremental).")
 
         if not args.data_only:
             # Generate preview images
             print("\nStarting preview image generation...")
-            success, fail = await generate_preview_images(session)
+            success, fail = await generate_preview_images(session, delay=args.delay)
             print(f"\nPreview images: {success} generated, {fail} failed.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Seed 150 prompt templates")
+    parser = argparse.ArgumentParser(description="Seed prompt templates (image + video)")
     parser.add_argument(
         "--data-only",
         action="store_true",
@@ -3584,6 +5121,17 @@ if __name__ == "__main__":
         "--images-only",
         action="store_true",
         help="Only generate images for templates with NULL preview_image_url",
+    )
+    parser.add_argument(
+        "--force-reset",
+        action="store_true",
+        help="WARNING: Clear ALL templates before seeding (destroys preview URLs and engagement data)",
+    )
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=5.0,
+        help="Seconds between API requests (default 5, increase if rate-limited)",
     )
     args = parser.parse_args()
 

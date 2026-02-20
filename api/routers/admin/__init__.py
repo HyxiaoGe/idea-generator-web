@@ -11,6 +11,7 @@ from .moderation import router as moderation_router
 from .providers import router as providers_router
 from .quota import router as quota_router
 from .system import router as system_router
+from .tasks import router as tasks_router
 from .users import router as users_router
 
 # Main admin router
@@ -23,5 +24,6 @@ router.include_router(moderation_router)
 router.include_router(system_router)
 router.include_router(quota_router)
 router.include_router(announcements_router)
+router.include_router(tasks_router)
 
 __all__ = ["router"]

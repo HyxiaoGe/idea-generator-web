@@ -7,6 +7,7 @@ This is the main entry point for the Nano Banana Lab API.
 import logging
 from contextlib import asynccontextmanager
 
+from arq import create_pool
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -77,6 +78,16 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Database not configured, using file-based storage")
 
+    # Initialize ARQ task queue pool
+    try:
+        from api.workers import _parse_redis_settings
+
+        app.state.arq_pool = await create_pool(_parse_redis_settings())
+        logger.info("ARQ task queue pool initialized")
+    except Exception as e:
+        logger.warning("Failed to initialize ARQ pool (worker features disabled): %s", e)
+        app.state.arq_pool = None
+
     # Start WebSocket stale connection cleanup
     ws_manager = get_websocket_manager()
     await ws_manager.start_stale_cleanup()
@@ -91,6 +102,11 @@ async def lifespan(app: FastAPI):
 
     # Stop WebSocket cleanup
     await ws_manager.stop_stale_cleanup()
+
+    # Close ARQ pool
+    if getattr(app.state, "arq_pool", None) is not None:
+        await app.state.arq_pool.close()
+        logger.info("ARQ pool closed")
 
     # Close Redis
     await close_redis()

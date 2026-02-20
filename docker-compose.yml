@@ -17,7 +17,7 @@ services:
       - DATABASE_ENABLED=true
       - DATABASE_URL=postgresql+asyncpg://prompthub:prompthub_dev@host.docker.internal:5432/idea_generator
       # Google Gemini API
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_API_KEY=${PROVIDER_GOOGLE_API_KEY}
       # Auth Service
       - AUTH_ENABLED=${AUTH_ENABLED:-false}
       - AUTH_SERVICE_URL=http://host.docker.internal:8100
@@ -41,10 +41,19 @@ services:
     container_name: nano-banana-worker
     command: arq api.workers.WorkerSettings
     environment:
+      # Application
+      - ENVIRONMENT=production
+      - DEBUG=false
+      # Redis (host machine, DB 1 to avoid conflict)
       - REDIS_URL=redis://host.docker.internal:6379/1
+      # PostgreSQL
       - DATABASE_ENABLED=true
       - DATABASE_URL=postgresql+asyncpg://prompthub:prompthub_dev@host.docker.internal:5432/idea_generator
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      # Google Gemini API
+      - GOOGLE_API_KEY=${PROVIDER_GOOGLE_API_KEY}
+      # Storage (MinIO on host)
+      - MINIO_ENDPOINT=host.docker.internal:9000
+      - STORAGE_PUBLIC_URL=http://localhost:9000/idea-generator
     volumes:
       - ./outputs:/app/outputs
     restart: unless-stopped
