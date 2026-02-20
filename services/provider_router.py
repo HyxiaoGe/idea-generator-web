@@ -552,9 +552,13 @@ class ProviderRouter:
                 continue
 
             start_time = time.time()
+            timeout = self._settings.provider_timeout
 
             try:
-                result = await provider.generate(request, model_id=model_id)
+                result = await asyncio.wait_for(
+                    provider.generate(request, model_id=model_id),
+                    timeout=timeout,
+                )
                 latency = time.time() - start_time
 
                 if result.success:
@@ -598,6 +602,28 @@ class ProviderRouter:
                     # Don't fallback for non-retryable errors
                     if not result.retryable:
                         return result
+
+            except TimeoutError:
+                latency = time.time() - start_time
+                breaker.record_failure()
+                self._adaptive.update(
+                    provider_name,
+                    success=False,
+                    latency=latency,
+                    cost=0,
+                )
+                logger.warning(
+                    f"Provider {provider_name} timed out after {timeout}s, "
+                    f"moving to next fallback"
+                )
+
+                result = GenerationResult(
+                    success=False,
+                    error=f"Provider {provider_name} timed out after {timeout}s",
+                    provider=provider_name,
+                    model=model_id or "",
+                    retryable=True,
+                )
 
             except Exception as e:
                 latency = time.time() - start_time

@@ -115,6 +115,7 @@ class Settings(BaseSettings):
     enable_fallback: bool = True
     fallback_image_providers: list[str] = ["google", "openai", "bfl"]
     fallback_video_providers: list[str] = ["runway", "kling", "pika"]
+    provider_timeout: int = 15  # Max seconds per provider in fallback chain
 
     # ============ Storage Configuration ============
     # Backend: local, minio, oss

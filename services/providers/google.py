@@ -153,7 +153,7 @@ class GoogleProvider(BaseImageProvider):
     - Multi-turn chat-based image refinement
     """
 
-    RETRY_CONFIG = RetryConfig()
+    RETRY_CONFIG = RetryConfig(max_retries=1, retry_delays=[2])
 
     def __init__(self, config: ProviderConfig | None = None):
         """
