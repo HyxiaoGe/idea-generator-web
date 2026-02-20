@@ -213,7 +213,8 @@ def mock_redis_fixture(mock_redis):
             with patch("api.routers.chat.get_redis", get_mock_redis):
                 with patch("api.routers.quota.get_redis", get_mock_redis):
                     with patch("api.routers.tasks.get_redis", get_mock_redis):
-                        yield mock_redis
+                        with patch("services.generation_task.get_redis", get_mock_redis):
+                            yield mock_redis
 
 
 # ============ Mock Services ============

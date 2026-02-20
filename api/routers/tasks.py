@@ -43,6 +43,42 @@ async def cancel_task(
     user_id = _get_user_id(user)
     redis = await get_redis()
 
+    # --- Try single-image generation task (gen_ prefix) ---
+    if task_id.startswith("gen_"):
+        gen_key = f"task:{task_id}"
+        gen_data = await redis.hgetall(gen_key)
+
+        if not gen_data:
+            raise TaskNotFoundError()
+
+        task_user = gen_data.get("user_id", "")
+        if task_user != user_id:
+            raise ValidationError(message="You can only cancel your own tasks")
+
+        status = gen_data.get("status", "unknown")
+        if status in TERMINAL_STATUSES:
+            raise ValidationError(
+                message=f"Task is already {status} and cannot be cancelled",
+                details={"task_id": task_id, "status": status},
+            )
+
+        # Set cancelled flag for the background task to pick up
+        await redis.hset(gen_key, "cancelled", "1")
+
+        # Refund 1 quota point if task hasn't completed
+        refunded = 0
+        if status in {"queued", "generating", "switching_provider"}:
+            quota_service = get_quota_service(redis)
+            refunded = await quota_service.refund_quota(user_id, 1)
+
+        return TaskCancelResponse(
+            task_id=task_id,
+            task_type="generate",
+            previous_status=status,
+            refunded_count=refunded,
+            message=f"Task cancelled. {refunded} quota point(s) refunded.",
+        )
+
     # --- Try batch task (hash at task:{task_id}) ---
     batch_key = f"task:{task_id}"
     batch_data = await redis.hgetall(batch_key)

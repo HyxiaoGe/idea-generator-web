@@ -458,6 +458,26 @@ class WebSocketManager:
             },
         )
 
+    async def send_generate_error(
+        self,
+        user_id: str,
+        request_id: str,
+        error: str,
+        code: str | None = None,
+    ) -> int:
+        """Send generation error notification."""
+        return await self.send_to_user(
+            user_id,
+            {
+                "type": "generate:error",
+                "payload": {
+                    "request_id": request_id,
+                    "error": error,
+                    "code": code,
+                },
+            },
+        )
+
     # ============ Notifications ============
 
     async def send_notification(

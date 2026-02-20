@@ -123,6 +123,43 @@ class GenerateImageResponse(BaseModel):
     template_name: str | None = Field(None, description="Template name if used")
 
 
+class AsyncGenerateResponse(BaseModel):
+    """Response returned by POST /api/generate in async mode."""
+
+    task_id: str = Field(..., description="Task ID for tracking progress")
+    status: str = Field(default="queued", description="Current task status")
+    message: str = Field(default="Generation task queued", description="Status message")
+
+
+class GenerateTaskProgress(BaseModel):
+    """Unified progress response for any generation task (single or batch)."""
+
+    task_id: str = Field(..., description="Task ID")
+    task_type: str = Field(..., description="Task type: 'single' or 'batch'")
+    status: str = Field(..., description="Task status")
+    progress: float = Field(
+        default=0.0, description="Progress (0.0-1.0 for single, count/total for batch)"
+    )
+    # Single-image fields
+    stage: str | None = Field(
+        None, description="Current stage (generating, switching_provider, etc)"
+    )
+    provider: str | None = Field(None, description="Current/final provider name")
+    result: GenerateImageResponse | None = Field(
+        None, description="Final result (single-image only)"
+    )
+    # Batch fields
+    total: int | None = Field(None, description="Total count (batch only)")
+    current_prompt: str | None = Field(None, description="Currently processing prompt (batch only)")
+    results: list[GeneratedImage] | None = Field(None, description="Completed results (batch only)")
+    errors: list[str] | None = Field(None, description="Error list (batch only)")
+    # Common
+    error: str | None = Field(None, description="Error message if failed")
+    error_code: str | None = Field(None, description="Error code if failed")
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
 class BatchGenerateRequest(BaseModel):
     """Request for batch image generation."""
 

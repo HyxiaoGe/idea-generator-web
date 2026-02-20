@@ -116,6 +116,9 @@ class Settings(BaseSettings):
     fallback_image_providers: list[str] = ["google", "openai", "bfl"]
     fallback_video_providers: list[str] = ["runway", "kling", "pika"]
     provider_timeout: int = 15  # Max seconds per provider in fallback chain
+    provider_soft_timeout: int = 20  # Seconds before starting first fallback in race mode
+    provider_stagger_interval: int = 5  # Seconds between launching successive fallback providers
+    generation_overall_timeout: int = 60  # Hard limit for the entire generation task
 
     # ============ Storage Configuration ============
     # Backend: local, minio, oss

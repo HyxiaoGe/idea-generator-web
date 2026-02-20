@@ -70,6 +70,7 @@ from .favorites import (
 )
 from .generate import (
     AspectRatio,
+    AsyncGenerateResponse,
     BatchGenerateRequest,
     BatchGenerateResponse,
     BlendImagesRequest,
@@ -77,6 +78,7 @@ from .generate import (
     GeneratedImage,
     GenerateImageRequest,
     GenerateImageResponse,
+    GenerateTaskProgress,
     GenerationMode,
     GenerationSettings,
     Resolution,
@@ -248,6 +250,8 @@ __all__ = [
     "StyleTransferRequest",
     "SearchGenerateRequest",
     "CostEstimate",
+    "AsyncGenerateResponse",
+    "GenerateTaskProgress",
     # Quota
     "QuotaStatusResponse",
     "QuotaCheckRequest",

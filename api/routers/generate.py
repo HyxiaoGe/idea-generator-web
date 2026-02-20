@@ -10,23 +10,25 @@ Endpoints:
 - POST /api/generate/search - Search-grounded generation
 """
 
+import json
 import logging
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query
 
 from api.dependencies import get_image_repository, get_quota_repository, get_template_repository
 from api.schemas.generate import (
+    AsyncGenerateResponse,
     BatchGenerateRequest,
     BatchGenerateResponse,
     GeneratedImage,
     GenerateImageRequest,
     GenerateImageResponse,
+    GenerateTaskProgress,
     GenerationMode,
     GenerationSettings,
     SearchGenerateRequest,
-    TaskProgress,
 )
 from core.auth import AppUser, get_current_user
 from core.config import get_settings
@@ -132,9 +134,11 @@ def build_provider_request(
 # ============ Endpoints ============
 
 
-@router.post("", response_model=GenerateImageResponse)
+@router.post("")
 async def generate_image(
     request: GenerateImageRequest,
+    background_tasks: BackgroundTasks,
+    sync: bool = Query(False, description="If true, run synchronously and return full result"),
     user: AppUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
@@ -143,16 +147,17 @@ async def generate_image(
     x_provider: str | None = Header(None, alias="X-Provider"),
     x_model: str | None = Header(None, alias="X-Model"),
     x_routing_strategy: str | None = Header(None, alias="X-Routing-Strategy"),  # noqa: ARG001
-):
+) -> GenerateImageResponse | AsyncGenerateResponse:
     """
     Generate a single image from a text prompt.
+
+    By default runs asynchronously (returns task_id for polling).
+    Pass ?sync=true for synchronous mode (blocks until complete).
 
     Supports multi-provider routing via headers:
     - X-Provider: Specify provider (google, openai, bfl, stability)
     - X-Model: Specify model ID
     - X-Routing-Strategy: Override routing (priority, cost, quality, speed)
-
-    Returns the generated image info and metadata.
     """
     user_id = get_user_id_from_user(user)
 
@@ -219,19 +224,112 @@ async def generate_image(
         negative_prompt=negative_prompt,
     )
 
-    # Use multi-provider router
+    # Route to determine primary provider and fallbacks
     router_instance = get_provider_router()
 
     try:
-        # Route and execute with fallback
-        result = await router_instance.execute_with_fallback(
+        decision = await router_instance.route(
             request=provider_request,
             media_type=MediaType.IMAGE,
         )
     except ValueError as e:
-        # No providers available
+        logger.warning(f"No providers available: {e}")
+        raise GenerationError(message="No providers available")
+
+    # ── sync path ──────────────────────────────────────────────────
+    if sync:
+        return await _generate_sync(
+            request=request,
+            provider_request=provider_request,
+            decision=decision,
+            router_instance=router_instance,
+            user_id=user_id,
+            user=user,
+            preset_used=preset_used,
+            processed=processed,
+            negative_prompt=negative_prompt,
+            image_repo=image_repo,
+            quota_repo=quota_repo,
+            x_api_key=x_api_key,
+        )
+
+    # ── async path (default) ──────────────────────────────────────
+    task_id = f"gen_{uuid.uuid4().hex[:12]}"
+
+    redis = await get_redis()
+    task_key = f"task:{task_id}"
+    settings_dict = {
+        "aspect_ratio": request.settings.aspect_ratio.value,
+        "resolution": request.settings.resolution.value,
+        "safety_level": request.settings.safety_level.value,
+    }
+    await redis.hset(
+        task_key,
+        mapping={
+            "status": "queued",
+            "stage": "queued",
+            "progress": "0",
+            "user_id": user_id,
+            "prompt": request.prompt,
+            "processed_prompt": final_prompt if processed else "",
+            "negative_prompt": negative_prompt or "",
+            "request_json": json.dumps(settings_dict),
+            "created_at": datetime.now().isoformat(),
+        },
+    )
+    await redis.expire(task_key, 86400)  # 24h TTL
+
+    from services.generation_task import execute_generation_race
+
+    background_tasks.add_task(
+        execute_generation_race,
+        task_id=task_id,
+        request=provider_request,
+        original_prompt=request.prompt,
+        processed_prompt=processed.final if processed else None,
+        negative_prompt=negative_prompt,
+        settings_dict=settings_dict,
+        user_id=user_id,
+        primary_provider=decision.provider_name,
+        primary_model=decision.model_id,
+        fallback_names=decision.fallback_providers or [],
+        preset_used=preset_used,
+        template_used=processed.template_used if processed else False,
+        was_translated=processed.was_translated if processed else False,
+        was_enhanced=processed.was_enhanced if processed else False,
+        template_name=processed.template_name if processed else None,
+    )
+
+    return AsyncGenerateResponse(
+        task_id=task_id,
+        status="queued",
+        message="Generation task queued",
+    )
+
+
+async def _generate_sync(
+    request: GenerateImageRequest,
+    provider_request: ProviderRequest,
+    decision,
+    router_instance,
+    user_id: str,
+    user: AppUser | None,
+    preset_used: str | None,
+    processed,
+    negative_prompt: str | None,
+    image_repo: ImageRepository | None,
+    quota_repo: QuotaRepository | None,
+    x_api_key: str | None,
+) -> GenerateImageResponse:
+    """Synchronous generation path — keeps the original blocking behavior."""
+    try:
+        result = await router_instance.execute_with_fallback(
+            request=provider_request,
+            decision=decision,
+            media_type=MediaType.IMAGE,
+        )
+    except ValueError as e:
         logger.warning(f"No providers available, falling back to legacy: {e}")
-        # Fallback to legacy generator
         generator = create_generator(x_api_key)
         legacy_result = generator.generate(
             prompt=request.prompt,
@@ -240,7 +338,6 @@ async def generate_image(
             enable_thinking=request.include_thinking,
             safety_level=request.settings.safety_level.value,
         )
-        # Convert legacy result
         result = type(
             "Result",
             (),
@@ -303,11 +400,10 @@ async def generate_image(
                 generation_duration_ms=int(result.duration * 1000) if result.duration else None,
                 text_response=result.text_response,
                 thinking=result.thinking,
-                user_id=None,  # TODO: Get user UUID from authenticated user
+                user_id=None,
             )
         except Exception as e:
             logger.warning(f"Failed to save image to database: {e}")
-            # Continue - file storage is the primary storage
 
     # Record quota usage to PostgreSQL if available
     if quota_repo:
@@ -350,12 +446,10 @@ async def generate_image(
         mode=GenerationMode.BASIC,
         settings=request.settings,
         created_at=datetime.now(),
-        # Provider info
         provider=result.provider,
         model=result.model,
         model_display_name=model_display_name,
         quality_preset=preset_used,
-        # Prompt pipeline
         processed_prompt=processed.final if processed else None,
         negative_prompt=negative_prompt,
         template_used=processed.template_used if processed else False,
@@ -524,27 +618,61 @@ async def process_batch_generation(
     await redis.hdel(task_key, "current_prompt")
 
 
-@router.get("/task/{task_id}", response_model=TaskProgress)
+@router.get("/task/{task_id}", response_model=GenerateTaskProgress)
 async def get_task_progress(task_id: str):
-    """Get progress of a batch generation task."""
-    import json
-
+    """Get progress of a generation task (single or batch)."""
     redis = await get_redis()
     task_key = f"task:{task_id}"
 
     task_data = await redis.hgetall(task_key)
-
     if not task_data:
         raise TaskNotFoundError()
 
+    if task_id.startswith("gen_"):
+        return _build_single_progress(task_id, task_data)
+    else:
+        return _build_batch_progress(task_id, task_data)
+
+
+def _build_single_progress(task_id: str, task_data: dict) -> GenerateTaskProgress:
+    """Build unified progress response for a single-image task."""
+    result = None
+    result_json = task_data.get("result_json")
+    if result_json:
+        result = GenerateImageResponse(**json.loads(result_json))
+
+    return GenerateTaskProgress(
+        task_id=task_id,
+        task_type="single",
+        status=task_data.get("status", "unknown"),
+        progress=float(task_data.get("progress", 0)),
+        stage=task_data.get("stage"),
+        provider=task_data.get("provider"),
+        result=result,
+        error=task_data.get("error"),
+        error_code=task_data.get("error_code") or None,
+        started_at=datetime.fromisoformat(task_data["started_at"])
+        if "started_at" in task_data
+        else None,
+        completed_at=datetime.fromisoformat(task_data["completed_at"])
+        if "completed_at" in task_data
+        else None,
+    )
+
+
+def _build_batch_progress(task_id: str, task_data: dict) -> GenerateTaskProgress:
+    """Build unified progress response for a batch task."""
     results = json.loads(task_data.get("results", "[]"))
     errors = json.loads(task_data.get("errors", "[]"))
+    total = int(task_data.get("total", 0))
+    progress = int(task_data.get("progress", 0))
 
-    return TaskProgress(
+    return GenerateTaskProgress(
         task_id=task_id,
+        task_type="batch",
         status=task_data.get("status", "unknown"),
-        progress=int(task_data.get("progress", 0)),
-        total=int(task_data.get("total", 0)),
+        progress=float(progress),
+        total=total,
         current_prompt=task_data.get("current_prompt"),
         results=[GeneratedImage(**r) for r in results],
         errors=errors,

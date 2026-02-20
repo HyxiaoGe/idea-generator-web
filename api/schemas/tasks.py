@@ -9,7 +9,7 @@ class TaskCancelResponse(BaseModel):
     """Response for task cancellation."""
 
     task_id: str
-    task_type: str  # "batch" or "video"
+    task_type: str  # "generate", "batch", or "video"
     previous_status: str
     refunded_count: int
     message: str
