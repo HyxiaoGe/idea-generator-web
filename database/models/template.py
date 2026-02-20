@@ -50,6 +50,11 @@ class PromptTemplate(Base, TimestampMixin):
             "use_count",
             postgresql_where=text("deleted_at IS NULL AND is_active = TRUE"),
         ),
+        Index(
+            "ix_prompt_templates_media_type",
+            "media_type",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
 
     # Primary key
@@ -96,6 +101,9 @@ class PromptTemplate(Base, TimestampMixin):
     difficulty: Mapped[str] = mapped_column(String(20), default="beginner", nullable=False)
     language: Mapped[str] = mapped_column(String(10), default="bilingual", nullable=False)
     source: Mapped[str] = mapped_column(String(20), default="curated", nullable=False)
+    media_type: Mapped[str] = mapped_column(
+        String(20), default="image", server_default=text("'image'"), nullable=False
+    )
 
     # Engagement metrics
     use_count: Mapped[int] = mapped_column(

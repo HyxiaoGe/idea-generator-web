@@ -4,7 +4,7 @@ Template repository for the prompt template library.
 Provides data access for PromptTemplate, likes, favorites, and usage tracking.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import delete, func, select, update
@@ -49,6 +49,7 @@ class TemplateRepository:
         style_keywords: list[str] | None = None,
         parameters: dict | None = None,
         difficulty: str = "beginner",
+        media_type: str = "image",
         language: str = "bilingual",
         source: str = "curated",
         created_by: UUID | None = None,
@@ -66,6 +67,7 @@ class TemplateRepository:
             style_keywords=style_keywords or [],
             parameters=parameters or {},
             difficulty=difficulty,
+            media_type=media_type,
             language=language,
             source=source,
             created_by=created_by,
@@ -97,7 +99,7 @@ class TemplateRepository:
         if not template:
             return False
 
-        template.deleted_at = datetime.now(datetime.UTC)
+        template.deleted_at = datetime.now(UTC)
         await self.session.flush()
         return True
 
@@ -110,6 +112,7 @@ class TemplateRepository:
         category: str | None = None,
         tags: list[str] | None = None,
         difficulty: str | None = None,
+        media_type: str | None = None,
         search: str | None = None,
         sort_by: str = "trending",
         limit: int = 20,
@@ -129,6 +132,9 @@ class TemplateRepository:
 
         if difficulty:
             query = query.where(PromptTemplate.difficulty == difficulty)
+
+        if media_type:
+            query = query.where(PromptTemplate.media_type == media_type)
 
         if search:
             pattern = f"%{search}%"
@@ -424,9 +430,9 @@ class TemplateRepository:
         created_at: datetime,
     ) -> float:
         """Compute trending score: (like*3 + use*1 + fav*2) / (hours + 2)^1.5"""
-        now = datetime.now(datetime.UTC)
+        now = datetime.now(UTC)
         if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=datetime.UTC)
+            created_at = created_at.replace(tzinfo=UTC)
         hours = (now - created_at).total_seconds() / 3600
         numerator = like_count * 3 + use_count * 1 + favorite_count * 2
         denominator = (hours + 2) ** 1.5

@@ -23,6 +23,7 @@ class TemplateListItem(BaseModel):
     category: str
     tags: list[str] = Field(default_factory=list)
     difficulty: str
+    media_type: str = "image"
     use_count: int
     like_count: int
     favorite_count: int
@@ -48,6 +49,7 @@ class TemplateDetailResponse(BaseModel):
     style_keywords: list[str] = Field(default_factory=list)
     parameters: dict = Field(default_factory=dict)
     difficulty: str
+    media_type: str = "image"
     language: str
     source: str
     use_count: int
@@ -85,6 +87,7 @@ class TemplateCreateRequest(BaseModel):
     style_keywords: list[str] = Field(default_factory=list)
     parameters: dict = Field(default_factory=dict)
     difficulty: str = "beginner"
+    media_type: str = "image"
     language: str = "bilingual"
     source: str = "curated"
 
@@ -103,6 +106,7 @@ class TemplateUpdateRequest(BaseModel):
     style_keywords: list[str] | None = None
     parameters: dict | None = None
     difficulty: str | None = None
+    media_type: str | None = None
     language: str | None = None
     source: str | None = None
     is_active: bool | None = None

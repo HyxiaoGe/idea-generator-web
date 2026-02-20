@@ -334,6 +334,7 @@ class TemplateGenerator:
                         tags=tags,
                         style_keywords=style_keywords,
                         difficulty=tpl_data.get("difficulty", "intermediate"),
+                        media_type="image",
                         language="bilingual",
                         source="ai_generated",
                     )
@@ -478,6 +479,7 @@ class TemplateGenerator:
                 tags=tags,
                 style_keywords=style_keywords,
                 difficulty=template.difficulty,
+                media_type="image",
                 language="bilingual",
                 source="ai_generated",
             )
