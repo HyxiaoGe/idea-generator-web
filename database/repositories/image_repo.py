@@ -84,6 +84,7 @@ class ImageRepository:
         limit: int = 20,
         offset: int = 0,
         mode: str | None = None,
+        media_type: str | None = None,
         search: str | None = None,
     ) -> list[GeneratedImage]:
         """
@@ -94,12 +95,16 @@ class ImageRepository:
             limit: Max number of results
             offset: Number of results to skip
             mode: Filter by generation mode
+            media_type: Filter by media type (image or video)
             search: Search in prompt text
         """
         query = select(GeneratedImage).where(GeneratedImage.user_id == user_id)
 
         if mode:
             query = query.where(GeneratedImage.mode == mode)
+
+        if media_type:
+            query = query.where(GeneratedImage.media_type == media_type)
 
         if search:
             query = query.where(GeneratedImage.prompt.ilike(f"%{search}%"))
@@ -114,6 +119,7 @@ class ImageRepository:
         self,
         user_id: UUID | None,
         mode: str | None = None,
+        media_type: str | None = None,
         search: str | None = None,
     ) -> int:
         """Count images for a user with optional filtering."""
@@ -122,6 +128,9 @@ class ImageRepository:
 
         if mode:
             query = query.where(GeneratedImage.mode == mode)
+
+        if media_type:
+            query = query.where(GeneratedImage.media_type == media_type)
 
         if search:
             query = query.where(GeneratedImage.prompt.ilike(f"%{search}%"))

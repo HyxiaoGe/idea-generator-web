@@ -143,13 +143,14 @@ async def list_templates(
 
 @router.get("/categories", response_model=list[CategoryItem])
 async def get_categories(
+    media_type: str | None = Query(default=None),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
 ):
     """Get all categories with template counts."""
     if not template_repo:
         return []
 
-    rows = await template_repo.get_categories_with_count()
+    rows = await template_repo.get_categories_with_count(media_type=media_type)
     return [CategoryItem(category=cat, count=cnt) for cat, cnt in rows]
 
 
@@ -157,6 +158,7 @@ async def get_categories(
 async def get_user_favorites(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    media_type: str | None = Query(default=None),
     user_id: UUID | None = Depends(ensure_db_user),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
 ):
@@ -166,6 +168,7 @@ async def get_user_favorites(
 
     templates, total = await template_repo.get_user_favorites(
         user_id=user_id,
+        media_type=media_type,
         limit=page_size,
         offset=(page - 1) * page_size,
     )
@@ -182,6 +185,7 @@ async def get_user_favorites(
 async def get_recommendations(
     based_on: str | None = Query(default=None, description="Template ID to base on"),
     tags: str | None = Query(default=None, description="Comma-separated tags"),
+    media_type: str | None = Query(default=None),
     limit: int = Query(default=10, ge=1, le=50),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
 ):
@@ -201,6 +205,7 @@ async def get_recommendations(
     templates = await template_repo.get_recommendations(
         based_on=based_on_uuid,
         tags=tag_list,
+        media_type=media_type,
         limit=limit,
     )
     return [template_to_list_item(t) for t in templates]

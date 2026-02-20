@@ -112,6 +112,13 @@ class GeneratedImage(Base):
         default="image/png",
         nullable=False,
     )
+    media_type: Mapped[str] = mapped_column(
+        String(20),
+        default="image",
+        server_default="image",
+        nullable=False,
+        index=True,
+    )
 
     # Performance data
     generation_duration_ms: Mapped[int | None] = mapped_column(

@@ -92,6 +92,7 @@ def record_to_history_item(record: dict, user_id: str | None = None) -> HistoryI
         text_response=record.get("text_response"),
         thinking=record.get("thinking"),
         session_id=record.get("session_id"),
+        media_type=record.get("media_type", "image"),
         provider=record.get("provider") or settings_data.get("provider"),
         model=record.get("model") or settings_data.get("model"),
     )
@@ -117,6 +118,7 @@ def db_image_to_history_item(image: GeneratedImage) -> HistoryItem:
         text_response=image.text_response,
         thinking=image.thinking,
         session_id=str(image.chat_session_id) if image.chat_session_id else None,
+        media_type=image.media_type,
         provider=image.provider,
         model=image.model,
     )
@@ -130,6 +132,7 @@ async def list_history(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     mode: str | None = Query(default=None),
+    media_type: str | None = Query(default=None),
     search: str | None = Query(default=None),
     sort: str = Query(default="newest"),
     user: AppUser | None = Depends(get_current_user),
@@ -155,6 +158,7 @@ async def list_history(
                 limit=limit + 1,  # +1 to check has_more
                 offset=offset,
                 mode=mode,
+                media_type=media_type,
                 search=search,
             )
 
@@ -165,6 +169,7 @@ async def list_history(
             total = await image_repo.count_by_user(
                 user_id=db_user_id,
                 mode=mode,
+                media_type=media_type,
                 search=search,
             )
 
@@ -194,6 +199,8 @@ async def list_history(
     # Apply filters
     if mode:
         all_items = [r for r in all_items if r.get("mode") == mode]
+    if media_type:
+        all_items = [r for r in all_items if r.get("media_type", "image") == media_type]
     if search:
         search_lower = search.lower()
         all_items = [r for r in all_items if search_lower in r.get("prompt", "").lower()]

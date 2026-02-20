@@ -169,7 +169,9 @@ class TemplateRepository:
     # Categories
     # ------------------------------------------------------------------
 
-    async def get_categories_with_count(self) -> list[tuple[str, int]]:
+    async def get_categories_with_count(
+        self, media_type: str | None = None
+    ) -> list[tuple[str, int]]:
         """Get all categories with their active template counts."""
         query = (
             select(PromptTemplate.category, func.count().label("count"))
@@ -180,6 +182,8 @@ class TemplateRepository:
             .group_by(PromptTemplate.category)
             .order_by(func.count().desc())
         )
+        if media_type:
+            query = query.where(PromptTemplate.media_type == media_type)
         result = await self.session.execute(query)
         return [(row[0], row[1]) for row in result.all()]
 
@@ -304,6 +308,7 @@ class TemplateRepository:
     async def get_user_favorites(
         self,
         user_id: UUID,
+        media_type: str | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> tuple[list[PromptTemplate], int]:
@@ -319,6 +324,8 @@ class TemplateRepository:
                 PromptTemplate.deleted_at.is_(None),
             )
         )
+        if media_type:
+            query = query.where(PromptTemplate.media_type == media_type)
 
         count_query = select(func.count()).select_from(query.subquery())
         total = await self.session.scalar(count_query) or 0
@@ -338,6 +345,7 @@ class TemplateRepository:
         self,
         based_on: UUID | None = None,
         tags: list[str] | None = None,
+        media_type: str | None = None,
         limit: int = 10,
     ) -> list[PromptTemplate]:
         """Get recommended templates based on tags or a source template."""
@@ -368,6 +376,8 @@ class TemplateRepository:
                 .order_by(PromptTemplate.trending_score.desc())
                 .limit(limit)
             )
+            if media_type:
+                query = query.where(PromptTemplate.media_type == media_type)
             result = await self.session.execute(query)
             return list(result.scalars().all())
 
@@ -384,6 +394,9 @@ class TemplateRepository:
 
         if based_on:
             query = query.where(PromptTemplate.id != based_on)
+
+        if media_type:
+            query = query.where(PromptTemplate.media_type == media_type)
 
         result = await self.session.execute(query)
         return list(result.scalars().all())

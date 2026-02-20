@@ -29,6 +29,7 @@ class HistoryItem(BaseModel):
     text_response: str | None = Field(None, description="Model text response")
     thinking: str | None = Field(None, description="Model thinking process")
     session_id: str | None = Field(None, description="Chat session ID if from chat")
+    media_type: str = Field(default="image", description="Media type: image or video")
     provider: str | None = Field(None, description="Provider used (google, openai, bfl, etc)")
     model: str | None = Field(None, description="Model ID used")
 
