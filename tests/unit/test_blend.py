@@ -71,13 +71,13 @@ class TestBlendValidation:
 
     def test_missing_image_keys(self, client):
         """Blend request without image_keys returns 422."""
-        response = client.post("/api/generate/blend", json={})
+        response = client.post("/api/generate/blend?sync=true", json={})
         assert response.status_code == 422
 
     def test_too_few_image_keys(self, client):
         """Blend request with only 1 image key returns 422."""
         response = client.post(
-            "/api/generate/blend",
+            "/api/generate/blend?sync=true",
             json={"image_keys": ["only_one"]},
         )
         assert response.status_code == 422
@@ -85,7 +85,7 @@ class TestBlendValidation:
     def test_too_many_image_keys(self, client):
         """Blend request with more than 4 image keys returns 422."""
         response = client.post(
-            "/api/generate/blend",
+            "/api/generate/blend?sync=true",
             json={"image_keys": ["k1", "k2", "k3", "k4", "k5"]},
         )
         assert response.status_code == 422
@@ -106,7 +106,7 @@ class TestBlendSuccess:
 
         with _patch_blend_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/blend",
+                "/api/generate/blend?sync=true",
                 json=_make_blend_request(),
             )
 
@@ -134,7 +134,7 @@ class TestBlendSuccess:
 
         with _patch_blend_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/blend",
+                "/api/generate/blend?sync=true",
                 json=_make_blend_request(blend_prompt="Merge into a sunset scene"),
             )
 
@@ -153,7 +153,7 @@ class TestBlendSuccess:
 
         with _patch_blend_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/blend",
+                "/api/generate/blend?sync=true",
                 json=_make_blend_request(image_keys=["a", "b", "c", "d"]),
             )
 
@@ -172,7 +172,7 @@ class TestBlendSuccess:
 
         with _patch_blend_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/blend",
+                "/api/generate/blend?sync=true",
                 json=_make_blend_request(),
             )
 
@@ -208,7 +208,7 @@ class TestBlendSuccess:
         try:
             with _patch_blend_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
                 response = client.post(
-                    "/api/generate/blend",
+                    "/api/generate/blend?sync=true",
                     json=_make_blend_request(),
                 )
 
@@ -239,7 +239,7 @@ class TestBlendErrors:
 
         with _patch_blend_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/blend",
+                "/api/generate/blend?sync=true",
                 json=_make_blend_request(image_keys=["exists", "missing"]),
             )
 
@@ -258,7 +258,7 @@ class TestBlendErrors:
 
         with _patch_blend_deps(mock_redis, quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/blend",
+                "/api/generate/blend?sync=true",
                 json=_make_blend_request(),
             )
 
@@ -277,7 +277,7 @@ class TestBlendErrors:
 
         with _patch_blend_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/blend",
+                "/api/generate/blend?sync=true",
                 json=_make_blend_request(),
             )
 
@@ -294,7 +294,7 @@ class TestBlendErrors:
 
         with _patch_blend_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/blend",
+                "/api/generate/blend?sync=true",
                 json=_make_blend_request(),
             )
 
@@ -313,7 +313,7 @@ class TestBlendErrors:
 
         with _patch_blend_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/blend",
+                "/api/generate/blend?sync=true",
                 json=_make_blend_request(),
             )
 

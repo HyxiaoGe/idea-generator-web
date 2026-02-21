@@ -699,9 +699,11 @@ def _build_batch_progress(task_id: str, task_data: dict) -> GenerateTaskProgress
     )
 
 
-@router.post("/search", response_model=GenerateImageResponse)
+@router.post("/search")
 async def search_grounded_generate(
     request: SearchGenerateRequest,
+    background_tasks: BackgroundTasks,
+    sync: bool = Query(False, description="If true, run synchronously and return full result"),
     user: AppUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     template_repo: TemplateRepository | None = Depends(get_template_repository),
@@ -709,9 +711,12 @@ async def search_grounded_generate(
     x_api_key: str | None = Header(None, alias="X-API-Key"),
     x_provider: str | None = Header(None, alias="X-Provider"),
     x_model: str | None = Header(None, alias="X-Model"),
-):
+) -> GenerateImageResponse | AsyncGenerateResponse:
     """
     Generate an image with search grounding.
+
+    By default runs asynchronously (returns task_id for polling).
+    Pass ?sync=true for synchronous mode (blocks until complete).
 
     Uses real-time search data to inform generation.
     Note: Search grounding is currently only supported by Google Gemini.
@@ -768,13 +773,100 @@ async def search_grounded_generate(
             search_effective_model = p_model
         search_preset_used = preset_str
 
+    # ── sync path ──────────────────────────────────────────────────
+    if sync:
+        return await _search_sync(
+            request=request,
+            final_prompt=final_prompt,
+            negative_prompt=negative_prompt,
+            processed=processed,
+            effective_provider=search_effective_provider,
+            effective_model=search_effective_model,
+            preset_used=search_preset_used,
+            user_id=user_id,
+            user=user,
+            image_repo=image_repo,
+            quota_repo=quota_repo,
+            x_api_key=x_api_key,
+        )
+
+    # ── async path (default) ──────────────────────────────────────
+    task_id = f"gen_{uuid.uuid4().hex[:12]}"
+    settings_dict = {
+        "aspect_ratio": request.settings.aspect_ratio.value,
+        "resolution": request.settings.resolution.value,
+        "safety_level": request.settings.safety_level.value,
+    }
+
+    redis = await get_redis()
+    task_key = f"task:{task_id}"
+    await redis.hset(
+        task_key,
+        mapping={
+            "status": "queued",
+            "stage": "queued",
+            "progress": "0",
+            "user_id": user_id,
+            "prompt": request.prompt,
+            "processed_prompt": final_prompt if processed else "",
+            "negative_prompt": negative_prompt or "",
+            "request_json": json.dumps(settings_dict),
+            "created_at": datetime.now().isoformat(),
+        },
+    )
+    await redis.expire(task_key, 86400)
+
+    from services.image_task import execute_image_task
+
+    background_tasks.add_task(
+        execute_image_task,
+        task_id=task_id,
+        mode="search",
+        user_id=user_id,
+        prompt=final_prompt,
+        settings_dict=settings_dict,
+        task_spec={
+            "preferred_provider": search_effective_provider,
+            "preferred_model": search_effective_model,
+            "negative_prompt": negative_prompt,
+            "quality_preset": search_preset_used,
+            "processed_prompt": processed.final if processed else None,
+            "template_used": processed.template_used if processed else False,
+            "was_translated": processed.was_translated if processed else False,
+            "was_enhanced": processed.was_enhanced if processed else False,
+            "template_name": processed.template_name if processed else None,
+        },
+    )
+
+    return AsyncGenerateResponse(
+        task_id=task_id,
+        status="queued",
+        message="Search generation task queued",
+    )
+
+
+async def _search_sync(
+    request: SearchGenerateRequest,
+    final_prompt: str,
+    negative_prompt: str | None,
+    processed,
+    effective_provider: str,
+    effective_model: str | None,
+    preset_used: str | None,
+    user_id: str,
+    user: AppUser | None,
+    image_repo: ImageRepository | None,
+    quota_repo: QuotaRepository | None,
+    x_api_key: str | None,
+) -> GenerateImageResponse:
+    """Synchronous search generation — keeps the original blocking behavior."""
     # Build provider request with search enabled
     provider_request = build_provider_request(
         prompt=final_prompt,
         settings=request.settings,
         user_id=user_id,
-        preferred_provider=search_effective_provider,
-        preferred_model=search_effective_model,
+        preferred_provider=effective_provider,
+        preferred_model=effective_model,
         enable_search=True,
         negative_prompt=negative_prompt,
     )
@@ -857,7 +949,7 @@ async def search_grounded_generate(
                 height=result.image.height,
                 generation_duration_ms=int(result.duration * 1000) if result.duration else None,
                 text_response=result.text_response,
-                user_id=None,  # TODO: Get user UUID from authenticated user
+                user_id=None,
             )
         except Exception as e:
             logger.warning(f"Failed to save image to database: {e}")
@@ -906,8 +998,7 @@ async def search_grounded_generate(
         provider=result.provider,
         model=result.model,
         model_display_name=search_model_display_name,
-        quality_preset=search_preset_used,
-        # Prompt pipeline
+        quality_preset=preset_used,
         processed_prompt=processed.final if processed else None,
         negative_prompt=negative_prompt,
         template_used=processed.template_used if processed else False,
@@ -917,15 +1008,20 @@ async def search_grounded_generate(
     )
 
 
-@router.post("/blend", response_model=GenerateImageResponse)
+@router.post("/blend")
 async def blend_images(
     request: BlendImagesRequest,
+    background_tasks: BackgroundTasks,
+    sync: bool = Query(False, description="If true, run synchronously and return full result"),
     user: AppUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     quota_repo: QuotaRepository | None = Depends(get_quota_repository),
-):
+) -> GenerateImageResponse | AsyncGenerateResponse:
     """
     Blend 2-4 existing images together with an optional prompt.
+
+    By default runs asynchronously (returns task_id for polling).
+    Pass ?sync=true for synchronous mode (blocks until complete).
 
     Takes image storage keys, loads them, and uses Google Gemini to blend them.
     """
@@ -934,7 +1030,71 @@ async def blend_images(
     # Check quota
     await check_quota_and_consume(user_id)
 
-    # Load images from storage
+    # ── sync path ──────────────────────────────────────────────────
+    if sync:
+        return await _blend_sync(request, user_id, user, image_repo, quota_repo)
+
+    # ── async path (default) ──────────────────────────────────────
+    # Validate images exist before queuing (fast check)
+    storage = get_storage_manager(user_id=user_id if user else None)
+    for key in request.image_keys:
+        img = await storage.load_image(key)
+        if img is None:
+            raise ValidationError(message=f"Image not found: {key}")
+
+    task_id = f"gen_{uuid.uuid4().hex[:12]}"
+    prompt = request.blend_prompt or "Blend these images together creatively"
+    settings_dict = {
+        "aspect_ratio": request.settings.aspect_ratio.value,
+        "resolution": request.settings.resolution.value,
+        "safety_level": request.settings.safety_level.value,
+    }
+
+    redis = await get_redis()
+    task_key = f"task:{task_id}"
+    await redis.hset(
+        task_key,
+        mapping={
+            "status": "queued",
+            "stage": "queued",
+            "progress": "0",
+            "user_id": user_id,
+            "prompt": prompt,
+            "request_json": json.dumps(settings_dict),
+            "created_at": datetime.now().isoformat(),
+        },
+    )
+    await redis.expire(task_key, 86400)
+
+    from services.image_task import execute_image_task
+
+    background_tasks.add_task(
+        execute_image_task,
+        task_id=task_id,
+        mode="blend",
+        user_id=user_id,
+        prompt=prompt,
+        settings_dict=settings_dict,
+        task_spec={
+            "image_keys": request.image_keys,
+        },
+    )
+
+    return AsyncGenerateResponse(
+        task_id=task_id,
+        status="queued",
+        message="Blend task queued",
+    )
+
+
+async def _blend_sync(
+    request: BlendImagesRequest,
+    user_id: str,
+    user: AppUser | None,
+    image_repo: ImageRepository | None,
+    quota_repo: QuotaRepository | None,
+) -> GenerateImageResponse:
+    """Synchronous blend — keeps the original blocking behavior."""
     storage = get_storage_manager(user_id=user_id if user else None)
     loaded_images = []
 
@@ -944,10 +1104,8 @@ async def blend_images(
             raise ValidationError(message=f"Image not found: {key}")
         loaded_images.append(img)
 
-    # Build prompt
     prompt = request.blend_prompt or "Blend these images together creatively"
 
-    # Build provider request — blend only supported by Google
     provider_request = build_provider_request(
         prompt=prompt,
         settings=request.settings,
@@ -956,8 +1114,6 @@ async def blend_images(
         reference_images=loaded_images,
     )
 
-    # Execute — use execute() (no fallback, no timeout) because only
-    # Google supports blend with reference_images and it needs more time
     router_instance = get_provider_router()
 
     try:
@@ -975,7 +1131,6 @@ async def blend_images(
     if not result.image:
         raise GenerationError(message="Failed to blend images")
 
-    # Save to storage
     try:
         storage_obj = await storage.save_image(
             image=result.image,
@@ -994,7 +1149,6 @@ async def blend_images(
         logger.error(f"Failed to save blended image: {e}")
         raise StorageError(message="Failed to save blended image")
 
-    # Save to PostgreSQL if available
     if image_repo:
         try:
             await image_repo.create(
@@ -1017,7 +1171,6 @@ async def blend_images(
         except Exception as e:
             logger.warning(f"Failed to save blended image to database: {e}")
 
-    # Record quota usage
     if quota_repo:
         try:
             await quota_repo.record_usage(
@@ -1031,7 +1184,6 @@ async def blend_images(
         except Exception as e:
             logger.warning(f"Failed to record quota usage to database: {e}")
 
-    # Resolve model display name
     blend_model_display_name = None
     if result.model:
         from services.providers.registry import get_provider_registry
@@ -1063,15 +1215,20 @@ async def blend_images(
     )
 
 
-@router.post("/inpaint", response_model=GenerateImageResponse)
+@router.post("/inpaint")
 async def inpaint_image(
     request: InpaintRequest,
+    background_tasks: BackgroundTasks,
+    sync: bool = Query(False, description="If true, run synchronously and return full result"),
     user: AppUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     quota_repo: QuotaRepository | None = Depends(get_quota_repository),
-):
+) -> GenerateImageResponse | AsyncGenerateResponse:
     """
     Inpaint an image — insert or remove content in masked areas.
+
+    By default runs asynchronously (returns task_id for polling).
+    Pass ?sync=true for synchronous mode (blocks until complete).
 
     Requires a source image key. Mask is required for user_provided mode,
     or auto-detected for foreground/background/semantic modes.
@@ -1082,26 +1239,98 @@ async def inpaint_image(
     # Check quota
     await check_quota_and_consume(user_id)
 
-    # Load source image from storage
+    # Validate mask_mode constraint (no I/O needed)
+    if not request.mask_key and request.mask_mode.value == "user_provided":
+        raise ValidationError(message="mask_key is required when mask_mode is user_provided")
+
+    # ── sync path ──────────────────────────────────────────────────
+    if sync:
+        return await _inpaint_sync(request, user_id, user, image_repo, quota_repo)
+
+    # ── async path (default) ──────────────────────────────────────
+    # Validate images exist before queuing (fast check)
     storage = get_storage_manager(user_id=user_id if user else None)
 
     source_img = await storage.load_image(request.image_key)
     if source_img is None:
         raise ValidationError(message=f"Image not found: {request.image_key}")
 
-    # Load mask image if provided
+    if request.mask_key:
+        mask_img = await storage.load_image(request.mask_key)
+        if mask_img is None:
+            raise ValidationError(message=f"Mask image not found: {request.mask_key}")
+
+    task_id = f"gen_{uuid.uuid4().hex[:12]}"
+    settings_dict = {
+        "aspect_ratio": request.settings.aspect_ratio.value,
+        "resolution": request.settings.resolution.value,
+        "safety_level": request.settings.safety_level.value,
+    }
+
+    redis = await get_redis()
+    task_key = f"task:{task_id}"
+    await redis.hset(
+        task_key,
+        mapping={
+            "status": "queued",
+            "stage": "queued",
+            "progress": "0",
+            "user_id": user_id,
+            "prompt": request.prompt,
+            "request_json": json.dumps(settings_dict),
+            "created_at": datetime.now().isoformat(),
+        },
+    )
+    await redis.expire(task_key, 86400)
+
+    from services.image_task import execute_image_task
+
+    background_tasks.add_task(
+        execute_image_task,
+        task_id=task_id,
+        mode="inpaint",
+        user_id=user_id,
+        prompt=request.prompt,
+        settings_dict=settings_dict,
+        task_spec={
+            "image_key": request.image_key,
+            "mask_key": request.mask_key,
+            "mask_mode": request.mask_mode.value,
+            "mask_dilation": request.mask_dilation,
+            "remove_mode": request.remove_mode,
+            "negative_prompt": request.negative_prompt,
+        },
+    )
+
+    return AsyncGenerateResponse(
+        task_id=task_id,
+        status="queued",
+        message="Inpaint task queued",
+    )
+
+
+async def _inpaint_sync(
+    request: InpaintRequest,
+    user_id: str,
+    user: AppUser | None,
+    image_repo: ImageRepository | None,
+    quota_repo: QuotaRepository | None,
+) -> GenerateImageResponse:
+    """Synchronous inpaint — keeps the original blocking behavior."""
+    storage = get_storage_manager(user_id=user_id if user else None)
+
+    source_img = await storage.load_image(request.image_key)
+    if source_img is None:
+        raise ValidationError(message=f"Image not found: {request.image_key}")
+
     mask_img = None
     if request.mask_key:
         mask_img = await storage.load_image(request.mask_key)
         if mask_img is None:
             raise ValidationError(message=f"Mask image not found: {request.mask_key}")
-    elif request.mask_mode.value == "user_provided":
-        raise ValidationError(message="mask_key is required when mask_mode is user_provided")
 
-    # Determine edit mode
     edit_mode = "inpaint_remove" if request.remove_mode else "inpaint_insert"
 
-    # Build provider request — inpaint only supported by Google
     provider_request = build_provider_request(
         prompt=request.prompt,
         settings=request.settings,
@@ -1115,7 +1344,6 @@ async def inpaint_image(
         mask_dilation=request.mask_dilation,
     )
 
-    # Execute — use execute() (no fallback), Google-only
     router_instance = get_provider_router()
 
     try:
@@ -1133,7 +1361,6 @@ async def inpaint_image(
     if not result.image:
         raise GenerationError(message="Failed to inpaint image")
 
-    # Save to storage
     try:
         storage_obj = await storage.save_image(
             image=result.image,
@@ -1152,7 +1379,6 @@ async def inpaint_image(
         logger.error(f"Failed to save inpainted image: {e}")
         raise StorageError(message="Failed to save inpainted image")
 
-    # Save to PostgreSQL if available
     if image_repo:
         try:
             await image_repo.create(
@@ -1175,7 +1401,6 @@ async def inpaint_image(
         except Exception as e:
             logger.warning(f"Failed to save inpainted image to database: {e}")
 
-    # Record quota usage
     if quota_repo:
         try:
             await quota_repo.record_usage(
@@ -1208,15 +1433,20 @@ async def inpaint_image(
     )
 
 
-@router.post("/outpaint", response_model=GenerateImageResponse)
+@router.post("/outpaint")
 async def outpaint_image(
     request: OutpaintRequest,
+    background_tasks: BackgroundTasks,
+    sync: bool = Query(False, description="If true, run synchronously and return full result"),
     user: AppUser | None = Depends(get_current_user),
     image_repo: ImageRepository | None = Depends(get_image_repository),
     quota_repo: QuotaRepository | None = Depends(get_quota_repository),
-):
+) -> GenerateImageResponse | AsyncGenerateResponse:
     """
     Outpaint an image — extend content beyond the original borders.
+
+    By default runs asynchronously (returns task_id for polling).
+    Pass ?sync=true for synchronous mode (blocks until complete).
 
     Requires both a source image and a mask image that defines the outpaint area.
     Uses Google Imagen edit_image API.
@@ -1226,7 +1456,12 @@ async def outpaint_image(
     # Check quota
     await check_quota_and_consume(user_id)
 
-    # Load source and mask images from storage
+    # ── sync path ──────────────────────────────────────────────────
+    if sync:
+        return await _outpaint_sync(request, user_id, user, image_repo, quota_repo)
+
+    # ── async path (default) ──────────────────────────────────────
+    # Validate images exist before queuing (fast check)
     storage = get_storage_manager(user_id=user_id if user else None)
 
     source_img = await storage.load_image(request.image_key)
@@ -1237,7 +1472,70 @@ async def outpaint_image(
     if mask_img is None:
         raise ValidationError(message=f"Mask image not found: {request.mask_key}")
 
-    # Build provider request — outpaint only supported by Google
+    task_id = f"gen_{uuid.uuid4().hex[:12]}"
+    settings_dict = {
+        "aspect_ratio": request.settings.aspect_ratio.value,
+        "resolution": request.settings.resolution.value,
+        "safety_level": request.settings.safety_level.value,
+    }
+
+    redis = await get_redis()
+    task_key = f"task:{task_id}"
+    await redis.hset(
+        task_key,
+        mapping={
+            "status": "queued",
+            "stage": "queued",
+            "progress": "0",
+            "user_id": user_id,
+            "prompt": request.prompt,
+            "request_json": json.dumps(settings_dict),
+            "created_at": datetime.now().isoformat(),
+        },
+    )
+    await redis.expire(task_key, 86400)
+
+    from services.image_task import execute_image_task
+
+    background_tasks.add_task(
+        execute_image_task,
+        task_id=task_id,
+        mode="outpaint",
+        user_id=user_id,
+        prompt=request.prompt,
+        settings_dict=settings_dict,
+        task_spec={
+            "image_key": request.image_key,
+            "mask_key": request.mask_key,
+            "negative_prompt": request.negative_prompt,
+        },
+    )
+
+    return AsyncGenerateResponse(
+        task_id=task_id,
+        status="queued",
+        message="Outpaint task queued",
+    )
+
+
+async def _outpaint_sync(
+    request: OutpaintRequest,
+    user_id: str,
+    user: AppUser | None,
+    image_repo: ImageRepository | None,
+    quota_repo: QuotaRepository | None,
+) -> GenerateImageResponse:
+    """Synchronous outpaint — keeps the original blocking behavior."""
+    storage = get_storage_manager(user_id=user_id if user else None)
+
+    source_img = await storage.load_image(request.image_key)
+    if source_img is None:
+        raise ValidationError(message=f"Image not found: {request.image_key}")
+
+    mask_img = await storage.load_image(request.mask_key)
+    if mask_img is None:
+        raise ValidationError(message=f"Mask image not found: {request.mask_key}")
+
     provider_request = build_provider_request(
         prompt=request.prompt,
         settings=request.settings,
@@ -1249,7 +1547,6 @@ async def outpaint_image(
         edit_mode="outpaint",
     )
 
-    # Execute — use execute() (no fallback), Google-only
     router_instance = get_provider_router()
 
     try:
@@ -1267,7 +1564,6 @@ async def outpaint_image(
     if not result.image:
         raise GenerationError(message="Failed to outpaint image")
 
-    # Save to storage
     try:
         storage_obj = await storage.save_image(
             image=result.image,
@@ -1286,7 +1582,6 @@ async def outpaint_image(
         logger.error(f"Failed to save outpainted image: {e}")
         raise StorageError(message="Failed to save outpainted image")
 
-    # Save to PostgreSQL if available
     if image_repo:
         try:
             await image_repo.create(
@@ -1309,7 +1604,6 @@ async def outpaint_image(
         except Exception as e:
             logger.warning(f"Failed to save outpainted image to database: {e}")
 
-    # Record quota usage
     if quota_repo:
         try:
             await quota_repo.record_usage(

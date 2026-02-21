@@ -82,7 +82,7 @@ class TestOutpaintValidation:
     def test_missing_image_key(self, client):
         """Outpaint without image_key returns 422."""
         response = client.post(
-            "/api/generate/outpaint",
+            "/api/generate/outpaint?sync=true",
             json={"mask_key": "mask_key"},
         )
         assert response.status_code == 422
@@ -90,7 +90,7 @@ class TestOutpaintValidation:
     def test_missing_mask_key(self, client):
         """Outpaint without mask_key returns 422."""
         response = client.post(
-            "/api/generate/outpaint",
+            "/api/generate/outpaint?sync=true",
             json={"image_key": "key1"},
         )
         assert response.status_code == 422
@@ -113,7 +113,7 @@ class TestOutpaintSuccess:
 
         with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/outpaint",
+                "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
             )
 
@@ -142,7 +142,7 @@ class TestOutpaintSuccess:
 
         with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/outpaint",
+                "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(prompt="Extend with a beach scene"),
             )
 
@@ -163,7 +163,7 @@ class TestOutpaintSuccess:
 
         with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/outpaint",
+                "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
             )
 
@@ -188,7 +188,7 @@ class TestOutpaintSuccess:
 
         with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/outpaint",
+                "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
             )
 
@@ -227,7 +227,7 @@ class TestOutpaintSuccess:
         try:
             with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
                 response = client.post(
-                    "/api/generate/outpaint",
+                    "/api/generate/outpaint?sync=true",
                     json=_make_outpaint_request(),
                 )
 
@@ -257,7 +257,7 @@ class TestOutpaintErrors:
 
         with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/outpaint",
+                "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
             )
 
@@ -275,7 +275,7 @@ class TestOutpaintErrors:
 
         with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/outpaint",
+                "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
             )
 
@@ -294,7 +294,7 @@ class TestOutpaintErrors:
 
         with _patch_outpaint_deps(mock_redis, quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/outpaint",
+                "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
             )
 
@@ -315,7 +315,7 @@ class TestOutpaintErrors:
 
         with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/outpaint",
+                "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
             )
 
@@ -334,7 +334,7 @@ class TestOutpaintErrors:
 
         with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/outpaint",
+                "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
             )
 
@@ -355,7 +355,7 @@ class TestOutpaintErrors:
 
         with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/outpaint",
+                "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
             )
 

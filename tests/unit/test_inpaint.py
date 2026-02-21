@@ -88,18 +88,18 @@ class TestInpaintValidation:
 
     def test_missing_image_key(self, client):
         """Inpaint without image_key returns 422."""
-        response = client.post("/api/generate/inpaint", json={"prompt": "test"})
+        response = client.post("/api/generate/inpaint?sync=true", json={"prompt": "test"})
         assert response.status_code == 422
 
     def test_missing_prompt(self, client):
         """Inpaint without prompt returns 422."""
-        response = client.post("/api/generate/inpaint", json={"image_key": "key1"})
+        response = client.post("/api/generate/inpaint?sync=true", json={"image_key": "key1"})
         assert response.status_code == 422
 
     def test_invalid_mask_mode(self, client):
         """Inpaint with invalid mask_mode returns 422."""
         response = client.post(
-            "/api/generate/inpaint",
+            "/api/generate/inpaint?sync=true",
             json=_make_inpaint_request(mask_mode="invalid"),
         )
         assert response.status_code == 422
@@ -114,7 +114,7 @@ class TestInpaintValidation:
 
         with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/inpaint",
+                "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_mode="user_provided"),
                 # No mask_key provided
             )
@@ -140,7 +140,7 @@ class TestInpaintSuccess:
 
         with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/inpaint",
+                "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key"),
             )
 
@@ -169,7 +169,7 @@ class TestInpaintSuccess:
 
         with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/inpaint",
+                "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_mode="foreground"),
             )
 
@@ -194,7 +194,7 @@ class TestInpaintSuccess:
 
         with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/inpaint",
+                "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key", remove_mode=True),
             )
 
@@ -219,7 +219,7 @@ class TestInpaintSuccess:
 
         with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/inpaint",
+                "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key"),
             )
 
@@ -243,7 +243,7 @@ class TestInpaintSuccess:
 
         with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/inpaint",
+                "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key", mask_dilation=0.1),
             )
 
@@ -266,7 +266,7 @@ class TestInpaintErrors:
 
         with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/inpaint",
+                "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_mode="foreground"),
             )
 
@@ -284,7 +284,7 @@ class TestInpaintErrors:
 
         with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/inpaint",
+                "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="missing_mask"),
             )
 
@@ -303,7 +303,7 @@ class TestInpaintErrors:
 
         with _patch_inpaint_deps(mock_redis, quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/inpaint",
+                "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key"),
             )
 
@@ -324,7 +324,7 @@ class TestInpaintErrors:
 
         with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/inpaint",
+                "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key"),
             )
 
@@ -343,7 +343,7 @@ class TestInpaintErrors:
 
         with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/inpaint",
+                "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key"),
             )
 
@@ -364,7 +364,7 @@ class TestInpaintErrors:
 
         with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
             response = client.post(
-                "/api/generate/inpaint",
+                "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key"),
             )
 
