@@ -9,12 +9,14 @@ Endpoints:
 - DELETE /api/chat/{session_id} - Delete chat session
 """
 
+import asyncio
 import json
 import logging
 import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header
+from PIL import Image
 
 from api.dependencies import get_chat_repository, get_quota_repository
 from api.schemas.chat import (
@@ -208,8 +210,7 @@ async def send_message(
     # Check quota
     await check_chat_quota(user_id)
 
-    # Create ChatSession and restore state
-    # Note: Chat sessions currently only support Google Gemini for multi-turn context
+    # Create ChatSession (stateless — full history passed each call)
     settings = get_settings()
     api_key = x_api_key or settings.get_google_api_key()
 
@@ -217,19 +218,32 @@ async def send_message(
         raise ValidationError(message="No API key configured")
 
     chat_session = ChatSession(api_key=api_key)
-    chat_session.start_session(aspect_ratio=session_data["aspect_ratio"])
+    chat_session.aspect_ratio = session_data["aspect_ratio"]
 
-    # Replay previous messages to restore context
-    for msg in session_data["messages"]:
-        if msg["role"] == "user":
-            # Send previous user messages without generating new responses
-            # This rebuilds the conversation context
-            pass  # Context is maintained by the chat object
+    # Pre-load recent history images (async concurrent)
+    history_messages = session_data["messages"]
+    history_images: dict[str, Image.Image] = {}
+    image_cutoff = max(0, len(history_messages) - ChatSession.IMAGE_HISTORY_TURNS * 2)
 
-    # Send the new message
+    storage = get_storage_manager(user_id=user_id if user else None)
+    image_keys_to_load = [
+        msg.get("image_key") for msg in history_messages[image_cutoff:] if msg.get("image_key")
+    ]
+
+    if image_keys_to_load:
+        load_tasks = [storage.load_image(key) for key in image_keys_to_load]
+        loaded = await asyncio.gather(*load_tasks, return_exceptions=True)
+        for key, img in zip(image_keys_to_load, loaded, strict=True):
+            if isinstance(img, Image.Image):
+                history_images[key] = img
+
+    # Send message (sync SDK call offloaded to thread to avoid blocking)
     aspect_ratio = request.aspect_ratio.value if request.aspect_ratio else None
-    response = chat_session.send_message(
+    response = await asyncio.to_thread(
+        chat_session.send_message,
         message=request.message,
+        history=history_messages,
+        history_images=history_images,
         aspect_ratio=aspect_ratio,
         safety_level=request.safety_level,
     )
@@ -240,7 +254,6 @@ async def send_message(
     # Save image if generated
     image_data = None
     if response.image:
-        storage = get_storage_manager(user_id=user_id if user else None)
         result = await storage.save_image(
             image=response.image,
             prompt=request.message,

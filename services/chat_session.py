@@ -1,31 +1,24 @@
 """
 Chat Session Manager for multi-turn image generation.
+
+Uses stateless generate_content(contents=[history...]) to maintain
+multi-turn context. History is stored externally (Redis) and passed in
+on each call — no server-side chat state is held.
 """
 
 import os
 import time
-import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from io import BytesIO
 
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
 from PIL import Image
 
 from .generator import build_safety_settings
 
 load_dotenv()
-
-
-@dataclass
-class ChatMessage:
-    """A single message in the chat."""
-
-    role: str  # "user" or "assistant"
-    content: str
-    image: Image.Image | None = None
-    thinking: str | None = None
-    timestamp: float = field(default_factory=time.time)
 
 
 @dataclass
@@ -42,84 +35,104 @@ class ChatResponse:
 
 class ChatSession:
     """
-    Manages a multi-turn chat session for iterative image generation.
-    Supports refining images through conversation.
+    Stateless multi-turn chat for iterative image generation.
+
+    Each call to send_message() receives the full conversation history
+    (from Redis) and passes it to generate_content() so the model sees
+    all prior turns.
     """
 
     MODEL_ID = "gemini-3-pro-image-preview"
+    MAX_HISTORY_TURNS = 20  # max turns (1 turn = user + model = 2 messages)
+    IMAGE_HISTORY_TURNS = 5  # only include images from last N turns
 
     def __init__(self, api_key: str | None = None):
-        """
-        Initialize the chat session.
-
-        Args:
-            api_key: Google API key. If not provided, will try to get from environment.
-        """
         self._api_key = api_key or os.getenv("GOOGLE_API_KEY")
         if not self._api_key:
             raise ValueError("GOOGLE_API_KEY not found")
         self.client = genai.Client(api_key=self._api_key)
-        self.chat = None
-        self.messages: list[ChatMessage] = []
         self.aspect_ratio = "16:9"
-        self.session_id: str | None = None  # Unique ID for this chat session
 
     def update_api_key(self, api_key: str):
         """Update the API key and reinitialize the client."""
         self._api_key = api_key
         self.client = genai.Client(api_key=api_key)
-        # Clear existing chat session as the client changed
-        self.clear_session()
 
-    def start_session(self, aspect_ratio: str = "16:9"):
-        """Start a new chat session with a unique session ID."""
-        self.chat = self.client.chats.create(model=self.MODEL_ID)
-        self.messages = []
-        self.aspect_ratio = aspect_ratio
-        self.session_id = str(uuid.uuid4())  # Generate unique session ID
+    def _build_contents(
+        self,
+        history: list[dict],
+        new_message: str,
+        history_images: dict[str, Image.Image] | None = None,
+    ) -> list[types.Content]:
+        """Build the contents list for generate_content from Redis history + new message."""
+        # Truncate old history beyond MAX_HISTORY_TURNS
+        max_messages = self.MAX_HISTORY_TURNS * 2
+        if len(history) > max_messages:
+            history = history[-max_messages:]
 
-    def clear_session(self):
-        """Clear the current chat session."""
-        self.chat = None
-        self.messages = []
-        self.session_id = None
+        # Only include images from the last IMAGE_HISTORY_TURNS turns
+        image_cutoff = len(history) - (self.IMAGE_HISTORY_TURNS * 2)
+
+        contents: list[types.Content] = []
+        for i, msg in enumerate(history):
+            role = "user" if msg["role"] == "user" else "model"
+            parts: list[types.Part] = []
+
+            if msg.get("content"):
+                parts.append(types.Part(text=msg["content"]))
+
+            # Attach image only for recent turns
+            image_key = msg.get("image_key")
+            if i >= image_cutoff and image_key and history_images and image_key in history_images:
+                img = history_images[image_key]
+                buf = BytesIO()
+                img.save(buf, format="PNG")
+                parts.append(
+                    types.Part(inline_data=types.Blob(mime_type="image/png", data=buf.getvalue()))
+                )
+
+            if parts:
+                contents.append(types.Content(role=role, parts=parts))
+
+        # Append the new user message
+        contents.append(types.Content(role="user", parts=[types.Part(text=new_message)]))
+        return contents
 
     def send_message(
         self,
         message: str,
+        history: list[dict] | None = None,
+        history_images: dict[str, Image.Image] | None = None,
         aspect_ratio: str | None = None,
         safety_level: str = "moderate",
     ) -> ChatResponse:
         """
-        Send a message and get a response with optional image.
+        Send a message with full conversation context and get a response.
 
         Args:
-            message: User's message/prompt
-            aspect_ratio: Override aspect ratio for this message
-            safety_level: Content safety level ("strict", "moderate", "relaxed", "none")
-
-        Returns:
-            ChatResponse with text and/or image
+            message: New user message/prompt
+            history: Previous messages from Redis (list of dicts with role/content/image_key)
+            history_images: Pre-loaded PIL images keyed by image_key
+            aspect_ratio: Override aspect ratio for this request
+            safety_level: Content safety level
         """
-        if self.chat is None:
-            self.start_session()
-
         start_time = time.time()
         response = ChatResponse()
 
-        # Record user message
-        self.messages.append(ChatMessage(role="user", content=message))
-
         try:
-            # Build config with safety settings
-            config = {
-                "response_modalities": ["TEXT", "IMAGE"],
-                "image_config": {"aspect_ratio": aspect_ratio or self.aspect_ratio},
-                "safety_settings": build_safety_settings(safety_level),
-            }
+            contents = self._build_contents(history or [], message, history_images)
 
-            # Direct sync call
-            api_response = self.chat.send_message(message, config=config)
+            config = types.GenerateContentConfig(
+                response_modalities=["TEXT", "IMAGE"],
+                image_config=types.ImageConfig(aspect_ratio=aspect_ratio or self.aspect_ratio),
+                safety_settings=build_safety_settings(safety_level),
+            )
+
+            api_response = self.client.models.generate_content(
+                model=self.MODEL_ID,
+                contents=contents,
+                config=config,
+            )
 
             # Check for safety blocks
             if hasattr(api_response, "candidates") and api_response.candidates:
@@ -130,36 +143,16 @@ class ChatSession:
                     response.duration = time.time() - start_time
                     return response
 
-            # Process response
+            # Process response parts
             for part in api_response.parts:
                 if hasattr(part, "thought") and part.thought:
                     response.thinking = part.text
                 elif hasattr(part, "text") and part.text:
                     response.text = part.text
                 elif hasattr(part, "inline_data") and part.inline_data:
-                    image_data = part.inline_data.data
-                    response.image = Image.open(BytesIO(image_data))
-                # Handle as_image() method if available (only if no image yet)
-                if response.image is None and hasattr(part, "as_image"):
-                    try:
-                        img = part.as_image()
-                        # Only use if it's a valid PIL Image
-                        if img and isinstance(img, Image.Image):
-                            response.image = img
-                    except Exception:
-                        pass
+                    response.image = Image.open(BytesIO(part.inline_data.data))
 
             response.duration = time.time() - start_time
-
-            # Record assistant message
-            self.messages.append(
-                ChatMessage(
-                    role="assistant",
-                    content=response.text or "",
-                    image=response.image,
-                    thinking=response.thinking,
-                )
-            )
 
         except Exception as e:
             error_msg = str(e)
@@ -171,15 +164,3 @@ class ChatSession:
             response.duration = time.time() - start_time
 
         return response
-
-    def get_history(self) -> list[ChatMessage]:
-        """Get the chat history."""
-        return self.messages.copy()
-
-    def is_active(self) -> bool:
-        """Check if there's an active chat session."""
-        return self.chat is not None
-
-    def get_session_id(self) -> str | None:
-        """Get the current session ID."""
-        return self.session_id
