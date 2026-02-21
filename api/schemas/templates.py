@@ -20,6 +20,7 @@ class TemplateListItem(BaseModel):
     description_en: str | None = None
     description_zh: str | None = None
     preview_image_url: str | None = None
+    preview_4k_url: str | None = None
     category: str
     tags: list[str] = Field(default_factory=list)
     difficulty: str
@@ -44,6 +45,7 @@ class TemplateDetailResponse(BaseModel):
     description_en: str | None = None
     description_zh: str | None = None
     preview_image_url: str | None = None
+    preview_4k_url: str | None = None
     category: str
     tags: list[str] = Field(default_factory=list)
     style_keywords: list[str] = Field(default_factory=list)
@@ -82,6 +84,7 @@ class TemplateCreateRequest(BaseModel):
     description_en: str | None = None
     description_zh: str | None = None
     preview_image_url: str | None = None
+    preview_4k_url: str | None = None
     category: str
     tags: list[str] = Field(default_factory=list)
     style_keywords: list[str] = Field(default_factory=list)
@@ -101,6 +104,7 @@ class TemplateUpdateRequest(BaseModel):
     description_en: str | None = None
     description_zh: str | None = None
     preview_image_url: str | None = None
+    preview_4k_url: str | None = None
     category: str | None = None
     tags: list[str] | None = None
     style_keywords: list[str] | None = None

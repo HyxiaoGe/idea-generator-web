@@ -75,6 +75,7 @@ class PromptTemplate(Base, TimestampMixin):
 
     # Preview
     preview_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    preview_4k_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Classification
     category: Mapped[str] = mapped_column(String(50), nullable=False)
