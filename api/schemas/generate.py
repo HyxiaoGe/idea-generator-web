@@ -58,6 +58,13 @@ class MaskMode(StrEnum):
     SEMANTIC = "semantic"
 
 
+class DescribeMode(StrEnum):
+    """Mode for image description endpoint."""
+
+    DESCRIBE = "describe"
+    REVERSE_PROMPT = "reverse_prompt"
+
+
 class DetailLevel(StrEnum):
     """Detail level for image description."""
 
@@ -275,6 +282,10 @@ class DescribeImageRequest(BaseModel):
     """Request for image description/analysis."""
 
     image_key: str = Field(..., description="Storage key of the image to describe")
+    mode: DescribeMode = Field(
+        default=DescribeMode.DESCRIBE,
+        description="Mode: 'describe' for natural language description, 'reverse_prompt' for generation prompt",
+    )
     detail_level: DetailLevel = Field(
         default=DetailLevel.STANDARD, description="Description detail level"
     )
@@ -288,6 +299,7 @@ class DescribeImageResponse(BaseModel):
     """Response for image description."""
 
     description: str = Field(..., description="Image description text")
+    prompt: str | None = Field(None, description="Generated prompt (reverse_prompt mode only)")
     tags: list[str] = Field(default_factory=list, description="Keyword tags extracted from image")
     duration: float = Field(..., description="Analysis time in seconds")
     provider: str | None = Field(None, description="Provider used")

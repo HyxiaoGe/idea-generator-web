@@ -25,6 +25,7 @@ from api.schemas.generate import (
     BlendImagesRequest,
     DescribeImageRequest,
     DescribeImageResponse,
+    DescribeMode,
     GeneratedImage,
     GenerateImageRequest,
     GenerateImageResponse,
@@ -1364,12 +1365,25 @@ async def describe_image(
     if img is None:
         raise ValidationError(message=f"Image not found: {request.image_key}")
 
-    # Build analysis prompt based on detail_level and language
+    # Build analysis prompt based on mode, detail_level and language
     lang_instruction = (
         "Respond in Chinese (中文)." if request.language == "zh" else "Respond in English."
     )
 
-    if request.detail_level == "brief":
+    if request.mode == DescribeMode.REVERSE_PROMPT:
+        # Reverse prompt mode: generate a reusable image generation prompt
+        analysis_prompt = (
+            "Analyze this image and generate a detailed image generation prompt that could "
+            "recreate a similar image. Include the subject, scene, composition, lighting, "
+            "color palette, artistic style, mood, and technical qualities. "
+            "Format it as a single prompt string suitable for text-to-image AI models "
+            "(e.g. Stable Diffusion, DALL-E, Midjourney). "
+            "Use comma-separated descriptive phrases. Include quality modifiers like "
+            "resolution, camera settings, and rendering style where appropriate. "
+            f"{lang_instruction} "
+            "Return ONLY the prompt, no explanations or prefixes."
+        )
+    elif request.detail_level == "brief":
         analysis_prompt = f"Describe this image in 1-2 sentences. {lang_instruction}"
     elif request.detail_level == "detailed":
         analysis_prompt = (
@@ -1382,7 +1396,7 @@ async def describe_image(
             f"and key visual elements. {lang_instruction}"
         )
 
-    if request.include_tags:
+    if request.mode != DescribeMode.REVERSE_PROMPT and request.include_tags:
         analysis_prompt += (
             " Also provide a list of keyword tags at the end in the format: "
             "Tags: tag1, tag2, tag3, ..."
@@ -1416,15 +1430,22 @@ async def describe_image(
     if not result.text_response:
         raise GenerationError(message="Failed to describe image")
 
-    # Parse tags from response text
-    description = result.text_response
+    # Parse response based on mode
+    raw_text = result.text_response
+    description = ""
+    generated_prompt: str | None = None
     tags: list[str] = []
 
-    if request.include_tags and "Tags:" in description:
-        parts = description.rsplit("Tags:", 1)
-        description = parts[0].strip()
-        tag_str = parts[1].strip()
-        tags = [t.strip() for t in tag_str.split(",") if t.strip()]
+    if request.mode == DescribeMode.REVERSE_PROMPT:
+        generated_prompt = raw_text.strip()
+        description = raw_text.strip()
+    else:
+        description = raw_text
+        if request.include_tags and "Tags:" in description:
+            parts = description.rsplit("Tags:", 1)
+            description = parts[0].strip()
+            tag_str = parts[1].strip()
+            tags = [t.strip() for t in tag_str.split(",") if t.strip()]
 
     # Record quota usage
     if quota_repo:
@@ -1442,6 +1463,7 @@ async def describe_image(
 
     return DescribeImageResponse(
         description=description,
+        prompt=generated_prompt,
         tags=tags,
         duration=result.duration,
         provider=result.provider,

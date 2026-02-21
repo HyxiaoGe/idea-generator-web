@@ -10,6 +10,7 @@ from PIL import Image
 
 def _make_describe_request(
     image_key="source_key",
+    mode="describe",
     detail_level="standard",
     include_tags=True,
     language="en",
@@ -17,6 +18,7 @@ def _make_describe_request(
     """Build a describe request dict."""
     return {
         "image_key": image_key,
+        "mode": mode,
         "detail_level": detail_level,
         "include_tags": include_tags,
         "language": language,
@@ -277,6 +279,131 @@ class TestDescribeSuccess:
         provider_request = call_args.kwargs.get("request") or call_args[0][0]
         assert provider_request.reference_images is not None
         assert len(provider_request.reference_images) == 1
+
+
+class TestReversePrompt:
+    """Reverse prompt mode tests."""
+
+    def test_reverse_prompt_returns_prompt_field(self, client, mock_redis, mock_quota_service):
+        """Reverse prompt mode returns generated prompt in the prompt field."""
+        source_img = Image.new("RGB", (256, 256), color="red")
+        storage_mock = MagicMock()
+        storage_mock.load_image = AsyncMock(return_value=source_img)
+
+        prompt_text = (
+            "orange tabby cat sitting on windowsill, golden hour sunset, "
+            "warm tones, soft bokeh, photorealistic, 8k, Canon EOS R5"
+        )
+        router_mock = MagicMock()
+        router_mock.execute = AsyncMock(return_value=_make_fake_result(text_response=prompt_text))
+
+        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+            response = client.post(
+                "/api/generate/describe",
+                json=_make_describe_request(mode="reverse_prompt", include_tags=False),
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["prompt"] == prompt_text
+        assert data["description"] == prompt_text
+        assert data["tags"] == []
+
+    def test_reverse_prompt_uses_correct_system_prompt(
+        self, client, mock_redis, mock_quota_service
+    ):
+        """Reverse prompt mode sends generation-focused prompt to the model."""
+        source_img = Image.new("RGB", (256, 256), color="blue")
+        storage_mock = MagicMock()
+        storage_mock.load_image = AsyncMock(return_value=source_img)
+
+        router_mock = MagicMock()
+        router_mock.execute = AsyncMock(
+            return_value=_make_fake_result(text_response="a cat, photorealistic")
+        )
+
+        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+            response = client.post(
+                "/api/generate/describe",
+                json=_make_describe_request(mode="reverse_prompt"),
+            )
+
+        assert response.status_code == 200
+        call_args = router_mock.execute.call_args
+        provider_request = call_args.kwargs.get("request") or call_args[0][0]
+        assert "generation prompt" in provider_request.prompt
+        assert "text-to-image" in provider_request.prompt
+
+    def test_reverse_prompt_skips_tag_parsing(self, client, mock_redis, mock_quota_service):
+        """Reverse prompt mode does not parse Tags: from response even if include_tags=True."""
+        source_img = Image.new("RGB", (256, 256), color="green")
+        storage_mock = MagicMock()
+        storage_mock.load_image = AsyncMock(return_value=source_img)
+
+        # Response that happens to contain "Tags:" — should NOT be parsed
+        text_with_tags = "a cat, detailed fur, Tags: cat, animal, fur"
+        router_mock = MagicMock()
+        router_mock.execute = AsyncMock(
+            return_value=_make_fake_result(text_response=text_with_tags)
+        )
+
+        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+            response = client.post(
+                "/api/generate/describe",
+                json=_make_describe_request(mode="reverse_prompt", include_tags=True),
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        # The full text should be preserved as prompt, not split
+        assert data["prompt"] == text_with_tags.strip()
+        assert data["tags"] == []
+
+    def test_reverse_prompt_chinese(self, client, mock_redis, mock_quota_service):
+        """Reverse prompt mode respects language setting."""
+        source_img = Image.new("RGB", (256, 256), color="red")
+        storage_mock = MagicMock()
+        storage_mock.load_image = AsyncMock(return_value=source_img)
+
+        router_mock = MagicMock()
+        router_mock.execute = AsyncMock(
+            return_value=_make_fake_result(text_response="一只橘猫，坐在窗台上，暖色调")
+        )
+
+        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+            response = client.post(
+                "/api/generate/describe",
+                json=_make_describe_request(mode="reverse_prompt", language="zh"),
+            )
+
+        assert response.status_code == 200
+        call_args = router_mock.execute.call_args
+        provider_request = call_args.kwargs.get("request") or call_args[0][0]
+        assert "中文" in provider_request.prompt
+
+    def test_reverse_prompt_describe_mode_has_no_prompt(
+        self, client, mock_redis, mock_quota_service
+    ):
+        """Normal describe mode returns prompt=None."""
+        source_img = Image.new("RGB", (256, 256), color="red")
+        storage_mock = MagicMock()
+        storage_mock.load_image = AsyncMock(return_value=source_img)
+
+        router_mock = MagicMock()
+        router_mock.execute = AsyncMock(
+            return_value=_make_fake_result(text_response="A red image.")
+        )
+
+        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+            response = client.post(
+                "/api/generate/describe",
+                json=_make_describe_request(mode="describe", include_tags=False),
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["prompt"] is None
+        assert data["description"] == "A red image."
 
 
 class TestDescribeErrors:
