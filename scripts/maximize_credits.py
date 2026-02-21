@@ -326,7 +326,7 @@ async def phase2_generate_previews(
                 await session.execute(
                     update(PromptTemplate)
                     .where(PromptTemplate.id == tpl.id)
-                    .values(preview_image_url=public_url)
+                    .values(preview_image_url=public_url, preview_storage_key=key)
                 )
                 await session.flush()
         else:
@@ -414,7 +414,7 @@ async def phase3_highres_upgrades(
                 await session.execute(
                     update(PromptTemplate)
                     .where(PromptTemplate.id == tpl.id)
-                    .values(preview_4k_url=public_url)
+                    .values(preview_4k_url=public_url, preview_storage_key=key)
                 )
                 await session.flush()
         else:

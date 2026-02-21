@@ -183,7 +183,7 @@ class PreviewGenerator:
                     await session.execute(
                         update(PromptTemplate)
                         .where(PromptTemplate.id == tpl.id)
-                        .values(preview_image_url=public_url)
+                        .values(preview_image_url=public_url, preview_storage_key=key)
                     )
                     await session.flush()
 
