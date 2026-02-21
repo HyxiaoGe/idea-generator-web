@@ -23,12 +23,16 @@ from api.schemas.generate import (
     BatchGenerateRequest,
     BatchGenerateResponse,
     BlendImagesRequest,
+    DescribeImageRequest,
+    DescribeImageResponse,
     GeneratedImage,
     GenerateImageRequest,
     GenerateImageResponse,
     GenerateTaskProgress,
     GenerationMode,
     GenerationSettings,
+    InpaintRequest,
+    OutpaintRequest,
     SearchGenerateRequest,
 )
 from core.auth import AppUser, get_current_user
@@ -114,6 +118,10 @@ def build_provider_request(
     enable_search: bool = False,
     reference_images: list | None = None,
     negative_prompt: str | None = None,
+    mask_image=None,
+    edit_mode: str | None = None,
+    mask_mode: str | None = None,
+    mask_dilation: float = 0.03,
 ) -> ProviderRequest:
     """Build a unified provider request from API parameters."""
     return ProviderRequest(
@@ -127,6 +135,10 @@ def build_provider_request(
         enable_thinking=enable_thinking,
         enable_search=enable_search,
         reference_images=reference_images,
+        mask_image=mask_image,
+        edit_mode=edit_mode,
+        mask_mode=mask_mode,
+        mask_dilation=mask_dilation,
         user_id=user_id,
         request_id=f"gen_{uuid.uuid4().hex[:12]}",
     )
@@ -1047,6 +1059,393 @@ async def blend_images(
         provider=result.provider,
         model=result.model,
         model_display_name=blend_model_display_name,
+    )
+
+
+@router.post("/inpaint", response_model=GenerateImageResponse)
+async def inpaint_image(
+    request: InpaintRequest,
+    user: AppUser | None = Depends(get_current_user),
+    image_repo: ImageRepository | None = Depends(get_image_repository),
+    quota_repo: QuotaRepository | None = Depends(get_quota_repository),
+):
+    """
+    Inpaint an image — insert or remove content in masked areas.
+
+    Requires a source image key. Mask is required for user_provided mode,
+    or auto-detected for foreground/background/semantic modes.
+    Uses Google Imagen edit_image API.
+    """
+    user_id = get_user_id_from_user(user)
+
+    # Check quota
+    await check_quota_and_consume(user_id)
+
+    # Load source image from storage
+    storage = get_storage_manager(user_id=user_id if user else None)
+
+    source_img = await storage.load_image(request.image_key)
+    if source_img is None:
+        raise ValidationError(message=f"Image not found: {request.image_key}")
+
+    # Load mask image if provided
+    mask_img = None
+    if request.mask_key:
+        mask_img = await storage.load_image(request.mask_key)
+        if mask_img is None:
+            raise ValidationError(message=f"Mask image not found: {request.mask_key}")
+    elif request.mask_mode.value == "user_provided":
+        raise ValidationError(message="mask_key is required when mask_mode is user_provided")
+
+    # Determine edit mode
+    edit_mode = "inpaint_remove" if request.remove_mode else "inpaint_insert"
+
+    # Build provider request — inpaint only supported by Google
+    provider_request = build_provider_request(
+        prompt=request.prompt,
+        settings=request.settings,
+        user_id=user_id,
+        preferred_provider="google",
+        negative_prompt=request.negative_prompt,
+        reference_images=[source_img],
+        mask_image=mask_img,
+        edit_mode=edit_mode,
+        mask_mode=request.mask_mode.value,
+        mask_dilation=request.mask_dilation,
+    )
+
+    # Execute — use execute() (no fallback), Google-only
+    router_instance = get_provider_router()
+
+    try:
+        result = await router_instance.execute(
+            request=provider_request,
+            media_type=MediaType.IMAGE,
+        )
+    except ValueError as e:
+        logger.warning(f"No providers available for inpaint: {e}")
+        raise GenerationError(message="No providers available for inpainting")
+
+    if result.error:
+        raise GenerationError(message=get_friendly_error_message(result.error))
+
+    if not result.image:
+        raise GenerationError(message="Failed to inpaint image")
+
+    # Save to storage
+    try:
+        storage_obj = await storage.save_image(
+            image=result.image,
+            prompt=request.prompt,
+            settings={
+                "aspect_ratio": request.settings.aspect_ratio.value,
+                "resolution": request.settings.resolution.value,
+                "provider": result.provider,
+                "model": result.model,
+            },
+            duration=result.duration,
+            mode="inpaint",
+            text_response=result.text_response,
+        )
+    except Exception as e:
+        logger.error(f"Failed to save inpainted image: {e}")
+        raise StorageError(message="Failed to save inpainted image")
+
+    # Save to PostgreSQL if available
+    if image_repo:
+        try:
+            await image_repo.create(
+                storage_key=storage_obj.key,
+                filename=storage_obj.filename,
+                prompt=request.prompt,
+                mode="inpaint",
+                storage_backend=get_settings().storage_backend,
+                public_url=storage_obj.public_url,
+                aspect_ratio=request.settings.aspect_ratio.value,
+                resolution=request.settings.resolution.value,
+                provider=result.provider,
+                model=result.model,
+                width=result.image.width,
+                height=result.image.height,
+                generation_duration_ms=int(result.duration * 1000) if result.duration else None,
+                text_response=result.text_response,
+                user_id=None,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to save inpainted image to database: {e}")
+
+    # Record quota usage
+    if quota_repo:
+        try:
+            await quota_repo.record_usage(
+                mode="inpaint",
+                points_used=1,
+                provider=result.provider,
+                model=result.model,
+                resolution=request.settings.resolution.value,
+                media_type="image",
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record quota usage to database: {e}")
+
+    return GenerateImageResponse(
+        image=GeneratedImage(
+            key=storage_obj.key,
+            filename=storage_obj.filename,
+            url=storage_obj.public_url,
+            width=result.image.width,
+            height=result.image.height,
+        ),
+        prompt=request.prompt,
+        text_response=result.text_response,
+        duration=result.duration,
+        mode=GenerationMode.INPAINT,
+        settings=request.settings,
+        created_at=datetime.now(),
+        provider=result.provider,
+        model=result.model,
+    )
+
+
+@router.post("/outpaint", response_model=GenerateImageResponse)
+async def outpaint_image(
+    request: OutpaintRequest,
+    user: AppUser | None = Depends(get_current_user),
+    image_repo: ImageRepository | None = Depends(get_image_repository),
+    quota_repo: QuotaRepository | None = Depends(get_quota_repository),
+):
+    """
+    Outpaint an image — extend content beyond the original borders.
+
+    Requires both a source image and a mask image that defines the outpaint area.
+    Uses Google Imagen edit_image API.
+    """
+    user_id = get_user_id_from_user(user)
+
+    # Check quota
+    await check_quota_and_consume(user_id)
+
+    # Load source and mask images from storage
+    storage = get_storage_manager(user_id=user_id if user else None)
+
+    source_img = await storage.load_image(request.image_key)
+    if source_img is None:
+        raise ValidationError(message=f"Image not found: {request.image_key}")
+
+    mask_img = await storage.load_image(request.mask_key)
+    if mask_img is None:
+        raise ValidationError(message=f"Mask image not found: {request.mask_key}")
+
+    # Build provider request — outpaint only supported by Google
+    provider_request = build_provider_request(
+        prompt=request.prompt,
+        settings=request.settings,
+        user_id=user_id,
+        preferred_provider="google",
+        negative_prompt=request.negative_prompt,
+        reference_images=[source_img],
+        mask_image=mask_img,
+        edit_mode="outpaint",
+    )
+
+    # Execute — use execute() (no fallback), Google-only
+    router_instance = get_provider_router()
+
+    try:
+        result = await router_instance.execute(
+            request=provider_request,
+            media_type=MediaType.IMAGE,
+        )
+    except ValueError as e:
+        logger.warning(f"No providers available for outpaint: {e}")
+        raise GenerationError(message="No providers available for outpainting")
+
+    if result.error:
+        raise GenerationError(message=get_friendly_error_message(result.error))
+
+    if not result.image:
+        raise GenerationError(message="Failed to outpaint image")
+
+    # Save to storage
+    try:
+        storage_obj = await storage.save_image(
+            image=result.image,
+            prompt=request.prompt,
+            settings={
+                "aspect_ratio": request.settings.aspect_ratio.value,
+                "resolution": request.settings.resolution.value,
+                "provider": result.provider,
+                "model": result.model,
+            },
+            duration=result.duration,
+            mode="outpaint",
+            text_response=result.text_response,
+        )
+    except Exception as e:
+        logger.error(f"Failed to save outpainted image: {e}")
+        raise StorageError(message="Failed to save outpainted image")
+
+    # Save to PostgreSQL if available
+    if image_repo:
+        try:
+            await image_repo.create(
+                storage_key=storage_obj.key,
+                filename=storage_obj.filename,
+                prompt=request.prompt,
+                mode="outpaint",
+                storage_backend=get_settings().storage_backend,
+                public_url=storage_obj.public_url,
+                aspect_ratio=request.settings.aspect_ratio.value,
+                resolution=request.settings.resolution.value,
+                provider=result.provider,
+                model=result.model,
+                width=result.image.width,
+                height=result.image.height,
+                generation_duration_ms=int(result.duration * 1000) if result.duration else None,
+                text_response=result.text_response,
+                user_id=None,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to save outpainted image to database: {e}")
+
+    # Record quota usage
+    if quota_repo:
+        try:
+            await quota_repo.record_usage(
+                mode="outpaint",
+                points_used=1,
+                provider=result.provider,
+                model=result.model,
+                resolution=request.settings.resolution.value,
+                media_type="image",
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record quota usage to database: {e}")
+
+    return GenerateImageResponse(
+        image=GeneratedImage(
+            key=storage_obj.key,
+            filename=storage_obj.filename,
+            url=storage_obj.public_url,
+            width=result.image.width,
+            height=result.image.height,
+        ),
+        prompt=request.prompt,
+        text_response=result.text_response,
+        duration=result.duration,
+        mode=GenerationMode.OUTPAINT,
+        settings=request.settings,
+        created_at=datetime.now(),
+        provider=result.provider,
+        model=result.model,
+    )
+
+
+@router.post("/describe", response_model=DescribeImageResponse)
+async def describe_image(
+    request: DescribeImageRequest,
+    user: AppUser | None = Depends(get_current_user),
+    quota_repo: QuotaRepository | None = Depends(get_quota_repository),
+):
+    """
+    Describe/analyze an image and return a text description with optional tags.
+
+    Uses Google Gemini generate_content with text-only output.
+    """
+    user_id = get_user_id_from_user(user)
+
+    # Check quota
+    await check_quota_and_consume(user_id)
+
+    # Load image from storage
+    storage = get_storage_manager(user_id=user_id if user else None)
+
+    img = await storage.load_image(request.image_key)
+    if img is None:
+        raise ValidationError(message=f"Image not found: {request.image_key}")
+
+    # Build analysis prompt based on detail_level and language
+    lang_instruction = (
+        "Respond in Chinese (中文)." if request.language == "zh" else "Respond in English."
+    )
+
+    if request.detail_level == "brief":
+        analysis_prompt = f"Describe this image in 1-2 sentences. {lang_instruction}"
+    elif request.detail_level == "detailed":
+        analysis_prompt = (
+            f"Provide a comprehensive description of this image including subject, "
+            f"composition, colors, mood, style, and notable details. {lang_instruction}"
+        )
+    else:  # standard
+        analysis_prompt = (
+            f"Describe this image in a short paragraph covering the main subject "
+            f"and key visual elements. {lang_instruction}"
+        )
+
+    if request.include_tags:
+        analysis_prompt += (
+            " Also provide a list of keyword tags at the end in the format: "
+            "Tags: tag1, tag2, tag3, ..."
+        )
+
+    # Build provider request — describe uses Google Gemini
+    provider_request = build_provider_request(
+        prompt=analysis_prompt,
+        settings=GenerationSettings(),  # default settings (not used for image output)
+        user_id=user_id,
+        preferred_provider="google",
+        reference_images=[img],
+        edit_mode="describe",
+    )
+
+    # Execute — use execute() (no fallback), Google-only
+    router_instance = get_provider_router()
+
+    try:
+        result = await router_instance.execute(
+            request=provider_request,
+            media_type=MediaType.IMAGE,
+        )
+    except ValueError as e:
+        logger.warning(f"No providers available for describe: {e}")
+        raise GenerationError(message="No providers available for image description")
+
+    if result.error:
+        raise GenerationError(message=get_friendly_error_message(result.error))
+
+    if not result.text_response:
+        raise GenerationError(message="Failed to describe image")
+
+    # Parse tags from response text
+    description = result.text_response
+    tags: list[str] = []
+
+    if request.include_tags and "Tags:" in description:
+        parts = description.rsplit("Tags:", 1)
+        description = parts[0].strip()
+        tag_str = parts[1].strip()
+        tags = [t.strip() for t in tag_str.split(",") if t.strip()]
+
+    # Record quota usage
+    if quota_repo:
+        try:
+            await quota_repo.record_usage(
+                mode="describe",
+                points_used=1,
+                provider=result.provider,
+                model=result.model,
+                resolution="1K",
+                media_type="image",
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record quota usage to database: {e}")
+
+    return DescribeImageResponse(
+        description=description,
+        tags=tags,
+        duration=result.duration,
+        provider=result.provider,
+        model=result.model,
     )
 
 

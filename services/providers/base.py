@@ -268,6 +268,10 @@ class GenerationRequest:
     # Image-specific
     reference_images: list[Image.Image] | None = None
     style_image: Image.Image | None = None
+    mask_image: Image.Image | None = None
+    edit_mode: str | None = None  # "inpaint_insert", "inpaint_remove", "outpaint", "describe"
+    mask_mode: str | None = None  # "user_provided", "foreground", "background", "semantic"
+    mask_dilation: float = 0.03
     # Video-specific
     duration: int | None = None  # seconds
     fps: int | None = None

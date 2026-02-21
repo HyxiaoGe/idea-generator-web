@@ -44,6 +44,26 @@ class GenerationMode(StrEnum):
     BLEND = "blend"
     STYLE = "style"
     SEARCH = "search"
+    INPAINT = "inpaint"
+    OUTPAINT = "outpaint"
+    DESCRIBE = "describe"
+
+
+class MaskMode(StrEnum):
+    """Mask modes for inpainting."""
+
+    USER_PROVIDED = "user_provided"
+    FOREGROUND = "foreground"
+    BACKGROUND = "background"
+    SEMANTIC = "semantic"
+
+
+class DetailLevel(StrEnum):
+    """Detail level for image description."""
+
+    BRIEF = "brief"
+    STANDARD = "standard"
+    DETAILED = "detailed"
 
 
 class GenerationSettings(BaseModel):
@@ -211,6 +231,67 @@ class StyleTransferRequest(BaseModel):
     settings: GenerationSettings = Field(
         default_factory=GenerationSettings, description="Generation settings"
     )
+
+
+class InpaintRequest(BaseModel):
+    """Request for image inpainting."""
+
+    image_key: str = Field(..., description="Storage key of the source image")
+    prompt: str = Field(
+        ..., min_length=1, max_length=2000, description="What to paint in the masked area"
+    )
+    mask_key: str | None = Field(
+        None, description="Storage key of the mask image (required for user_provided mode)"
+    )
+    mask_mode: MaskMode = Field(default=MaskMode.USER_PROVIDED, description="Mask mode")
+    mask_dilation: float = Field(default=0.03, ge=0.0, le=1.0, description="Mask dilation factor")
+    remove_mode: bool = Field(
+        default=False, description="If true, remove content in masked area instead of inserting"
+    )
+    negative_prompt: str | None = Field(None, description="Negative prompt")
+    settings: GenerationSettings = Field(
+        default_factory=GenerationSettings, description="Generation settings"
+    )
+
+
+class OutpaintRequest(BaseModel):
+    """Request for image outpainting (extending beyond borders)."""
+
+    image_key: str = Field(..., description="Storage key of the source image")
+    mask_key: str = Field(..., description="Storage key of the mask image (defines outpaint area)")
+    prompt: str = Field(
+        default="Extend this image naturally",
+        min_length=1,
+        max_length=2000,
+        description="Prompt for the extended area",
+    )
+    negative_prompt: str | None = Field(None, description="Negative prompt")
+    settings: GenerationSettings = Field(
+        default_factory=GenerationSettings, description="Generation settings"
+    )
+
+
+class DescribeImageRequest(BaseModel):
+    """Request for image description/analysis."""
+
+    image_key: str = Field(..., description="Storage key of the image to describe")
+    detail_level: DetailLevel = Field(
+        default=DetailLevel.STANDARD, description="Description detail level"
+    )
+    include_tags: bool = Field(default=True, description="Include keyword tags in response")
+    language: str = Field(
+        default="en", pattern="^(en|zh)$", description="Response language (en or zh)"
+    )
+
+
+class DescribeImageResponse(BaseModel):
+    """Response for image description."""
+
+    description: str = Field(..., description="Image description text")
+    tags: list[str] = Field(default_factory=list, description="Keyword tags extracted from image")
+    duration: float = Field(..., description="Analysis time in seconds")
+    provider: str | None = Field(None, description="Provider used")
+    model: str | None = Field(None, description="Model used")
 
 
 class SearchGenerateRequest(BaseModel):

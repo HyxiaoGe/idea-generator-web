@@ -139,6 +139,25 @@ GOOGLE_MODELS = [
         arena_score=1170,
         strengths=["speed", "efficiency"],
     ),
+    ProviderModel(
+        id="imagen-3.0-capability-001",
+        name="Imagen 3 Edit",
+        provider="google",
+        media_type=MediaType.IMAGE,
+        capabilities=[
+            ProviderCapability.INPAINTING,
+            ProviderCapability.OUTPAINTING,
+        ],
+        max_resolution="1K",
+        supports_aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4"],
+        pricing_per_unit=0.04,
+        quality_score=0.85,
+        latency_estimate=12.0,
+        is_default=False,
+        hidden=True,
+        tier="balanced",
+        strengths=["inpainting", "outpainting", "editing"],
+    ),
 ]
 
 
@@ -305,6 +324,13 @@ class GoogleProvider(BaseImageProvider):
 
         return True
 
+    @staticmethod
+    def _pil_to_genai_image(img: Image.Image) -> types.Image:
+        """Convert a PIL Image to a google.genai types.Image."""
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        return types.Image(image_bytes=buf.getvalue(), mime_type="image/png")
+
     async def generate(
         self,
         request: GenerationRequest,
@@ -321,6 +347,31 @@ class GoogleProvider(BaseImageProvider):
             result.error = "Google API client not initialized"
             result.error_type = "invalid_key"
             return result
+
+        # Route edit_mode operations to specialised methods
+        if request.edit_mode in ("inpaint_insert", "inpaint_remove"):
+            edit_model = self.get_model_by_id("imagen-3.0-capability-001")
+            if not edit_model:
+                result.error = "Imagen edit model not available"
+                return result
+            result.model = edit_model.id
+            return await self._generate_inpaint(request, edit_model, result, start_time)
+
+        if request.edit_mode == "outpaint":
+            edit_model = self.get_model_by_id("imagen-3.0-capability-001")
+            if not edit_model:
+                result.error = "Imagen edit model not available"
+                return result
+            result.model = edit_model.id
+            return await self._generate_outpaint(request, edit_model, result, start_time)
+
+        if request.edit_mode == "describe":
+            model = self.get_model_by_id(model_id) if model_id else self.get_default_model()
+            if not model:
+                result.error = f"Model not found: {model_id}"
+                return result
+            result.model = model.id
+            return await self._describe_image(request, model, result, start_time)
 
         # Select model
         model = self.get_model_by_id(model_id) if model_id else self.get_default_model()
@@ -487,6 +538,226 @@ class GoogleProvider(BaseImageProvider):
         result.success = result.image is not None
         result.duration = time.time() - start_time
         result.cost = self._estimate_cost(model, request.resolution) * 1.5  # Search costs more
+        self._record_stats(result.duration)
+        return result
+
+    async def _generate_inpaint(
+        self,
+        request: GenerationRequest,
+        model: ProviderModel,
+        result: GenerationResult,
+        start_time: float,
+    ) -> GenerationResult:
+        """Inpaint an image using Imagen edit_image API."""
+        if not request.reference_images or len(request.reference_images) < 1:
+            result.error = "Source image is required for inpainting"
+            return result
+
+        source_image = request.reference_images[0]
+
+        # Build raw reference image
+        raw_ref = types.RawReferenceImage(
+            referenceImage=self._pil_to_genai_image(source_image),
+            referenceId=0,
+        )
+
+        # Build mask reference image
+        mask_ref_kwargs: dict = {
+            "referenceId": 1,
+        }
+
+        if request.mask_mode == "user_provided" and request.mask_image is not None:
+            mask_ref_kwargs["referenceImage"] = self._pil_to_genai_image(request.mask_image)
+            mask_ref_kwargs["config"] = types.MaskReferenceConfig(
+                maskMode="MASK_MODE_USER_PROVIDED",
+                maskDilation=request.mask_dilation,
+            )
+        elif request.mask_mode == "foreground":
+            mask_ref_kwargs["config"] = types.MaskReferenceConfig(
+                maskMode="MASK_MODE_FOREGROUND",
+                maskDilation=request.mask_dilation,
+            )
+        elif request.mask_mode == "background":
+            mask_ref_kwargs["config"] = types.MaskReferenceConfig(
+                maskMode="MASK_MODE_BACKGROUND",
+                maskDilation=request.mask_dilation,
+            )
+        elif request.mask_mode == "semantic":
+            mask_ref_kwargs["config"] = types.MaskReferenceConfig(
+                maskMode="MASK_MODE_SEMANTIC",
+                maskDilation=request.mask_dilation,
+            )
+        else:
+            # Default: user_provided but no mask image → error
+            result.error = "Mask image is required for user_provided mask mode"
+            return result
+
+        mask_ref = types.MaskReferenceImage(**mask_ref_kwargs)
+
+        # Determine edit mode
+        edit_mode = (
+            "EDIT_MODE_INPAINT_REMOVAL"
+            if request.edit_mode == "inpaint_remove"
+            else "EDIT_MODE_INPAINT_INSERTION"
+        )
+
+        def api_call():
+            return self._client.models.edit_image(
+                model=model.id,
+                prompt=request.prompt,
+                reference_images=[raw_ref, mask_ref],
+                config=types.EditImageConfig(
+                    editMode=edit_mode,
+                    numberOfImages=1,
+                ),
+            )
+
+        loop = asyncio.get_event_loop()
+        response, last_error = await loop.run_in_executor(
+            None, lambda: self._execute_with_retry(api_call, result, start_time)
+        )
+
+        if response is None:
+            if not result.error:
+                result.error = last_error
+                result.retryable = is_retryable_error(last_error) if last_error else False
+            result.duration = time.time() - start_time
+            return result
+
+        # Process edit_image response
+        try:
+            if response.generated_images and len(response.generated_images) > 0:
+                image_bytes = response.generated_images[0].image.image_bytes
+                result.image = Image.open(BytesIO(image_bytes))
+                result.success = True
+            else:
+                result.error = "No images returned from inpainting"
+        except Exception as e:
+            result.error = f"Failed to process inpaint response: {e}"
+
+        result.duration = time.time() - start_time
+        result.cost = self._estimate_cost(model, request.resolution)
+        self._record_stats(result.duration)
+        return result
+
+    async def _generate_outpaint(
+        self,
+        request: GenerationRequest,
+        model: ProviderModel,
+        result: GenerationResult,
+        start_time: float,
+    ) -> GenerationResult:
+        """Outpaint an image using Imagen edit_image API."""
+        if not request.reference_images or len(request.reference_images) < 1:
+            result.error = "Source image is required for outpainting"
+            return result
+
+        if not request.mask_image:
+            result.error = "Mask image is required for outpainting"
+            return result
+
+        source_image = request.reference_images[0]
+
+        raw_ref = types.RawReferenceImage(
+            referenceImage=self._pil_to_genai_image(source_image),
+            referenceId=0,
+        )
+
+        mask_ref = types.MaskReferenceImage(
+            referenceId=1,
+            referenceImage=self._pil_to_genai_image(request.mask_image),
+            config=types.MaskReferenceConfig(
+                maskMode="MASK_MODE_USER_PROVIDED",
+                maskDilation=request.mask_dilation,
+            ),
+        )
+
+        def api_call():
+            return self._client.models.edit_image(
+                model=model.id,
+                prompt=request.prompt,
+                reference_images=[raw_ref, mask_ref],
+                config=types.EditImageConfig(
+                    editMode="EDIT_MODE_OUTPAINT",
+                    numberOfImages=1,
+                ),
+            )
+
+        loop = asyncio.get_event_loop()
+        response, last_error = await loop.run_in_executor(
+            None, lambda: self._execute_with_retry(api_call, result, start_time)
+        )
+
+        if response is None:
+            if not result.error:
+                result.error = last_error
+                result.retryable = is_retryable_error(last_error) if last_error else False
+            result.duration = time.time() - start_time
+            return result
+
+        # Process edit_image response
+        try:
+            if response.generated_images and len(response.generated_images) > 0:
+                image_bytes = response.generated_images[0].image.image_bytes
+                result.image = Image.open(BytesIO(image_bytes))
+                result.success = True
+            else:
+                result.error = "No images returned from outpainting"
+        except Exception as e:
+            result.error = f"Failed to process outpaint response: {e}"
+
+        result.duration = time.time() - start_time
+        result.cost = self._estimate_cost(model, request.resolution)
+        self._record_stats(result.duration)
+        return result
+
+    async def _describe_image(
+        self,
+        request: GenerationRequest,
+        model: ProviderModel,
+        result: GenerationResult,
+        start_time: float,
+    ) -> GenerationResult:
+        """Describe/analyze an image using generate_content (text-only output)."""
+        if not request.reference_images or len(request.reference_images) < 1:
+            result.error = "Image is required for description"
+            return result
+
+        image = request.reference_images[0]
+
+        contents = [request.prompt, image]
+        config = types.GenerateContentConfig(
+            response_modalities=["Text"],
+            safety_settings=build_safety_settings(request.safety_level),
+        )
+
+        def api_call():
+            return self._client.models.generate_content(
+                model=model.id,
+                contents=contents,
+                config=config,
+            )
+
+        loop = asyncio.get_event_loop()
+        response, last_error = await loop.run_in_executor(
+            None, lambda: self._execute_with_retry(api_call, result, start_time)
+        )
+
+        if response is None:
+            if not result.error:
+                result.error = last_error
+                result.retryable = is_retryable_error(last_error) if last_error else False
+            result.duration = time.time() - start_time
+            return result
+
+        if not self._process_response(response, result):
+            result.duration = time.time() - start_time
+            return result
+
+        # For describe, success means we got text back
+        result.success = result.text_response is not None
+        result.duration = time.time() - start_time
+        result.cost = self._estimate_cost(model, request.resolution)
         self._record_stats(result.duration)
         return result
 
