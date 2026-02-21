@@ -22,6 +22,7 @@ from api.schemas.generate import (
     AsyncGenerateResponse,
     BatchGenerateRequest,
     BatchGenerateResponse,
+    BlendImagesRequest,
     GeneratedImage,
     GenerateImageRequest,
     GenerateImageResponse,
@@ -900,6 +901,152 @@ async def search_grounded_generate(
         was_translated=processed.was_translated if processed else False,
         was_enhanced=processed.was_enhanced if processed else False,
         template_name=processed.template_name if processed else None,
+    )
+
+
+@router.post("/blend", response_model=GenerateImageResponse)
+async def blend_images(
+    request: BlendImagesRequest,
+    user: AppUser | None = Depends(get_current_user),
+    image_repo: ImageRepository | None = Depends(get_image_repository),
+    quota_repo: QuotaRepository | None = Depends(get_quota_repository),
+):
+    """
+    Blend 2-4 existing images together with an optional prompt.
+
+    Takes image storage keys, loads them, and uses Google Gemini to blend them.
+    """
+    user_id = get_user_id_from_user(user)
+
+    # Check quota
+    await check_quota_and_consume(user_id)
+
+    # Load images from storage
+    storage = get_storage_manager(user_id=user_id if user else None)
+    loaded_images = []
+
+    for key in request.image_keys:
+        img = await storage.load_image(key)
+        if img is None:
+            raise ValidationError(message=f"Image not found: {key}")
+        loaded_images.append(img)
+
+    # Build prompt
+    prompt = request.blend_prompt or "Blend these images together creatively"
+
+    # Build provider request — blend only supported by Google
+    provider_request = build_provider_request(
+        prompt=prompt,
+        settings=request.settings,
+        user_id=user_id,
+        preferred_provider="google",
+        reference_images=loaded_images,
+    )
+
+    # Execute — use execute() (no fallback, no timeout) because only
+    # Google supports blend with reference_images and it needs more time
+    router_instance = get_provider_router()
+
+    try:
+        result = await router_instance.execute(
+            request=provider_request,
+            media_type=MediaType.IMAGE,
+        )
+    except ValueError as e:
+        logger.warning(f"No providers available for blend: {e}")
+        raise GenerationError(message="No providers available for image blending")
+
+    if result.error:
+        raise GenerationError(message=get_friendly_error_message(result.error))
+
+    if not result.image:
+        raise GenerationError(message="Failed to blend images")
+
+    # Save to storage
+    try:
+        storage_obj = await storage.save_image(
+            image=result.image,
+            prompt=prompt,
+            settings={
+                "aspect_ratio": request.settings.aspect_ratio.value,
+                "resolution": request.settings.resolution.value,
+                "provider": result.provider,
+                "model": result.model,
+            },
+            duration=result.duration,
+            mode="blend",
+            text_response=result.text_response,
+        )
+    except Exception as e:
+        logger.error(f"Failed to save blended image: {e}")
+        raise StorageError(message="Failed to save blended image")
+
+    # Save to PostgreSQL if available
+    if image_repo:
+        try:
+            await image_repo.create(
+                storage_key=storage_obj.key,
+                filename=storage_obj.filename,
+                prompt=prompt,
+                mode="blend",
+                storage_backend=get_settings().storage_backend,
+                public_url=storage_obj.public_url,
+                aspect_ratio=request.settings.aspect_ratio.value,
+                resolution=request.settings.resolution.value,
+                provider=result.provider,
+                model=result.model,
+                width=result.image.width,
+                height=result.image.height,
+                generation_duration_ms=int(result.duration * 1000) if result.duration else None,
+                text_response=result.text_response,
+                user_id=None,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to save blended image to database: {e}")
+
+    # Record quota usage
+    if quota_repo:
+        try:
+            await quota_repo.record_usage(
+                mode="blend",
+                points_used=1,
+                provider=result.provider,
+                model=result.model,
+                resolution=request.settings.resolution.value,
+                media_type="image",
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record quota usage to database: {e}")
+
+    # Resolve model display name
+    blend_model_display_name = None
+    if result.model:
+        from services.providers.registry import get_provider_registry
+
+        registry = get_provider_registry()
+        for p in registry.get_available_image_providers():
+            m = p.get_model_by_id(result.model)
+            if m:
+                blend_model_display_name = m.name
+                break
+
+    return GenerateImageResponse(
+        image=GeneratedImage(
+            key=storage_obj.key,
+            filename=storage_obj.filename,
+            url=storage_obj.public_url,
+            width=result.image.width,
+            height=result.image.height,
+        ),
+        prompt=prompt,
+        text_response=result.text_response,
+        duration=result.duration,
+        mode=GenerationMode.BLEND,
+        settings=request.settings,
+        created_at=datetime.now(),
+        provider=result.provider,
+        model=result.model,
+        model_display_name=blend_model_display_name,
     )
 
 
