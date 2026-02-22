@@ -147,3 +147,11 @@ class SessionNotFoundError(NotFoundError):
 
     error_code = "session_not_found"
     message = "Chat session not found"
+
+
+class DatabaseRequiredError(AppException):
+    """Raised when a feature requires database but it is unavailable."""
+
+    error_code = "database_unavailable"
+    message = "Database required for this feature"
+    status_code = 503

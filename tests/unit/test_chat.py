@@ -1,11 +1,13 @@
 """
-Unit tests for chat endpoints — focused on POST /api/chat/{session_id}/message (send_message).
+Unit tests for chat endpoints — focused on POST /api/chat/{session_id}/message (send_message)
+and the background task execute_chat_task.
 
-Tests the router layer (mock Redis + mock ChatSession + mock storage) and
+Tests the router layer (async task dispatch) and
 the ChatSession class (mock Google SDK with real message processing).
 """
 
 import json
+import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from io import BytesIO
@@ -16,6 +18,9 @@ from PIL import Image
 
 # ============ Helpers ============
 
+# Valid UUID for test session IDs (used by background task and router tests)
+TEST_SESSION_UUID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
 
 def _make_send_request(message="Make it more colorful", aspect_ratio=None, safety_level="moderate"):
     """Build a send message request dict."""
@@ -25,16 +30,36 @@ def _make_send_request(message="Make it more colorful", aspect_ratio=None, safet
     return req
 
 
-def _make_session_data(session_id="test-session-123", messages=None):
-    """Build mock Redis session data."""
-    now = datetime.now().isoformat()
+def _make_db_session(session_id=TEST_SESSION_UUID, messages=None, aspect_ratio="16:9"):
+    """Build a mock DB ChatSession with messages."""
+    mock_session = MagicMock()
+    mock_session.id = uuid.UUID(session_id)
+    mock_session.aspect_ratio = aspect_ratio
+    mock_session.created_at = datetime.now()
+    mock_session.updated_at = datetime.now()
+    mock_session.message_count = len(messages) if messages else 0
+    mock_session.messages = messages or []
+    return mock_session
+
+
+def _make_db_message(role, content, image_url=None, thinking=None, thought_signature=None):
+    """Build a mock DB ChatMessage."""
+    msg = MagicMock()
+    msg.role = role
+    msg.content = content
+    msg.image_url = image_url
+    msg.thinking = thinking
+    msg.thought_signature = thought_signature
+    msg.created_at = datetime.now()
+    return msg
+
+
+def _make_session_data(session_id=TEST_SESSION_UUID, messages=None):
+    """Build mock session data dict (used by background task tests)."""
     return {
         "session_id": session_id,
-        "user_id": "anonymous",
         "aspect_ratio": "16:9",
         "messages": messages or [],
-        "created_at": now,
-        "last_activity": now,
     }
 
 
@@ -52,265 +77,175 @@ def _make_chat_response(text="Here's the updated image", image=None, thinking=No
     )
 
 
+def _make_mock_chat_repo(db_session=None):
+    """Build a mock ChatRepository."""
+    repo = AsyncMock()
+    repo.get_session_with_messages = AsyncMock(return_value=db_session)
+    repo.create_session = AsyncMock()
+    repo.delete_session = AsyncMock(return_value=db_session is not None)
+    repo.list_sessions_by_user = AsyncMock(return_value=[])
+    repo.create_message = AsyncMock()
+    repo.count_messages_by_session = AsyncMock(return_value=2)
+    repo.update_session_latest_image = AsyncMock()
+    return repo
+
+
 @contextmanager
-def _patch_chat_deps(mock_redis, mock_quota_service, storage_mock, chat_session_mock):
-    """Patch all chat send_message endpoint dependencies."""
-    from services.chat_session import ChatSession as RealChatSession
+def _patch_send_message_deps(mock_redis, mock_quota_service, mock_chat_repo):
+    """Patch router dependencies for send_message (async mode)."""
 
     async def get_mock_redis():
         return mock_redis
-
-    # Build a mock class that returns chat_session_mock on instantiation
-    # but preserves class-level constants the router accesses
-    mock_cls = MagicMock(return_value=chat_session_mock)
-    mock_cls.IMAGE_HISTORY_TURNS = RealChatSession.IMAGE_HISTORY_TURNS
 
     with (
         patch("api.routers.chat.get_redis", get_mock_redis),
         patch("core.redis.get_redis", get_mock_redis),
         patch("api.routers.chat.get_quota_service", return_value=mock_quota_service),
-        patch("api.routers.chat.get_storage_manager", return_value=storage_mock),
-        patch("api.routers.chat.ChatSession", mock_cls),
+        patch("api.routers.chat.execute_chat_task", new_callable=AsyncMock) as mock_task,
     ):
-        yield
+        from api.dependencies import require_chat_repository
+        from api.main import app
+
+        app.dependency_overrides[require_chat_repository] = lambda: mock_chat_repo
+        try:
+            yield mock_task
+        finally:
+            app.dependency_overrides.pop(require_chat_repository, None)
 
 
-# ============ Router Tests: Send Message ============
+# ============ Router Tests: Send Message (Async) ============
 
 
 class TestSendMessageValidation:
     """Request validation tests for POST /api/chat/{session_id}/message."""
 
+    def _override_chat_repo(self, client):
+        """Override require_chat_repository so validation runs first."""
+        from api.dependencies import require_chat_repository
+        from api.main import app
+
+        mock_repo = _make_mock_chat_repo(db_session=None)
+        app.dependency_overrides[require_chat_repository] = lambda: mock_repo
+        return mock_repo
+
+    def _cleanup(self):
+        from api.dependencies import require_chat_repository
+        from api.main import app
+
+        app.dependency_overrides.pop(require_chat_repository, None)
+
     def test_missing_message(self, client, mock_redis):
         """Send without message returns 422."""
-        response = client.post("/api/chat/test-session/message", json={})
-        assert response.status_code == 422
+        self._override_chat_repo(client)
+        try:
+            response = client.post("/api/chat/test-session/message", json={})
+            assert response.status_code == 422
+        finally:
+            self._cleanup()
 
     def test_empty_message(self, client, mock_redis):
         """Send with empty message returns 422."""
-        response = client.post(
-            "/api/chat/test-session/message",
-            json={"message": ""},
-        )
-        assert response.status_code == 422
+        self._override_chat_repo(client)
+        try:
+            response = client.post(
+                "/api/chat/test-session/message",
+                json={"message": ""},
+            )
+            assert response.status_code == 422
+        finally:
+            self._cleanup()
 
     def test_message_too_long(self, client, mock_redis):
         """Send with message exceeding max_length returns 422."""
-        response = client.post(
-            "/api/chat/test-session/message",
-            json={"message": "x" * 2001},
-        )
-        assert response.status_code == 422
-
-
-class TestSendMessageSuccess:
-    """Successful send_message tests."""
-
-    def test_send_text_only_response(self, client, mock_redis, mock_quota_service):
-        """Send message gets text-only response (no image)."""
-        session_data = _make_session_data()
-        session_key = "chat:anonymous:test-session-123"
-        mock_redis._data[session_key] = json.dumps(session_data)
-
-        chat_mock = MagicMock()
-        chat_mock.send_message.return_value = _make_chat_response(
-            text="I'll make the colors more vibrant.", image=None
-        )
-
-        storage_mock = MagicMock()
-        storage_mock.load_image = AsyncMock(return_value=None)
-
-        with _patch_chat_deps(mock_redis, mock_quota_service, storage_mock, chat_mock):
+        self._override_chat_repo(client)
+        try:
             response = client.post(
-                "/api/chat/test-session-123/message",
+                "/api/chat/test-session/message",
+                json={"message": "x" * 2001},
+            )
+            assert response.status_code == 422
+        finally:
+            self._cleanup()
+
+
+class TestSendMessageAsync:
+    """Tests for the async send_message endpoint."""
+
+    def test_returns_task_id(self, client, mock_redis, mock_quota_service):
+        """Send message returns task_id with queued status."""
+        session_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        db_session = _make_db_session(session_id=session_id)
+        mock_chat_repo = _make_mock_chat_repo(db_session)
+
+        with _patch_send_message_deps(mock_redis, mock_quota_service, mock_chat_repo):
+            response = client.post(
+                f"/api/chat/{session_id}/message",
                 json=_make_send_request(),
             )
 
         assert response.status_code == 200
         data = response.json()
-        assert data["text"] == "I'll make the colors more vibrant."
-        assert data["image"] is None
-        assert data["duration"] > 0
-        assert data["message_count"] == 2  # user + assistant
+        assert "task_id" in data
+        assert data["task_id"].startswith("chat_")
+        assert data["status"] == "queued"
 
-    def test_send_with_image_response(self, client, mock_redis, mock_quota_service):
-        """Send message gets response with generated image."""
-        session_data = _make_session_data()
-        session_key = "chat:anonymous:test-session-123"
-        mock_redis._data[session_key] = json.dumps(session_data)
+    def test_creates_redis_task(self, client, mock_redis, mock_quota_service):
+        """Send message creates task hash in Redis."""
+        session_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        db_session = _make_db_session(session_id=session_id)
+        mock_chat_repo = _make_mock_chat_repo(db_session)
 
-        img = Image.new("RGB", (512, 512), color="blue")
-        chat_mock = MagicMock()
-        chat_mock.send_message.return_value = _make_chat_response(
-            text="Here's the colorful version.", image=img
-        )
-
-        storage_mock = MagicMock()
-        storage_mock.load_image = AsyncMock(return_value=None)
-        save_result = MagicMock()
-        save_result.key = "images/chat/test.png"
-        save_result.filename = "test.png"
-        save_result.public_url = "https://cdn.example.com/images/chat/test.png"
-        storage_mock.save_image = AsyncMock(return_value=save_result)
-
-        with _patch_chat_deps(mock_redis, mock_quota_service, storage_mock, chat_mock):
+        with _patch_send_message_deps(mock_redis, mock_quota_service, mock_chat_repo):
             response = client.post(
-                "/api/chat/test-session-123/message",
-                json=_make_send_request(),
+                f"/api/chat/{session_id}/message",
+                json=_make_send_request(message="Draw a sunset"),
             )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["text"] == "Here's the colorful version."
-        assert data["image"] is not None
-        assert data["image"]["key"] == "images/chat/test.png"
-        assert data["image"]["width"] == 512
-        assert data["image"]["height"] == 512
+        task_id = response.json()["task_id"]
+        task_data = mock_redis._hashes.get(f"task:{task_id}", {})
+        assert task_data["status"] == "queued"
+        assert task_data["session_id"] == session_id
+        assert task_data["message"] == "Draw a sunset"
+        assert task_data["task_type"] == "chat"
 
-    def test_send_with_thinking(self, client, mock_redis, mock_quota_service):
-        """Send message includes thinking in response."""
-        session_data = _make_session_data()
-        session_key = "chat:anonymous:test-session-123"
-        mock_redis._data[session_key] = json.dumps(session_data)
+    def test_with_aspect_ratio_override(self, client, mock_redis, mock_quota_service):
+        """Send message with aspect_ratio returns task_id."""
+        session_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        db_session = _make_db_session(session_id=session_id)
+        mock_chat_repo = _make_mock_chat_repo(db_session)
 
-        chat_mock = MagicMock()
-        chat_mock.send_message.return_value = _make_chat_response(
-            text="Done!", thinking="Let me adjust the saturation and hue..."
-        )
-
-        storage_mock = MagicMock()
-        storage_mock.load_image = AsyncMock(return_value=None)
-
-        with _patch_chat_deps(mock_redis, mock_quota_service, storage_mock, chat_mock):
+        with _patch_send_message_deps(mock_redis, mock_quota_service, mock_chat_repo):
             response = client.post(
-                "/api/chat/test-session-123/message",
-                json=_make_send_request(),
-            )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["thinking"] == "Let me adjust the saturation and hue..."
-
-    def test_send_with_aspect_ratio_override(self, client, mock_redis, mock_quota_service):
-        """Send message passes aspect ratio override to ChatSession."""
-        session_data = _make_session_data()
-        session_key = "chat:anonymous:test-session-123"
-        mock_redis._data[session_key] = json.dumps(session_data)
-
-        chat_mock = MagicMock()
-        chat_mock.send_message.return_value = _make_chat_response(text="Square version.")
-
-        storage_mock = MagicMock()
-        storage_mock.load_image = AsyncMock(return_value=None)
-
-        with _patch_chat_deps(mock_redis, mock_quota_service, storage_mock, chat_mock):
-            response = client.post(
-                "/api/chat/test-session-123/message",
+                f"/api/chat/{session_id}/message",
                 json=_make_send_request(aspect_ratio="1:1"),
             )
 
         assert response.status_code == 200
-        # Verify ChatSession.send_message was called with the right aspect ratio
-        call_kwargs = chat_mock.send_message.call_args
-        assert call_kwargs.kwargs.get("aspect_ratio") == "1:1"
+        assert response.json()["task_id"].startswith("chat_")
 
-    def test_send_updates_redis_session(self, client, mock_redis, mock_quota_service):
-        """Send message updates session data in Redis with new messages."""
-        session_data = _make_session_data()
-        session_key = "chat:anonymous:test-session-123"
-        mock_redis._data[session_key] = json.dumps(session_data)
-
-        chat_mock = MagicMock()
-        chat_mock.send_message.return_value = _make_chat_response(text="Updated!")
-
-        storage_mock = MagicMock()
-        storage_mock.load_image = AsyncMock(return_value=None)
-
-        with _patch_chat_deps(mock_redis, mock_quota_service, storage_mock, chat_mock):
-            client.post(
-                "/api/chat/test-session-123/message",
-                json=_make_send_request(message="Add a sunset"),
-            )
-
-        # Verify Redis was updated with the new messages
-        updated_data = json.loads(mock_redis._data[session_key])
-        assert len(updated_data["messages"]) == 2
-        assert updated_data["messages"][0]["role"] == "user"
-        assert updated_data["messages"][0]["content"] == "Add a sunset"
-        assert updated_data["messages"][1]["role"] == "assistant"
-        assert updated_data["messages"][1]["content"] == "Updated!"
-
-    def test_send_with_existing_conversation(self, client, mock_redis, mock_quota_service):
-        """Send message in session that already has messages."""
-        existing_messages = [
-            {"role": "user", "content": "Draw a cat", "timestamp": datetime.now().isoformat()},
-            {
-                "role": "assistant",
-                "content": "Here's a cat.",
-                "image_key": None,
-                "thinking": None,
-                "timestamp": datetime.now().isoformat(),
-            },
+    def test_includes_history_in_snapshot(self, client, mock_redis, mock_quota_service):
+        """Send message builds snapshot with existing messages from DB."""
+        session_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        messages = [
+            _make_db_message("user", "Draw a cat"),
+            _make_db_message("assistant", "Here's a cat.", image_url="img/cat.png"),
         ]
-        session_data = _make_session_data(messages=existing_messages)
-        session_key = "chat:anonymous:test-session-123"
-        mock_redis._data[session_key] = json.dumps(session_data)
+        db_session = _make_db_session(session_id=session_id, messages=messages)
+        mock_chat_repo = _make_mock_chat_repo(db_session)
 
-        chat_mock = MagicMock()
-        chat_mock.send_message.return_value = _make_chat_response(text="Made it colorful!")
-
-        storage_mock = MagicMock()
-        storage_mock.load_image = AsyncMock(return_value=None)
-
-        with _patch_chat_deps(mock_redis, mock_quota_service, storage_mock, chat_mock):
+        with _patch_send_message_deps(mock_redis, mock_quota_service, mock_chat_repo) as mock_task:
             response = client.post(
-                "/api/chat/test-session-123/message",
-                json=_make_send_request(),
-            )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["message_count"] == 4  # 2 existing + 2 new
-
-    def test_send_passes_history_to_chat_session(self, client, mock_redis, mock_quota_service):
-        """Send message passes existing history to ChatSession.send_message."""
-        existing_messages = [
-            {"role": "user", "content": "Draw a cat", "timestamp": datetime.now().isoformat()},
-            {
-                "role": "assistant",
-                "content": "Here's a cat.",
-                "image_key": None,
-                "thinking": None,
-                "timestamp": datetime.now().isoformat(),
-            },
-        ]
-        session_data = _make_session_data(messages=existing_messages)
-        session_key = "chat:anonymous:test-session-123"
-        mock_redis._data[session_key] = json.dumps(session_data)
-
-        chat_mock = MagicMock()
-        chat_mock.send_message.return_value = _make_chat_response(text="OK!")
-
-        storage_mock = MagicMock()
-        storage_mock.load_image = AsyncMock(return_value=None)
-
-        with _patch_chat_deps(mock_redis, mock_quota_service, storage_mock, chat_mock):
-            client.post(
-                "/api/chat/test-session-123/message",
+                f"/api/chat/{session_id}/message",
                 json=_make_send_request(message="Make it blue"),
             )
 
-        # Verify history was passed (the list is mutated after send, so check
-        # it contains at least the original messages plus the new ones)
-        call_kwargs = chat_mock.send_message.call_args.kwargs
-        assert call_kwargs["message"] == "Make it blue"
-        # history is the same list object as session_data["messages"], which
-        # gets new messages appended after send_message returns, so verify
-        # it was passed (non-empty) and contains the originals
-        assert len(call_kwargs["history"]) >= 2
-        assert call_kwargs["history"][0]["content"] == "Draw a cat"
-        assert call_kwargs["history"][1]["content"] == "Here's a cat."
-        assert isinstance(call_kwargs["history_images"], dict)
+        assert response.status_code == 200
+        # Verify the background task received session data with history
+        call_kwargs = mock_task.call_args.kwargs
+        snapshot = json.loads(call_kwargs["session_data_json"])
+        assert len(snapshot["messages"]) == 2
+        assert snapshot["messages"][0]["role"] == "user"
+        assert snapshot["messages"][1]["image_key"] == "img/cat.png"
 
 
 class TestSendMessageErrors:
@@ -318,13 +253,11 @@ class TestSendMessageErrors:
 
     def test_session_not_found(self, client, mock_redis, mock_quota_service):
         """Send to non-existent session returns 404."""
-        storage_mock = MagicMock()
-        storage_mock.load_image = AsyncMock(return_value=None)
-        chat_mock = MagicMock()
+        mock_chat_repo = _make_mock_chat_repo(db_session=None)
 
-        with _patch_chat_deps(mock_redis, mock_quota_service, storage_mock, chat_mock):
+        with _patch_send_message_deps(mock_redis, mock_quota_service, mock_chat_repo):
             response = client.post(
-                "/api/chat/nonexistent-session/message",
+                "/api/chat/a1b2c3d4-e5f6-7890-abcd-ef1234567890/message",
                 json=_make_send_request(),
             )
 
@@ -332,92 +265,95 @@ class TestSendMessageErrors:
 
     def test_quota_exceeded(self, client, mock_redis):
         """Send fails with 429 when quota exceeded."""
-        session_data = _make_session_data()
-        session_key = "chat:anonymous:test-session-123"
-        mock_redis._data[session_key] = json.dumps(session_data)
+        session_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        db_session = _make_db_session(session_id=session_id)
+        mock_chat_repo = _make_mock_chat_repo(db_session)
 
         quota_service = MagicMock()
         quota_service.check_quota = AsyncMock(
             return_value=(False, "Daily limit reached", {"used": 50, "limit": 50})
         )
 
-        chat_mock = MagicMock()
-        storage_mock = MagicMock()
-        storage_mock.load_image = AsyncMock(return_value=None)
-
-        with _patch_chat_deps(mock_redis, quota_service, storage_mock, chat_mock):
+        with _patch_send_message_deps(mock_redis, quota_service, mock_chat_repo):
             response = client.post(
-                "/api/chat/test-session-123/message",
+                f"/api/chat/{session_id}/message",
                 json=_make_send_request(),
             )
 
         assert response.status_code == 429
 
-    def test_provider_error(self, client, mock_redis, mock_quota_service):
-        """Send fails with 500 when ChatSession returns error."""
-        session_data = _make_session_data()
-        session_key = "chat:anonymous:test-session-123"
-        mock_redis._data[session_key] = json.dumps(session_data)
-
-        chat_mock = MagicMock()
-        chat_mock.send_message.return_value = _make_chat_response(
-            text=None, error="Model overloaded"
-        )
-
-        storage_mock = MagicMock()
-        storage_mock.load_image = AsyncMock(return_value=None)
-
-        with _patch_chat_deps(mock_redis, mock_quota_service, storage_mock, chat_mock):
-            response = client.post(
-                "/api/chat/test-session-123/message",
-                json=_make_send_request(),
-            )
-
-        assert response.status_code == 500
-
-    def test_safety_blocked(self, client, mock_redis, mock_quota_service):
-        """Send fails with 500 when content is safety-blocked."""
-        session_data = _make_session_data()
-        session_key = "chat:anonymous:test-session-123"
-        mock_redis._data[session_key] = json.dumps(session_data)
-
-        chat_mock = MagicMock()
-        chat_mock.send_message.return_value = _make_chat_response(
-            text=None, error="Content blocked by safety filter"
-        )
-
-        storage_mock = MagicMock()
-        storage_mock.load_image = AsyncMock(return_value=None)
-
-        with _patch_chat_deps(mock_redis, mock_quota_service, storage_mock, chat_mock):
-            response = client.post(
-                "/api/chat/test-session-123/message",
-                json=_make_send_request(),
-            )
-
-        assert response.status_code == 500
-
     def test_no_api_key(self, client, mock_redis, mock_quota_service):
         """Send fails when no API key is configured."""
-        session_data = _make_session_data()
-        session_key = "chat:anonymous:test-session-123"
-        mock_redis._data[session_key] = json.dumps(session_data)
+        session_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        db_session = _make_db_session(session_id=session_id)
+        mock_chat_repo = _make_mock_chat_repo(db_session)
 
-        storage_mock = MagicMock()
-        storage_mock.load_image = AsyncMock(return_value=None)
-
-        # Patch ChatSession to raise on init (no API key) and settings to return None
-        with _patch_no_api_key(mock_redis, mock_quota_service, storage_mock):
+        with _patch_no_api_key(mock_redis, mock_quota_service, mock_chat_repo):
             response = client.post(
-                "/api/chat/test-session-123/message",
+                f"/api/chat/{session_id}/message",
                 json=_make_send_request(),
             )
 
         assert response.status_code == 422
 
 
+class TestDatabaseRequired:
+    """Tests for DB unavailable returning 503."""
+
+    def test_create_session_requires_db(self, client, mock_redis):
+        """POST /chat returns 503 when database is unavailable."""
+
+        async def get_mock_redis():
+            return mock_redis
+
+        with (
+            patch("api.routers.chat.get_redis", get_mock_redis),
+            patch("core.redis.get_redis", get_mock_redis),
+            patch("api.dependencies.is_database_available", return_value=False),
+        ):
+            response = client.post(
+                "/api/chat",
+                json={"aspect_ratio": "16:9"},
+            )
+
+        assert response.status_code == 503
+
+    def test_send_message_requires_db(self, client, mock_redis, mock_quota_service):
+        """POST /chat/{id}/message returns 503 when database is unavailable."""
+
+        async def get_mock_redis():
+            return mock_redis
+
+        with (
+            patch("api.routers.chat.get_redis", get_mock_redis),
+            patch("core.redis.get_redis", get_mock_redis),
+            patch("api.dependencies.is_database_available", return_value=False),
+        ):
+            response = client.post(
+                "/api/chat/a1b2c3d4-e5f6-7890-abcd-ef1234567890/message",
+                json=_make_send_request(),
+            )
+
+        assert response.status_code == 503
+
+    def test_list_sessions_requires_db(self, client, mock_redis):
+        """GET /chat returns 503 when database is unavailable."""
+
+        async def get_mock_redis():
+            return mock_redis
+
+        with (
+            patch("api.routers.chat.get_redis", get_mock_redis),
+            patch("core.redis.get_redis", get_mock_redis),
+            patch("api.dependencies.is_database_available", return_value=False),
+        ):
+            response = client.get("/api/chat")
+
+        assert response.status_code == 503
+
+
 @contextmanager
-def _patch_no_api_key(mock_redis, mock_quota_service, storage_mock):
+def _patch_no_api_key(mock_redis, mock_quota_service, mock_chat_repo):
     """Patch for no API key scenario."""
 
     async def get_mock_redis():
@@ -430,10 +366,461 @@ def _patch_no_api_key(mock_redis, mock_quota_service, storage_mock):
         patch("api.routers.chat.get_redis", get_mock_redis),
         patch("core.redis.get_redis", get_mock_redis),
         patch("api.routers.chat.get_quota_service", return_value=mock_quota_service),
-        patch("api.routers.chat.get_storage_manager", return_value=storage_mock),
         patch("api.routers.chat.get_settings", return_value=mock_settings),
     ):
-        yield
+        from api.dependencies import require_chat_repository
+        from api.main import app
+
+        app.dependency_overrides[require_chat_repository] = lambda: mock_chat_repo
+        try:
+            yield
+        finally:
+            app.dependency_overrides.pop(require_chat_repository, None)
+
+
+# ============ Polling Endpoint Tests ============
+
+
+class TestGetChatTaskProgress:
+    """Tests for GET /api/chat/task/{task_id}."""
+
+    def test_task_not_found(self, client, mock_redis):
+        """Polling non-existent task returns 404."""
+
+        async def get_mock_redis():
+            return mock_redis
+
+        with patch("api.routers.chat.get_redis", get_mock_redis):
+            response = client.get("/api/chat/task/chat_nonexistent")
+
+        assert response.status_code == 404
+
+    def test_task_queued(self, client, mock_redis):
+        """Polling queued task returns correct status."""
+        mock_redis._hashes["task:chat_abc123"] = {
+            "status": "queued",
+            "stage": "queued",
+            "progress": "0.0",
+            "user_id": "anonymous",
+            "session_id": "test-session",
+            "message": "Draw a cat",
+            "task_type": "chat",
+        }
+
+        async def get_mock_redis():
+            return mock_redis
+
+        with patch("api.routers.chat.get_redis", get_mock_redis):
+            response = client.get("/api/chat/task/chat_abc123")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["task_id"] == "chat_abc123"
+        assert data["status"] == "queued"
+        assert data["progress"] == 0.0
+        assert data["result"] is None
+
+    def test_task_completed(self, client, mock_redis):
+        """Polling completed task returns result."""
+        result_json = json.dumps(
+            {
+                "text": "Here's your cat!",
+                "image": None,
+                "thinking": None,
+                "duration": 2.5,
+                "message_count": 2,
+            }
+        )
+        mock_redis._hashes["task:chat_abc123"] = {
+            "status": "completed",
+            "stage": "saving",
+            "progress": "1.0",
+            "result_json": result_json,
+            "started_at": "2026-01-01T00:00:00",
+            "completed_at": "2026-01-01T00:00:03",
+        }
+
+        async def get_mock_redis():
+            return mock_redis
+
+        with patch("api.routers.chat.get_redis", get_mock_redis):
+            response = client.get("/api/chat/task/chat_abc123")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "completed"
+        assert data["progress"] == 1.0
+        assert data["result"]["text"] == "Here's your cat!"
+        assert data["result"]["duration"] == 2.5
+        assert data["started_at"] is not None
+        assert data["completed_at"] is not None
+
+    def test_task_failed(self, client, mock_redis):
+        """Polling failed task returns error."""
+        mock_redis._hashes["task:chat_abc123"] = {
+            "status": "failed",
+            "error": "Model overloaded",
+            "error_code": "generation_error",
+            "completed_at": "2026-01-01T00:00:03",
+        }
+
+        async def get_mock_redis():
+            return mock_redis
+
+        with patch("api.routers.chat.get_redis", get_mock_redis):
+            response = client.get("/api/chat/task/chat_abc123")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "failed"
+        assert data["error"] == "Model overloaded"
+        assert data["error_code"] == "generation_error"
+
+
+# ============ Background Task Tests ============
+
+
+def _make_chat_session_cls_mock(instance_mock):
+    """Build a mock ChatSession class with correct class-level constants."""
+    from services.chat_session import ChatSession as RealChatSession
+
+    mock_cls = MagicMock(return_value=instance_mock)
+    mock_cls.IMAGE_HISTORY_TURNS = RealChatSession.IMAGE_HISTORY_TURNS
+    return mock_cls
+
+
+class TestExecuteChatTask:
+    """Tests for execute_chat_task background function."""
+
+    @pytest.fixture
+    def mock_redis(self):
+        """Fresh mock Redis for background task tests."""
+        from tests.conftest import MockRedis
+
+        return MockRedis()
+
+    @pytest.fixture
+    def session_data_json(self):
+        """Serialized session data."""
+        return json.dumps(_make_session_data())
+
+    @pytest.fixture
+    def task_redis(self, mock_redis):
+        """Set up task hash in Redis (simulates router creating it)."""
+        mock_redis._hashes["task:chat_test123"] = {
+            "status": "queued",
+            "stage": "queued",
+            "progress": "0.0",
+        }
+        return mock_redis
+
+    async def test_success_text_only(self, task_redis, session_data_json):
+        """Background task completes with text-only response."""
+        from services.chat_task import execute_chat_task
+
+        chat_mock = MagicMock()
+        chat_mock.send_message.return_value = _make_chat_response(
+            text="Here's the colorful version."
+        )
+
+        storage_mock = MagicMock()
+        storage_mock.load_image = AsyncMock(return_value=None)
+
+        ws_mock = MagicMock()
+        ws_mock.send_chat_progress = AsyncMock(return_value=0)
+        ws_mock.send_chat_complete = AsyncMock(return_value=0)
+        ws_mock.send_chat_error = AsyncMock(return_value=0)
+
+        mock_chat_repo = _make_mock_chat_repo()
+
+        async def get_mock_redis():
+            return task_redis
+
+        async def mock_get_session():
+            mock_db = MagicMock()
+            yield mock_db
+
+        with (
+            patch("services.chat_task.get_redis", get_mock_redis),
+            patch("services.chat_task.get_websocket_manager", return_value=ws_mock),
+            patch("services.chat_task.get_storage_manager", return_value=storage_mock),
+            patch(
+                "services.chat_task.ChatSession",
+                _make_chat_session_cls_mock(chat_mock),
+            ),
+            patch("services.chat_task.is_database_available", return_value=True),
+            patch("services.chat_task.get_session", mock_get_session),
+            patch("services.chat_task.ChatRepository", return_value=mock_chat_repo),
+            patch("services.chat_task.QuotaRepository"),
+        ):
+            await execute_chat_task(
+                task_id="chat_test123",
+                session_id=TEST_SESSION_UUID,
+                user_id="anonymous",
+                message="Make it colorful",
+                aspect_ratio=None,
+                safety_level="moderate",
+                enable_thinking=False,
+                api_key="test-key",
+                session_data_json=session_data_json,
+            )
+
+        # Verify task completed in Redis
+        task_data = task_redis._hashes["task:chat_test123"]
+        assert task_data["status"] == "completed"
+        assert task_data["progress"] == "1.0"
+        assert "result_json" in task_data
+
+        result = json.loads(task_data["result_json"])
+        assert result["text"] == "Here's the colorful version."
+        assert result["message_count"] == 2
+
+        # Verify DB messages were created
+        assert mock_chat_repo.create_message.call_count == 2
+        user_call = mock_chat_repo.create_message.call_args_list[0]
+        assert user_call.kwargs["role"] == "user"
+        assert user_call.kwargs["content"] == "Make it colorful"
+        assistant_call = mock_chat_repo.create_message.call_args_list[1]
+        assert assistant_call.kwargs["role"] == "assistant"
+
+        # Verify WS complete was called
+        ws_mock.send_chat_complete.assert_called_once()
+
+    async def test_success_with_image(self, task_redis, session_data_json):
+        """Background task saves image and completes."""
+        from services.chat_task import execute_chat_task
+
+        img = Image.new("RGB", (512, 512), color="blue")
+        chat_mock = MagicMock()
+        chat_mock.send_message.return_value = _make_chat_response(
+            text="Here's the image.", image=img
+        )
+
+        save_result = MagicMock()
+        save_result.key = "images/chat/test.png"
+        save_result.filename = "test.png"
+        save_result.public_url = "https://cdn.example.com/images/chat/test.png"
+
+        storage_mock = MagicMock()
+        storage_mock.load_image = AsyncMock(return_value=None)
+        storage_mock.save_image = AsyncMock(return_value=save_result)
+
+        ws_mock = MagicMock()
+        ws_mock.send_chat_progress = AsyncMock(return_value=0)
+        ws_mock.send_chat_complete = AsyncMock(return_value=0)
+        ws_mock.send_chat_error = AsyncMock(return_value=0)
+
+        mock_chat_repo = _make_mock_chat_repo()
+
+        async def get_mock_redis():
+            return task_redis
+
+        async def mock_get_session():
+            mock_db = MagicMock()
+            yield mock_db
+
+        with (
+            patch("services.chat_task.get_redis", get_mock_redis),
+            patch("services.chat_task.get_websocket_manager", return_value=ws_mock),
+            patch("services.chat_task.get_storage_manager", return_value=storage_mock),
+            patch(
+                "services.chat_task.ChatSession",
+                _make_chat_session_cls_mock(chat_mock),
+            ),
+            patch("services.chat_task.is_database_available", return_value=True),
+            patch("services.chat_task.get_session", mock_get_session),
+            patch("services.chat_task.ChatRepository", return_value=mock_chat_repo),
+            patch("services.chat_task.QuotaRepository"),
+        ):
+            await execute_chat_task(
+                task_id="chat_test123",
+                session_id=TEST_SESSION_UUID,
+                user_id="anonymous",
+                message="Draw something",
+                aspect_ratio=None,
+                safety_level="moderate",
+                enable_thinking=False,
+                api_key="test-key",
+                session_data_json=session_data_json,
+            )
+
+        task_data = task_redis._hashes["task:chat_test123"]
+        assert task_data["status"] == "completed"
+        result = json.loads(task_data["result_json"])
+        assert result["image"]["key"] == "images/chat/test.png"
+        assert result["image"]["width"] == 512
+
+        # Verify image URL updated in DB
+        mock_chat_repo.update_session_latest_image.assert_called_once()
+
+    async def test_generation_error_refunds_quota(self, task_redis, session_data_json):
+        """Background task refunds quota on generation error."""
+        from services.chat_task import execute_chat_task
+
+        chat_mock = MagicMock()
+        chat_mock.send_message.return_value = _make_chat_response(
+            text=None, error="Model overloaded"
+        )
+
+        storage_mock = MagicMock()
+        storage_mock.load_image = AsyncMock(return_value=None)
+
+        ws_mock = MagicMock()
+        ws_mock.send_chat_progress = AsyncMock(return_value=0)
+        ws_mock.send_chat_error = AsyncMock(return_value=0)
+
+        quota_mock = MagicMock()
+        quota_mock.refund_quota = AsyncMock()
+
+        async def get_mock_redis():
+            return task_redis
+
+        with (
+            patch("services.chat_task.get_redis", get_mock_redis),
+            patch("services.chat_task.get_websocket_manager", return_value=ws_mock),
+            patch("services.chat_task.get_storage_manager", return_value=storage_mock),
+            patch(
+                "services.chat_task.ChatSession",
+                _make_chat_session_cls_mock(chat_mock),
+            ),
+            patch("services.chat_task.get_quota_service", return_value=quota_mock),
+            patch("services.chat_task.is_database_available", return_value=False),
+        ):
+            await execute_chat_task(
+                task_id="chat_test123",
+                session_id=TEST_SESSION_UUID,
+                user_id="anonymous",
+                message="Test",
+                aspect_ratio=None,
+                safety_level="moderate",
+                enable_thinking=False,
+                api_key="test-key",
+                session_data_json=session_data_json,
+            )
+
+        task_data = task_redis._hashes["task:chat_test123"]
+        assert task_data["status"] == "failed"
+        assert "error" in task_data
+
+        # Verify quota refund
+        quota_mock.refund_quota.assert_called_once_with("anonymous", 1)
+
+    async def test_persists_messages_to_db(self, task_redis, session_data_json):
+        """Background task persists user and assistant messages to DB."""
+        from services.chat_task import execute_chat_task
+
+        chat_mock = MagicMock()
+        chat_mock.send_message.return_value = _make_chat_response(text="Updated!")
+
+        storage_mock = MagicMock()
+        storage_mock.load_image = AsyncMock(return_value=None)
+
+        ws_mock = MagicMock()
+        ws_mock.send_chat_progress = AsyncMock(return_value=0)
+        ws_mock.send_chat_complete = AsyncMock(return_value=0)
+        ws_mock.send_chat_error = AsyncMock(return_value=0)
+
+        mock_chat_repo = _make_mock_chat_repo()
+        mock_chat_repo.count_messages_by_session = AsyncMock(return_value=4)
+
+        async def get_mock_redis():
+            return task_redis
+
+        async def mock_get_session():
+            mock_db = MagicMock()
+            yield mock_db
+
+        with (
+            patch("services.chat_task.get_redis", get_mock_redis),
+            patch("services.chat_task.get_websocket_manager", return_value=ws_mock),
+            patch("services.chat_task.get_storage_manager", return_value=storage_mock),
+            patch(
+                "services.chat_task.ChatSession",
+                _make_chat_session_cls_mock(chat_mock),
+            ),
+            patch("services.chat_task.is_database_available", return_value=True),
+            patch("services.chat_task.get_session", mock_get_session),
+            patch("services.chat_task.ChatRepository", return_value=mock_chat_repo),
+            patch("services.chat_task.QuotaRepository"),
+        ):
+            await execute_chat_task(
+                task_id="chat_test123",
+                session_id=TEST_SESSION_UUID,
+                user_id="anonymous",
+                message="Add a sunset",
+                aspect_ratio=None,
+                safety_level="moderate",
+                enable_thinking=False,
+                api_key="test-key",
+                session_data_json=session_data_json,
+            )
+
+        # Verify DB messages were created
+        assert mock_chat_repo.create_message.call_count == 2
+
+        # Verify message_count comes from DB
+        result = json.loads(task_redis._hashes["task:chat_test123"]["result_json"])
+        assert result["message_count"] == 4
+
+        # No Redis session key should be written
+        assert f"chat:anonymous:{TEST_SESSION_UUID}" not in task_redis._data
+
+    async def test_loads_history_images(self, task_redis):
+        """Background task loads history images from storage."""
+        from services.chat_task import execute_chat_task
+
+        existing_messages = [
+            {"role": "user", "content": "Draw a cat", "timestamp": datetime.now().isoformat()},
+            {
+                "role": "assistant",
+                "content": "Here's a cat.",
+                "image_key": "img/cat.png",
+                "thinking": None,
+                "timestamp": datetime.now().isoformat(),
+            },
+        ]
+        session_data_json = json.dumps(_make_session_data(messages=existing_messages))
+
+        cat_img = Image.new("RGB", (64, 64), color="orange")
+        chat_mock = MagicMock()
+        chat_mock.send_message.return_value = _make_chat_response(text="Blue cat!")
+
+        storage_mock = MagicMock()
+        storage_mock.load_image = AsyncMock(return_value=cat_img)
+
+        ws_mock = MagicMock()
+        ws_mock.send_chat_progress = AsyncMock(return_value=0)
+        ws_mock.send_chat_complete = AsyncMock(return_value=0)
+        ws_mock.send_chat_error = AsyncMock(return_value=0)
+
+        async def get_mock_redis():
+            return task_redis
+
+        with (
+            patch("services.chat_task.get_redis", get_mock_redis),
+            patch("services.chat_task.get_websocket_manager", return_value=ws_mock),
+            patch("services.chat_task.get_storage_manager", return_value=storage_mock),
+            patch(
+                "services.chat_task.ChatSession",
+                _make_chat_session_cls_mock(chat_mock),
+            ),
+            patch("services.chat_task.is_database_available", return_value=False),
+        ):
+            await execute_chat_task(
+                task_id="chat_test123",
+                session_id=TEST_SESSION_UUID,
+                user_id="anonymous",
+                message="Make it blue",
+                aspect_ratio=None,
+                safety_level="moderate",
+                enable_thinking=False,
+                api_key="test-key",
+                session_data_json=session_data_json,
+            )
+
+        # Verify send_message received history_images
+        call_kwargs = chat_mock.send_message.call_args.kwargs
+        assert "img/cat.png" in call_kwargs["history_images"]
 
 
 # ============ ChatSession Unit Tests ============
@@ -512,8 +899,30 @@ class TestBuildContents:
         assert contents[2].role == "user"
         assert contents[2].parts[0].text == "make it blue"
 
-    def test_with_images(self, session):
-        """Recent history images are included in model message parts."""
+    def test_with_images_and_signature(self, session):
+        """Model images with thought_signature are included."""
+        img = Image.new("RGB", (64, 64), color="red")
+        history = [
+            {"role": "user", "content": "draw a cat"},
+            {"role": "assistant", "content": "here is a cat", "image_key": "img/cat.png"},
+        ]
+        history_images = {"img/cat.png": img}
+        history_signatures = {"img/cat.png": b"fake_sig"}
+
+        contents = session._build_contents(
+            history, "make it blue", history_images, history_signatures
+        )
+
+        model_msg = contents[1]
+        assert model_msg.role == "model"
+        assert len(model_msg.parts) == 2
+        assert model_msg.parts[0].text == "here is a cat"
+        assert model_msg.parts[1].inline_data is not None
+        assert model_msg.parts[1].inline_data.mime_type == "image/png"
+        assert model_msg.parts[1].thought_signature == b"fake_sig"
+
+    def test_model_image_without_signature_skipped(self, session):
+        """Model images without thought_signature are skipped (legacy data)."""
         img = Image.new("RGB", (64, 64), color="red")
         history = [
             {"role": "user", "content": "draw a cat"},
@@ -523,13 +932,27 @@ class TestBuildContents:
 
         contents = session._build_contents(history, "make it blue", history_images)
 
-        # Model message should have 2 parts: text + image
+        # Model message should only have text (image skipped due to missing signature)
         model_msg = contents[1]
         assert model_msg.role == "model"
-        assert len(model_msg.parts) == 2
+        assert len(model_msg.parts) == 1
         assert model_msg.parts[0].text == "here is a cat"
-        assert model_msg.parts[1].inline_data is not None
-        assert model_msg.parts[1].inline_data.mime_type == "image/png"
+
+    def test_user_image_without_signature_included(self, session):
+        """User-uploaded images don't need thought_signature."""
+        img = Image.new("RGB", (64, 64), color="blue")
+        history = [
+            {"role": "user", "content": "edit this", "image_key": "img/upload.png"},
+            {"role": "assistant", "content": "done"},
+        ]
+        history_images = {"img/upload.png": img}
+
+        contents = session._build_contents(history, "more changes", history_images)
+
+        user_msg = contents[0]
+        assert user_msg.role == "user"
+        assert len(user_msg.parts) == 2
+        assert user_msg.parts[1].inline_data is not None
 
     def test_truncation(self, session):
         """History beyond MAX_HISTORY_TURNS is truncated."""
@@ -770,77 +1193,3 @@ class TestChatSessionSendMessage:
         assert result.image.size == (64, 64)
         pixel = result.image.getpixel((0, 0))
         assert pixel == (42, 128, 255)
-
-
-# ============ Router-Level History Image Loading Tests ============
-
-
-class TestRouterHistoryImageLoading:
-    """Tests that the router correctly loads history images and passes them to ChatSession."""
-
-    def test_router_loads_history_images(self, client, mock_redis, mock_quota_service):
-        """Router loads images from storage for recent history messages."""
-        existing_messages = [
-            {"role": "user", "content": "Draw a cat", "timestamp": datetime.now().isoformat()},
-            {
-                "role": "assistant",
-                "content": "Here's a cat.",
-                "image_key": "img/cat.png",
-                "thinking": None,
-                "timestamp": datetime.now().isoformat(),
-            },
-        ]
-        session_data = _make_session_data(messages=existing_messages)
-        session_key = "chat:anonymous:test-session-123"
-        mock_redis._data[session_key] = json.dumps(session_data)
-
-        cat_img = Image.new("RGB", (64, 64), color="orange")
-        chat_mock = MagicMock()
-        chat_mock.send_message.return_value = _make_chat_response(text="Blue cat!")
-
-        storage_mock = MagicMock()
-        storage_mock.load_image = AsyncMock(return_value=cat_img)
-
-        with _patch_chat_deps(mock_redis, mock_quota_service, storage_mock, chat_mock):
-            response = client.post(
-                "/api/chat/test-session-123/message",
-                json=_make_send_request(message="Make it blue"),
-            )
-
-        assert response.status_code == 200
-        # Verify send_message received history_images with the loaded image
-        call_kwargs = chat_mock.send_message.call_args.kwargs
-        assert "img/cat.png" in call_kwargs["history_images"]
-
-    def test_router_handles_failed_image_load(self, client, mock_redis, mock_quota_service):
-        """Router gracefully handles image loading failures."""
-        existing_messages = [
-            {"role": "user", "content": "Draw a cat", "timestamp": datetime.now().isoformat()},
-            {
-                "role": "assistant",
-                "content": "Here's a cat.",
-                "image_key": "img/missing.png",
-                "thinking": None,
-                "timestamp": datetime.now().isoformat(),
-            },
-        ]
-        session_data = _make_session_data(messages=existing_messages)
-        session_key = "chat:anonymous:test-session-123"
-        mock_redis._data[session_key] = json.dumps(session_data)
-
-        chat_mock = MagicMock()
-        chat_mock.send_message.return_value = _make_chat_response(text="OK")
-
-        storage_mock = MagicMock()
-        storage_mock.load_image = AsyncMock(side_effect=Exception("File not found"))
-
-        with _patch_chat_deps(mock_redis, mock_quota_service, storage_mock, chat_mock):
-            response = client.post(
-                "/api/chat/test-session-123/message",
-                json=_make_send_request(),
-            )
-
-        # Should still succeed — failed image loads are silently skipped
-        assert response.status_code == 200
-        call_kwargs = chat_mock.send_message.call_args.kwargs
-        assert call_kwargs["history_images"] == {}

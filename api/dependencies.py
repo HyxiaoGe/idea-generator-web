@@ -10,6 +10,7 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.auth import AppUser, get_current_user, require_current_user
+from core.exceptions import DatabaseRequiredError
 from database import get_session, is_database_available
 from database.repositories import (
     APIKeyRepository,
@@ -66,6 +67,15 @@ async def get_chat_repository(
     """Get ChatRepository dependency."""
     if session is None:
         return None
+    return ChatRepository(session)
+
+
+async def require_chat_repository(
+    session: AsyncSession | None = Depends(get_db_session),
+) -> ChatRepository:
+    """Get ChatRepository dependency (required — 503 if DB unavailable)."""
+    if session is None:
+        raise DatabaseRequiredError(message="Database required for chat")
     return ChatRepository(session)
 
 
