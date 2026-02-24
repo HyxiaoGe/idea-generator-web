@@ -91,7 +91,7 @@ def _make_mock_chat_repo(db_session=None):
 
 
 @contextmanager
-def _patch_send_message_deps(mock_redis, mock_quota_service, mock_chat_repo):
+def _patch_send_message_deps(mock_redis, mock_chat_repo):
     """Patch router dependencies for send_message (async mode)."""
 
     async def get_mock_redis():
@@ -100,7 +100,7 @@ def _patch_send_message_deps(mock_redis, mock_quota_service, mock_chat_repo):
     with (
         patch("api.routers.chat.get_redis", get_mock_redis),
         patch("core.redis.get_redis", get_mock_redis),
-        patch("api.routers.chat.get_quota_service", return_value=mock_quota_service),
+        patch("api.routers.chat.check_quota_and_consume", new_callable=AsyncMock),
         patch("api.routers.chat.execute_chat_task", new_callable=AsyncMock) as mock_task,
     ):
         from api.dependencies import require_chat_repository
@@ -171,13 +171,13 @@ class TestSendMessageValidation:
 class TestSendMessageAsync:
     """Tests for the async send_message endpoint."""
 
-    def test_returns_task_id(self, client, mock_redis, mock_quota_service):
+    def test_returns_task_id(self, client, mock_redis):
         """Send message returns task_id with queued status."""
         session_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         db_session = _make_db_session(session_id=session_id)
         mock_chat_repo = _make_mock_chat_repo(db_session)
 
-        with _patch_send_message_deps(mock_redis, mock_quota_service, mock_chat_repo):
+        with _patch_send_message_deps(mock_redis, mock_chat_repo):
             response = client.post(
                 f"/api/chat/{session_id}/message",
                 json=_make_send_request(),
@@ -189,13 +189,13 @@ class TestSendMessageAsync:
         assert data["task_id"].startswith("chat_")
         assert data["status"] == "queued"
 
-    def test_creates_redis_task(self, client, mock_redis, mock_quota_service):
+    def test_creates_redis_task(self, client, mock_redis):
         """Send message creates task hash in Redis."""
         session_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         db_session = _make_db_session(session_id=session_id)
         mock_chat_repo = _make_mock_chat_repo(db_session)
 
-        with _patch_send_message_deps(mock_redis, mock_quota_service, mock_chat_repo):
+        with _patch_send_message_deps(mock_redis, mock_chat_repo):
             response = client.post(
                 f"/api/chat/{session_id}/message",
                 json=_make_send_request(message="Draw a sunset"),
@@ -208,13 +208,13 @@ class TestSendMessageAsync:
         assert task_data["message"] == "Draw a sunset"
         assert task_data["task_type"] == "chat"
 
-    def test_with_aspect_ratio_override(self, client, mock_redis, mock_quota_service):
+    def test_with_aspect_ratio_override(self, client, mock_redis):
         """Send message with aspect_ratio returns task_id."""
         session_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         db_session = _make_db_session(session_id=session_id)
         mock_chat_repo = _make_mock_chat_repo(db_session)
 
-        with _patch_send_message_deps(mock_redis, mock_quota_service, mock_chat_repo):
+        with _patch_send_message_deps(mock_redis, mock_chat_repo):
             response = client.post(
                 f"/api/chat/{session_id}/message",
                 json=_make_send_request(aspect_ratio="1:1"),
@@ -223,7 +223,7 @@ class TestSendMessageAsync:
         assert response.status_code == 200
         assert response.json()["task_id"].startswith("chat_")
 
-    def test_includes_history_in_snapshot(self, client, mock_redis, mock_quota_service):
+    def test_includes_history_in_snapshot(self, client, mock_redis):
         """Send message builds snapshot with existing messages from DB."""
         session_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         messages = [
@@ -233,7 +233,7 @@ class TestSendMessageAsync:
         db_session = _make_db_session(session_id=session_id, messages=messages)
         mock_chat_repo = _make_mock_chat_repo(db_session)
 
-        with _patch_send_message_deps(mock_redis, mock_quota_service, mock_chat_repo) as mock_task:
+        with _patch_send_message_deps(mock_redis, mock_chat_repo) as mock_task:
             response = client.post(
                 f"/api/chat/{session_id}/message",
                 json=_make_send_request(message="Make it blue"),
@@ -251,11 +251,11 @@ class TestSendMessageAsync:
 class TestSendMessageErrors:
     """Error handling tests for send_message."""
 
-    def test_session_not_found(self, client, mock_redis, mock_quota_service):
+    def test_session_not_found(self, client, mock_redis):
         """Send to non-existent session returns 404."""
         mock_chat_repo = _make_mock_chat_repo(db_session=None)
 
-        with _patch_send_message_deps(mock_redis, mock_quota_service, mock_chat_repo):
+        with _patch_send_message_deps(mock_redis, mock_chat_repo):
             response = client.post(
                 "/api/chat/a1b2c3d4-e5f6-7890-abcd-ef1234567890/message",
                 json=_make_send_request(),
@@ -265,30 +265,49 @@ class TestSendMessageErrors:
 
     def test_quota_exceeded(self, client, mock_redis):
         """Send fails with 429 when quota exceeded."""
+        from core.exceptions import QuotaExceededError
+
         session_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         db_session = _make_db_session(session_id=session_id)
         mock_chat_repo = _make_mock_chat_repo(db_session)
 
-        quota_service = MagicMock()
-        quota_service.check_quota = AsyncMock(
-            return_value=(False, "Daily limit reached", {"used": 50, "limit": 50})
-        )
+        async def get_mock_redis():
+            return mock_redis
 
-        with _patch_send_message_deps(mock_redis, quota_service, mock_chat_repo):
-            response = client.post(
-                f"/api/chat/{session_id}/message",
-                json=_make_send_request(),
-            )
+        with (
+            patch("api.routers.chat.get_redis", get_mock_redis),
+            patch("core.redis.get_redis", get_mock_redis),
+            patch(
+                "api.routers.chat.check_quota_and_consume",
+                new_callable=AsyncMock,
+                side_effect=QuotaExceededError(
+                    message="Daily limit reached",
+                    details={"used": 50, "limit": 50},
+                ),
+            ),
+            patch("api.routers.chat.execute_chat_task", new_callable=AsyncMock),
+        ):
+            from api.dependencies import require_chat_repository
+            from api.main import app
+
+            app.dependency_overrides[require_chat_repository] = lambda: mock_chat_repo
+            try:
+                response = client.post(
+                    f"/api/chat/{session_id}/message",
+                    json=_make_send_request(),
+                )
+            finally:
+                app.dependency_overrides.pop(require_chat_repository, None)
 
         assert response.status_code == 429
 
-    def test_no_api_key(self, client, mock_redis, mock_quota_service):
+    def test_no_api_key(self, client, mock_redis):
         """Send fails when no API key is configured."""
         session_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         db_session = _make_db_session(session_id=session_id)
         mock_chat_repo = _make_mock_chat_repo(db_session)
 
-        with _patch_no_api_key(mock_redis, mock_quota_service, mock_chat_repo):
+        with _patch_no_api_key(mock_redis, mock_chat_repo):
             response = client.post(
                 f"/api/chat/{session_id}/message",
                 json=_make_send_request(),
@@ -318,7 +337,7 @@ class TestDatabaseRequired:
 
         assert response.status_code == 503
 
-    def test_send_message_requires_db(self, client, mock_redis, mock_quota_service):
+    def test_send_message_requires_db(self, client, mock_redis):
         """POST /chat/{id}/message returns 503 when database is unavailable."""
 
         async def get_mock_redis():
@@ -353,7 +372,7 @@ class TestDatabaseRequired:
 
 
 @contextmanager
-def _patch_no_api_key(mock_redis, mock_quota_service, mock_chat_repo):
+def _patch_no_api_key(mock_redis, mock_chat_repo):
     """Patch for no API key scenario."""
 
     async def get_mock_redis():
@@ -365,7 +384,7 @@ def _patch_no_api_key(mock_redis, mock_quota_service, mock_chat_repo):
     with (
         patch("api.routers.chat.get_redis", get_mock_redis),
         patch("core.redis.get_redis", get_mock_redis),
-        patch("api.routers.chat.get_quota_service", return_value=mock_quota_service),
+        patch("api.routers.chat.check_quota_and_consume", new_callable=AsyncMock),
         patch("api.routers.chat.get_settings", return_value=mock_settings),
     ):
         from api.dependencies import require_chat_repository

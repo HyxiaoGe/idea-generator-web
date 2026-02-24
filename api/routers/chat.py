@@ -18,7 +18,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header
 
-from api.dependencies import require_chat_repository
+from api.dependencies import check_quota_and_consume, get_user_id_from_user, require_chat_repository
 from api.schemas.chat import (
     AsyncChatResponse,
     ChatHistoryResponse,
@@ -35,48 +35,18 @@ from api.schemas.generate import GeneratedImage
 from core.auth import AppUser, get_current_user
 from core.config import get_settings
 from core.exceptions import (
-    QuotaExceededError,
     SessionNotFoundError,
     TaskNotFoundError,
     ValidationError,
 )
 from core.redis import get_redis
 from database.repositories import ChatRepository
-from services import (
-    get_quota_service,
-    get_storage_manager,
-)
+from services import get_storage_manager
 from services.chat_task import execute_chat_task
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-
-
-# ============ Helpers ============
-
-
-def get_user_id_from_user(user: AppUser | None) -> str:
-    """Get user ID for session storage."""
-    if user:
-        return user.user_folder_id
-    return "anonymous"
-
-
-async def check_chat_quota(user_id: str):
-    """Check and consume quota for chat generation."""
-    redis = await get_redis()
-    quota_service = get_quota_service(redis)
-
-    can_generate, reason, info = await quota_service.check_quota(
-        user_id=user_id,
-        count=1,
-    )
-
-    if not can_generate:
-        raise QuotaExceededError(message=reason, details=info)
-
-    await quota_service.consume_quota(user_id=user_id, count=1)
 
 
 # ============ Endpoints ============
@@ -154,7 +124,7 @@ async def send_message(
     session_json = json.dumps(session_data)
 
     # Check quota (before creating task)
-    await check_chat_quota(user_id)
+    await check_quota_and_consume(user_id)
 
     # Resolve API key
     settings = get_settings()

@@ -55,18 +55,17 @@ def _make_fake_result(success=True, error=None, text_response=_SENTINEL):
 
 
 @contextmanager
-def _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+def _patch_describe_deps(mock_redis, storage_mock, router_mock):
     """Patch all describe endpoint dependencies (non-DI ones)."""
 
     async def get_mock_redis():
         return mock_redis
 
     with (
-        patch("api.routers.generate.get_redis", get_mock_redis),
         patch("core.redis.get_redis", get_mock_redis),
-        patch("api.routers.generate.get_quota_service", return_value=mock_quota_service),
-        patch("api.routers.generate.get_storage_manager", return_value=storage_mock),
-        patch("api.routers.generate.get_provider_router", return_value=router_mock),
+        patch("api.routers.generate._describe.check_quota_and_consume", new_callable=AsyncMock),
+        patch("api.routers.generate._describe.get_storage_manager", return_value=storage_mock),
+        patch("api.routers.generate._describe.get_provider_router", return_value=router_mock),
     ):
         yield
 
@@ -99,7 +98,7 @@ class TestDescribeValidation:
 class TestDescribeSuccess:
     """Successful describe tests."""
 
-    def test_describe_standard(self, client, mock_redis, mock_quota_service):
+    def test_describe_standard(self, client, mock_redis):
         """Describe with standard detail level succeeds."""
         source_img = Image.new("RGB", (256, 256), color="red")
         storage_mock = MagicMock()
@@ -108,7 +107,7 @@ class TestDescribeSuccess:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result())
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(),
@@ -121,7 +120,7 @@ class TestDescribeSuccess:
         assert data["provider"] == "google"
         assert data["duration"] > 0
 
-    def test_describe_with_tags(self, client, mock_redis, mock_quota_service):
+    def test_describe_with_tags(self, client, mock_redis):
         """Describe with include_tags=True parses tags from response."""
         source_img = Image.new("RGB", (256, 256), color="blue")
         storage_mock = MagicMock()
@@ -130,7 +129,7 @@ class TestDescribeSuccess:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result())
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(include_tags=True),
@@ -143,7 +142,7 @@ class TestDescribeSuccess:
         # Description should not contain the "Tags:" prefix
         assert "Tags:" not in data["description"]
 
-    def test_describe_without_tags(self, client, mock_redis, mock_quota_service):
+    def test_describe_without_tags(self, client, mock_redis):
         """Describe with include_tags=False returns empty tags."""
         source_img = Image.new("RGB", (256, 256), color="green")
         storage_mock = MagicMock()
@@ -153,7 +152,7 @@ class TestDescribeSuccess:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result(text_response=text))
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(include_tags=False),
@@ -164,7 +163,7 @@ class TestDescribeSuccess:
         assert data["tags"] == []
         assert data["description"] == text
 
-    def test_describe_brief(self, client, mock_redis, mock_quota_service):
+    def test_describe_brief(self, client, mock_redis):
         """Describe with brief detail level uses brief prompt."""
         source_img = Image.new("RGB", (256, 256), color="yellow")
         storage_mock = MagicMock()
@@ -175,7 +174,7 @@ class TestDescribeSuccess:
             return_value=_make_fake_result(text_response="A yellow image.")
         )
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(detail_level="brief", include_tags=False),
@@ -188,7 +187,7 @@ class TestDescribeSuccess:
         provider_request = call_args.kwargs.get("request") or call_args[0][0]
         assert "1-2 sentences" in provider_request.prompt
 
-    def test_describe_detailed(self, client, mock_redis, mock_quota_service):
+    def test_describe_detailed(self, client, mock_redis):
         """Describe with detailed level uses comprehensive prompt."""
         source_img = Image.new("RGB", (256, 256), color="purple")
         storage_mock = MagicMock()
@@ -199,7 +198,7 @@ class TestDescribeSuccess:
             return_value=_make_fake_result(text_response="A detailed description.")
         )
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(detail_level="detailed", include_tags=False),
@@ -211,7 +210,7 @@ class TestDescribeSuccess:
         provider_request = call_args.kwargs.get("request") or call_args[0][0]
         assert "comprehensive" in provider_request.prompt
 
-    def test_describe_chinese(self, client, mock_redis, mock_quota_service):
+    def test_describe_chinese(self, client, mock_redis):
         """Describe with language=zh includes Chinese instruction."""
         source_img = Image.new("RGB", (256, 256), color="red")
         storage_mock = MagicMock()
@@ -222,7 +221,7 @@ class TestDescribeSuccess:
             return_value=_make_fake_result(text_response="一幅美丽的日落图片。")
         )
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(language="zh", include_tags=False),
@@ -234,7 +233,7 @@ class TestDescribeSuccess:
         provider_request = call_args.kwargs.get("request") or call_args[0][0]
         assert "中文" in provider_request.prompt
 
-    def test_describe_forces_google_provider(self, client, mock_redis, mock_quota_service):
+    def test_describe_forces_google_provider(self, client, mock_redis):
         """Describe always routes to google provider."""
         source_img = Image.new("RGB", (256, 256), color="red")
         storage_mock = MagicMock()
@@ -245,7 +244,7 @@ class TestDescribeSuccess:
             return_value=_make_fake_result(text_response="Test description.")
         )
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(include_tags=False),
@@ -258,7 +257,7 @@ class TestDescribeSuccess:
         assert provider_request.preferred_provider == "google"
         assert provider_request.edit_mode == "describe"
 
-    def test_describe_passes_image_as_reference(self, client, mock_redis, mock_quota_service):
+    def test_describe_passes_image_as_reference(self, client, mock_redis):
         """Describe passes the image in reference_images for generate_content."""
         source_img = Image.new("RGB", (256, 256), color="red")
         storage_mock = MagicMock()
@@ -267,7 +266,7 @@ class TestDescribeSuccess:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result(text_response="An image."))
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(include_tags=False),
@@ -284,7 +283,7 @@ class TestDescribeSuccess:
 class TestReversePrompt:
     """Reverse prompt mode tests."""
 
-    def test_reverse_prompt_returns_prompt_field(self, client, mock_redis, mock_quota_service):
+    def test_reverse_prompt_returns_prompt_field(self, client, mock_redis):
         """Reverse prompt mode returns generated prompt in the prompt field."""
         source_img = Image.new("RGB", (256, 256), color="red")
         storage_mock = MagicMock()
@@ -297,7 +296,7 @@ class TestReversePrompt:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result(text_response=prompt_text))
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(mode="reverse_prompt", include_tags=False),
@@ -309,9 +308,7 @@ class TestReversePrompt:
         assert data["description"] == prompt_text
         assert data["tags"] == []
 
-    def test_reverse_prompt_uses_correct_system_prompt(
-        self, client, mock_redis, mock_quota_service
-    ):
+    def test_reverse_prompt_uses_correct_system_prompt(self, client, mock_redis):
         """Reverse prompt mode sends generation-focused prompt to the model."""
         source_img = Image.new("RGB", (256, 256), color="blue")
         storage_mock = MagicMock()
@@ -322,7 +319,7 @@ class TestReversePrompt:
             return_value=_make_fake_result(text_response="a cat, photorealistic")
         )
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(mode="reverse_prompt"),
@@ -334,7 +331,7 @@ class TestReversePrompt:
         assert "generation prompt" in provider_request.prompt
         assert "text-to-image" in provider_request.prompt
 
-    def test_reverse_prompt_skips_tag_parsing(self, client, mock_redis, mock_quota_service):
+    def test_reverse_prompt_skips_tag_parsing(self, client, mock_redis):
         """Reverse prompt mode does not parse Tags: from response even if include_tags=True."""
         source_img = Image.new("RGB", (256, 256), color="green")
         storage_mock = MagicMock()
@@ -347,7 +344,7 @@ class TestReversePrompt:
             return_value=_make_fake_result(text_response=text_with_tags)
         )
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(mode="reverse_prompt", include_tags=True),
@@ -359,7 +356,7 @@ class TestReversePrompt:
         assert data["prompt"] == text_with_tags.strip()
         assert data["tags"] == []
 
-    def test_reverse_prompt_chinese(self, client, mock_redis, mock_quota_service):
+    def test_reverse_prompt_chinese(self, client, mock_redis):
         """Reverse prompt mode respects language setting."""
         source_img = Image.new("RGB", (256, 256), color="red")
         storage_mock = MagicMock()
@@ -370,7 +367,7 @@ class TestReversePrompt:
             return_value=_make_fake_result(text_response="一只橘猫，坐在窗台上，暖色调")
         )
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(mode="reverse_prompt", language="zh"),
@@ -381,9 +378,7 @@ class TestReversePrompt:
         provider_request = call_args.kwargs.get("request") or call_args[0][0]
         assert "中文" in provider_request.prompt
 
-    def test_reverse_prompt_describe_mode_has_no_prompt(
-        self, client, mock_redis, mock_quota_service
-    ):
+    def test_reverse_prompt_describe_mode_has_no_prompt(self, client, mock_redis):
         """Normal describe mode returns prompt=None."""
         source_img = Image.new("RGB", (256, 256), color="red")
         storage_mock = MagicMock()
@@ -394,7 +389,7 @@ class TestReversePrompt:
             return_value=_make_fake_result(text_response="A red image.")
         )
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(mode="describe", include_tags=False),
@@ -409,14 +404,14 @@ class TestReversePrompt:
 class TestDescribeErrors:
     """Error handling tests."""
 
-    def test_image_not_found(self, client, mock_redis, mock_quota_service):
+    def test_image_not_found(self, client, mock_redis):
         """Describe fails with 422 when image is not found."""
         storage_mock = MagicMock()
         storage_mock.load_image = AsyncMock(return_value=None)
 
         router_mock = MagicMock()
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(),
@@ -427,15 +422,27 @@ class TestDescribeErrors:
 
     def test_quota_exceeded(self, client, mock_redis):
         """Describe fails with 429 when quota is exceeded."""
-        quota_service = MagicMock()
-        quota_service.check_quota = AsyncMock(
-            return_value=(False, "Daily limit reached", {"used": 50, "limit": 50})
-        )
+        from core.exceptions import QuotaExceededError
 
         storage_mock = MagicMock()
         router_mock = MagicMock()
 
-        with _patch_describe_deps(mock_redis, quota_service, storage_mock, router_mock):
+        async def get_mock_redis():
+            return mock_redis
+
+        with (
+            patch("core.redis.get_redis", get_mock_redis),
+            patch(
+                "api.routers.generate._describe.check_quota_and_consume",
+                new_callable=AsyncMock,
+                side_effect=QuotaExceededError(
+                    message="Daily limit reached",
+                    details={"used": 50, "limit": 50},
+                ),
+            ),
+            patch("api.routers.generate._describe.get_storage_manager", return_value=storage_mock),
+            patch("api.routers.generate._describe.get_provider_router", return_value=router_mock),
+        ):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(),
@@ -443,7 +450,7 @@ class TestDescribeErrors:
 
         assert response.status_code == 429
 
-    def test_provider_failure(self, client, mock_redis, mock_quota_service):
+    def test_provider_failure(self, client, mock_redis):
         """Describe fails with 500 when provider returns error."""
         source_img = Image.new("RGB", (256, 256), color="red")
         storage_mock = MagicMock()
@@ -454,7 +461,7 @@ class TestDescribeErrors:
             return_value=_make_fake_result(success=False, error="Model overloaded")
         )
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(),
@@ -462,7 +469,7 @@ class TestDescribeErrors:
 
         assert response.status_code == 500
 
-    def test_no_text_response(self, client, mock_redis, mock_quota_service):
+    def test_no_text_response(self, client, mock_redis):
         """Describe fails with 500 when provider returns no text."""
         source_img = Image.new("RGB", (256, 256), color="red")
         storage_mock = MagicMock()
@@ -473,7 +480,7 @@ class TestDescribeErrors:
             return_value=_make_fake_result(success=True, text_response=None)
         )
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(),
@@ -481,7 +488,7 @@ class TestDescribeErrors:
 
         assert response.status_code == 500
 
-    def test_no_provider_available(self, client, mock_redis, mock_quota_service):
+    def test_no_provider_available(self, client, mock_redis):
         """Describe fails with 500 when no provider is available."""
         source_img = Image.new("RGB", (256, 256), color="red")
         storage_mock = MagicMock()
@@ -490,7 +497,7 @@ class TestDescribeErrors:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(side_effect=ValueError("No providers configured"))
 
-        with _patch_describe_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_describe_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/describe",
                 json=_make_describe_request(),

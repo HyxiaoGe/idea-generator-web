@@ -60,18 +60,18 @@ def _make_storage_obj():
 
 
 @contextmanager
-def _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+def _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
     """Patch all outpaint endpoint dependencies (non-DI ones)."""
 
     async def get_mock_redis():
         return mock_redis
 
     with (
-        patch("api.routers.generate.get_redis", get_mock_redis),
+        patch("api.routers.generate._outpaint.get_redis", get_mock_redis),
         patch("core.redis.get_redis", get_mock_redis),
-        patch("api.routers.generate.get_quota_service", return_value=mock_quota_service),
-        patch("api.routers.generate.get_storage_manager", return_value=storage_mock),
-        patch("api.routers.generate.get_provider_router", return_value=router_mock),
+        patch("api.routers.generate._outpaint.check_quota_and_consume", new_callable=AsyncMock),
+        patch("api.routers.generate._outpaint.get_storage_manager", return_value=storage_mock),
+        patch("api.routers.generate._outpaint.get_provider_router", return_value=router_mock),
     ):
         yield
 
@@ -99,7 +99,7 @@ class TestOutpaintValidation:
 class TestOutpaintSuccess:
     """Successful outpaint tests."""
 
-    def test_outpaint_basic(self, client, mock_redis, mock_quota_service):
+    def test_outpaint_basic(self, client, mock_redis):
         """Outpaint with source and mask succeeds."""
         source_img = Image.new("RGB", (256, 256), color="red")
         mask_img = Image.new("L", (512, 256), color=128)
@@ -111,7 +111,7 @@ class TestOutpaintSuccess:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result())
 
-        with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
@@ -128,7 +128,7 @@ class TestOutpaintSuccess:
         storage_mock.load_image.assert_any_call("source_key")
         storage_mock.load_image.assert_any_call("mask_key")
 
-    def test_outpaint_with_custom_prompt(self, client, mock_redis, mock_quota_service):
+    def test_outpaint_with_custom_prompt(self, client, mock_redis):
         """Outpaint with custom prompt uses that prompt."""
         source_img = Image.new("RGB", (256, 256), color="green")
         mask_img = Image.new("L", (256, 256), color=255)
@@ -140,7 +140,7 @@ class TestOutpaintSuccess:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result())
 
-        with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(prompt="Extend with a beach scene"),
@@ -149,7 +149,7 @@ class TestOutpaintSuccess:
         assert response.status_code == 200
         assert response.json()["prompt"] == "Extend with a beach scene"
 
-    def test_outpaint_forces_google_provider(self, client, mock_redis, mock_quota_service):
+    def test_outpaint_forces_google_provider(self, client, mock_redis):
         """Outpaint always routes to google provider."""
         source_img = Image.new("RGB", (256, 256), color="red")
         mask_img = Image.new("L", (256, 256), color=255)
@@ -161,7 +161,7 @@ class TestOutpaintSuccess:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result())
 
-        with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
@@ -174,7 +174,7 @@ class TestOutpaintSuccess:
         assert provider_request.preferred_provider == "google"
         assert provider_request.edit_mode == "outpaint"
 
-    def test_outpaint_passes_mask_image(self, client, mock_redis, mock_quota_service):
+    def test_outpaint_passes_mask_image(self, client, mock_redis):
         """Outpaint passes the mask image in the provider request."""
         source_img = Image.new("RGB", (256, 256), color="red")
         mask_img = Image.new("L", (256, 256), color=200)
@@ -186,7 +186,7 @@ class TestOutpaintSuccess:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result())
 
-        with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
@@ -200,7 +200,7 @@ class TestOutpaintSuccess:
         assert provider_request.reference_images is not None
         assert len(provider_request.reference_images) == 1
 
-    def test_outpaint_saves_to_database(self, client, mock_redis, mock_quota_service):
+    def test_outpaint_saves_to_database(self, client, mock_redis):
         """Outpaint saves record to PostgreSQL when repos are available."""
         from api.dependencies import get_image_repository, get_quota_repository
         from api.main import app
@@ -225,7 +225,7 @@ class TestOutpaintSuccess:
         app.dependency_overrides[get_quota_repository] = lambda: quota_repo
 
         try:
-            with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+            with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
                 response = client.post(
                     "/api/generate/outpaint?sync=true",
                     json=_make_outpaint_request(),
@@ -248,14 +248,14 @@ class TestOutpaintSuccess:
 class TestOutpaintErrors:
     """Error handling tests."""
 
-    def test_source_image_not_found(self, client, mock_redis, mock_quota_service):
+    def test_source_image_not_found(self, client, mock_redis):
         """Outpaint fails with 422 when source image is not found."""
         storage_mock = MagicMock()
         storage_mock.load_image = AsyncMock(return_value=None)
 
         router_mock = MagicMock()
 
-        with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
@@ -264,7 +264,7 @@ class TestOutpaintErrors:
         assert response.status_code == 422
         assert "not found" in response.json()["error"]["message"].lower()
 
-    def test_mask_image_not_found(self, client, mock_redis, mock_quota_service):
+    def test_mask_image_not_found(self, client, mock_redis):
         """Outpaint fails with 422 when mask image is not found."""
         source_img = Image.new("RGB", (256, 256), color="red")
 
@@ -273,7 +273,7 @@ class TestOutpaintErrors:
 
         router_mock = MagicMock()
 
-        with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
@@ -284,15 +284,28 @@ class TestOutpaintErrors:
 
     def test_quota_exceeded(self, client, mock_redis):
         """Outpaint fails with 429 when quota is exceeded."""
-        quota_service = MagicMock()
-        quota_service.check_quota = AsyncMock(
-            return_value=(False, "Daily limit reached", {"used": 50, "limit": 50})
-        )
+        from core.exceptions import QuotaExceededError
 
         storage_mock = MagicMock()
         router_mock = MagicMock()
 
-        with _patch_outpaint_deps(mock_redis, quota_service, storage_mock, router_mock):
+        async def get_mock_redis():
+            return mock_redis
+
+        with (
+            patch("api.routers.generate._outpaint.get_redis", get_mock_redis),
+            patch("core.redis.get_redis", get_mock_redis),
+            patch(
+                "api.routers.generate._outpaint.check_quota_and_consume",
+                new_callable=AsyncMock,
+                side_effect=QuotaExceededError(
+                    message="Daily limit reached",
+                    details={"used": 50, "limit": 50},
+                ),
+            ),
+            patch("api.routers.generate._outpaint.get_storage_manager", return_value=storage_mock),
+            patch("api.routers.generate._outpaint.get_provider_router", return_value=router_mock),
+        ):
             response = client.post(
                 "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
@@ -300,7 +313,7 @@ class TestOutpaintErrors:
 
         assert response.status_code == 429
 
-    def test_provider_failure(self, client, mock_redis, mock_quota_service):
+    def test_provider_failure(self, client, mock_redis):
         """Outpaint fails with 500 when provider returns error."""
         source_img = Image.new("RGB", (256, 256), color="red")
         mask_img = Image.new("L", (256, 256), color=255)
@@ -313,7 +326,7 @@ class TestOutpaintErrors:
             return_value=_make_fake_result(success=False, error="Model overloaded")
         )
 
-        with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
@@ -321,7 +334,7 @@ class TestOutpaintErrors:
 
         assert response.status_code == 500
 
-    def test_no_provider_available(self, client, mock_redis, mock_quota_service):
+    def test_no_provider_available(self, client, mock_redis):
         """Outpaint fails with 500 when no provider is available."""
         source_img = Image.new("RGB", (256, 256), color="red")
         mask_img = Image.new("L", (256, 256), color=255)
@@ -332,7 +345,7 @@ class TestOutpaintErrors:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(side_effect=ValueError("No providers configured"))
 
-        with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),
@@ -341,7 +354,7 @@ class TestOutpaintErrors:
         assert response.status_code == 500
         assert "outpainting" in response.json()["error"]["message"].lower()
 
-    def test_storage_save_failure(self, client, mock_redis, mock_quota_service):
+    def test_storage_save_failure(self, client, mock_redis):
         """Outpaint fails with 500 when storage save fails."""
         source_img = Image.new("RGB", (256, 256), color="red")
         mask_img = Image.new("L", (256, 256), color=255)
@@ -353,7 +366,7 @@ class TestOutpaintErrors:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result())
 
-        with _patch_outpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/outpaint?sync=true",
                 json=_make_outpaint_request(),

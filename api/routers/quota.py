@@ -11,6 +11,7 @@ import logging
 
 from fastapi import APIRouter, Depends
 
+from api.dependencies import get_user_id_from_user
 from api.schemas.quota import (
     QuotaCheckRequest,
     QuotaCheckResponse,
@@ -24,16 +25,6 @@ from services import COOLDOWN_SECONDS, DAILY_LIMIT, MAX_BATCH_SIZE, get_quota_se
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/quota", tags=["quota"])
-
-
-# ============ Helpers ============
-
-
-def get_user_id_from_user(user: AppUser | None) -> str:
-    """Get user ID for quota tracking."""
-    if user:
-        return user.user_folder_id
-    return "anonymous"
 
 
 # ============ Endpoints ============

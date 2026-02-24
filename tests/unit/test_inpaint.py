@@ -67,18 +67,18 @@ def _make_storage_obj():
 
 
 @contextmanager
-def _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+def _patch_inpaint_deps(mock_redis, storage_mock, router_mock):
     """Patch all inpaint endpoint dependencies (non-DI ones)."""
 
     async def get_mock_redis():
         return mock_redis
 
     with (
-        patch("api.routers.generate.get_redis", get_mock_redis),
+        patch("api.routers.generate._inpaint.get_redis", get_mock_redis),
         patch("core.redis.get_redis", get_mock_redis),
-        patch("api.routers.generate.get_quota_service", return_value=mock_quota_service),
-        patch("api.routers.generate.get_storage_manager", return_value=storage_mock),
-        patch("api.routers.generate.get_provider_router", return_value=router_mock),
+        patch("api.routers.generate._inpaint.check_quota_and_consume", new_callable=AsyncMock),
+        patch("api.routers.generate._inpaint.get_storage_manager", return_value=storage_mock),
+        patch("api.routers.generate._inpaint.get_provider_router", return_value=router_mock),
     ):
         yield
 
@@ -104,7 +104,7 @@ class TestInpaintValidation:
         )
         assert response.status_code == 422
 
-    def test_mask_required_for_user_provided_mode(self, client, mock_redis, mock_quota_service):
+    def test_mask_required_for_user_provided_mode(self, client, mock_redis):
         """Inpaint with user_provided mode but no mask_key returns 422."""
         storage_mock = MagicMock()
         source_img = Image.new("RGB", (256, 256), color="red")
@@ -112,7 +112,7 @@ class TestInpaintValidation:
 
         router_mock = MagicMock()
 
-        with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_inpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_mode="user_provided"),
@@ -126,7 +126,7 @@ class TestInpaintValidation:
 class TestInpaintSuccess:
     """Successful inpaint tests."""
 
-    def test_inpaint_with_mask(self, client, mock_redis, mock_quota_service):
+    def test_inpaint_with_mask(self, client, mock_redis):
         """Inpaint with user-provided mask succeeds."""
         source_img = Image.new("RGB", (256, 256), color="red")
         mask_img = Image.new("L", (256, 256), color=255)
@@ -138,7 +138,7 @@ class TestInpaintSuccess:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result())
 
-        with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_inpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key"),
@@ -156,7 +156,7 @@ class TestInpaintSuccess:
         storage_mock.load_image.assert_any_call("source_key")
         storage_mock.load_image.assert_any_call("mask_key")
 
-    def test_inpaint_foreground_mode_no_mask_key(self, client, mock_redis, mock_quota_service):
+    def test_inpaint_foreground_mode_no_mask_key(self, client, mock_redis):
         """Inpaint with foreground auto-detect mode works without mask_key."""
         source_img = Image.new("RGB", (256, 256), color="green")
 
@@ -167,7 +167,7 @@ class TestInpaintSuccess:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result())
 
-        with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_inpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_mode="foreground"),
@@ -180,7 +180,7 @@ class TestInpaintSuccess:
         # Verify only source image loaded (no mask)
         assert storage_mock.load_image.call_count == 1
 
-    def test_inpaint_remove_mode(self, client, mock_redis, mock_quota_service):
+    def test_inpaint_remove_mode(self, client, mock_redis):
         """Inpaint with remove_mode=True sends inpaint_remove edit_mode."""
         source_img = Image.new("RGB", (256, 256), color="blue")
         mask_img = Image.new("L", (256, 256), color=128)
@@ -192,7 +192,7 @@ class TestInpaintSuccess:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result())
 
-        with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_inpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key", remove_mode=True),
@@ -205,7 +205,7 @@ class TestInpaintSuccess:
         provider_request = call_args.kwargs.get("request") or call_args[0][0]
         assert provider_request.edit_mode == "inpaint_remove"
 
-    def test_inpaint_forces_google_provider(self, client, mock_redis, mock_quota_service):
+    def test_inpaint_forces_google_provider(self, client, mock_redis):
         """Inpaint always routes to google provider."""
         source_img = Image.new("RGB", (256, 256), color="red")
         mask_img = Image.new("L", (256, 256), color=255)
@@ -217,7 +217,7 @@ class TestInpaintSuccess:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result())
 
-        with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_inpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key"),
@@ -229,7 +229,7 @@ class TestInpaintSuccess:
         provider_request = call_args.kwargs.get("request") or call_args[0][0]
         assert provider_request.preferred_provider == "google"
 
-    def test_inpaint_passes_mask_dilation(self, client, mock_redis, mock_quota_service):
+    def test_inpaint_passes_mask_dilation(self, client, mock_redis):
         """Inpaint passes mask_dilation parameter to the provider request."""
         source_img = Image.new("RGB", (256, 256), color="red")
         mask_img = Image.new("L", (256, 256), color=255)
@@ -241,7 +241,7 @@ class TestInpaintSuccess:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result())
 
-        with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_inpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key", mask_dilation=0.1),
@@ -257,14 +257,14 @@ class TestInpaintSuccess:
 class TestInpaintErrors:
     """Error handling tests."""
 
-    def test_image_not_found(self, client, mock_redis, mock_quota_service):
+    def test_image_not_found(self, client, mock_redis):
         """Inpaint fails with 422 when source image is not found."""
         storage_mock = MagicMock()
         storage_mock.load_image = AsyncMock(return_value=None)
 
         router_mock = MagicMock()
 
-        with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_inpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_mode="foreground"),
@@ -273,7 +273,7 @@ class TestInpaintErrors:
         assert response.status_code == 422
         assert "not found" in response.json()["error"]["message"].lower()
 
-    def test_mask_image_not_found(self, client, mock_redis, mock_quota_service):
+    def test_mask_image_not_found(self, client, mock_redis):
         """Inpaint fails with 422 when mask image is not found."""
         source_img = Image.new("RGB", (256, 256), color="red")
 
@@ -282,7 +282,7 @@ class TestInpaintErrors:
 
         router_mock = MagicMock()
 
-        with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_inpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="missing_mask"),
@@ -293,15 +293,28 @@ class TestInpaintErrors:
 
     def test_quota_exceeded(self, client, mock_redis):
         """Inpaint fails with 429 when quota is exceeded."""
-        quota_service = MagicMock()
-        quota_service.check_quota = AsyncMock(
-            return_value=(False, "Daily limit reached", {"used": 50, "limit": 50})
-        )
+        from core.exceptions import QuotaExceededError
 
         storage_mock = MagicMock()
         router_mock = MagicMock()
 
-        with _patch_inpaint_deps(mock_redis, quota_service, storage_mock, router_mock):
+        async def get_mock_redis():
+            return mock_redis
+
+        with (
+            patch("api.routers.generate._inpaint.get_redis", get_mock_redis),
+            patch("core.redis.get_redis", get_mock_redis),
+            patch(
+                "api.routers.generate._inpaint.check_quota_and_consume",
+                new_callable=AsyncMock,
+                side_effect=QuotaExceededError(
+                    message="Daily limit reached",
+                    details={"used": 50, "limit": 50},
+                ),
+            ),
+            patch("api.routers.generate._inpaint.get_storage_manager", return_value=storage_mock),
+            patch("api.routers.generate._inpaint.get_provider_router", return_value=router_mock),
+        ):
             response = client.post(
                 "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key"),
@@ -309,7 +322,7 @@ class TestInpaintErrors:
 
         assert response.status_code == 429
 
-    def test_provider_failure(self, client, mock_redis, mock_quota_service):
+    def test_provider_failure(self, client, mock_redis):
         """Inpaint fails with 500 when provider returns error."""
         source_img = Image.new("RGB", (256, 256), color="red")
         mask_img = Image.new("L", (256, 256), color=255)
@@ -322,7 +335,7 @@ class TestInpaintErrors:
             return_value=_make_fake_result(success=False, error="Model overloaded")
         )
 
-        with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_inpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key"),
@@ -330,7 +343,7 @@ class TestInpaintErrors:
 
         assert response.status_code == 500
 
-    def test_no_provider_available(self, client, mock_redis, mock_quota_service):
+    def test_no_provider_available(self, client, mock_redis):
         """Inpaint fails with 500 when no provider is available."""
         source_img = Image.new("RGB", (256, 256), color="red")
         mask_img = Image.new("L", (256, 256), color=255)
@@ -341,7 +354,7 @@ class TestInpaintErrors:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(side_effect=ValueError("No providers configured"))
 
-        with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_inpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key"),
@@ -350,7 +363,7 @@ class TestInpaintErrors:
         assert response.status_code == 500
         assert "inpainting" in response.json()["error"]["message"].lower()
 
-    def test_storage_save_failure(self, client, mock_redis, mock_quota_service):
+    def test_storage_save_failure(self, client, mock_redis):
         """Inpaint fails with 500 when storage save fails."""
         source_img = Image.new("RGB", (256, 256), color="red")
         mask_img = Image.new("L", (256, 256), color=255)
@@ -362,7 +375,7 @@ class TestInpaintErrors:
         router_mock = MagicMock()
         router_mock.execute = AsyncMock(return_value=_make_fake_result())
 
-        with _patch_inpaint_deps(mock_redis, mock_quota_service, storage_mock, router_mock):
+        with _patch_inpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
                 "/api/generate/inpaint?sync=true",
                 json=_make_inpaint_request(mask_key="mask_key"),

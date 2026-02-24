@@ -13,7 +13,8 @@ from .chat_session import ChatSession
 # Content moderation
 from .content_filter import ContentFilter, get_content_filter
 from .cost_estimator import CostEstimate, estimate_cost, format_cost, get_pricing_table
-from .generator import ImageGenerator, get_friendly_error_message
+from .errors import get_friendly_error_message
+from .generator import ImageGenerator
 
 # Health check (FastAPI compatible)
 from .health_check import (

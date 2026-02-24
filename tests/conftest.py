@@ -208,13 +208,19 @@ def mock_redis_fixture(mock_redis):
     async def get_mock_redis():
         return mock_redis
 
-    with patch("core.redis.get_redis", get_mock_redis):
-        with patch("api.routers.generate.get_redis", get_mock_redis):
-            with patch("api.routers.chat.get_redis", get_mock_redis):
-                with patch("api.routers.quota.get_redis", get_mock_redis):
-                    with patch("api.routers.tasks.get_redis", get_mock_redis):
-                        with patch("services.generation_task.get_redis", get_mock_redis):
-                            yield mock_redis
+    with (
+        patch("core.redis.get_redis", get_mock_redis),
+        patch("api.routers.generate._core.get_redis", get_mock_redis),
+        patch("api.routers.generate._search.get_redis", get_mock_redis),
+        patch("api.routers.generate._blend.get_redis", get_mock_redis),
+        patch("api.routers.generate._inpaint.get_redis", get_mock_redis),
+        patch("api.routers.generate._outpaint.get_redis", get_mock_redis),
+        patch("api.routers.chat.get_redis", get_mock_redis),
+        patch("api.routers.quota.get_redis", get_mock_redis),
+        patch("api.routers.tasks.get_redis", get_mock_redis),
+        patch("services.generation_task.get_redis", get_mock_redis),
+    ):
+        yield mock_redis
 
 
 # ============ Mock Services ============

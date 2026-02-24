@@ -10,7 +10,7 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.auth import AppUser, get_current_user, require_current_user
-from core.exceptions import DatabaseRequiredError
+from core.exceptions import DatabaseRequiredError, QuotaExceededError
 from database import get_session, is_database_available
 from database.repositories import (
     APIKeyRepository,
@@ -191,3 +191,39 @@ async def ensure_db_user_optional(
     if not user or not user_repo:
         return None
     return await _sync_user(user, user_repo)
+
+
+# ============ Shared Router Helpers ============
+
+
+def get_user_id_from_user(user: AppUser | None) -> str:
+    """Extract a user ID string suitable for quota tracking and storage paths.
+
+    Returns "anonymous" when no authenticated user is present.
+    """
+    if user:
+        return user.user_folder_id
+    return "anonymous"
+
+
+async def check_quota_and_consume(user_id: str, count: int = 1) -> None:
+    """Check daily quota and consume if available.
+
+    Raises:
+        QuotaExceededError: If quota exceeded or cooldown active.
+    """
+    from core.redis import get_redis
+    from services import get_quota_service
+
+    redis = await get_redis()
+    quota_service = get_quota_service(redis)
+
+    can_generate, reason, info = await quota_service.check_quota(
+        user_id=user_id,
+        count=count,
+    )
+
+    if not can_generate:
+        raise QuotaExceededError(message=reason, details=info)
+
+    await quota_service.consume_quota(user_id=user_id, count=count)

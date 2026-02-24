@@ -2,7 +2,7 @@
 Integration tests for image generation endpoints.
 """
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -39,11 +39,9 @@ class TestGenerateEndpoints:
         """Test generation blocked by safety filter."""
         pass
 
-    def test_batch_generate_success(
-        self, client, mock_redis_fixture, mock_quota_service, sample_batch_request
-    ):
+    def test_batch_generate_success(self, client, mock_redis_fixture, sample_batch_request):
         """Test batch generation creates a task."""
-        with patch("api.routers.generate.get_quota_service", return_value=mock_quota_service):
+        with patch("api.routers.generate._core.check_quota_and_consume", new_callable=AsyncMock):
             response = client.post(
                 "/api/generate/batch",
                 json=sample_batch_request,
@@ -93,7 +91,7 @@ class TestGenerateEndpoints:
         async def mock_get_redis():
             return mock_redis
 
-        with patch("api.routers.generate.get_redis", mock_get_redis):
+        with patch("api.routers.generate._core.get_redis", mock_get_redis):
             response = client.get("/api/generate/task/test_task_id")
 
             assert response.status_code == 200

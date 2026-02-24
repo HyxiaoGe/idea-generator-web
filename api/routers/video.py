@@ -15,6 +15,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header
 
+from api.dependencies import check_quota_and_consume, get_user_id_from_user
 from api.schemas.video import (
     GeneratedVideo,
     GenerateVideoRequest,
@@ -36,7 +37,6 @@ from core.exceptions import (
     ValidationError,
 )
 from core.redis import get_redis
-from services import get_quota_service
 from services.providers import (
     GenerationRequest as ProviderRequest,
 )
@@ -115,13 +115,6 @@ def get_video_provider(provider_name: str | None = None):
     return next(iter(providers.values()))
 
 
-def get_user_id_from_user(user: AppUser | None) -> str:
-    """Get user ID for tracking."""
-    if user:
-        return user.user_folder_id
-    return "anonymous"
-
-
 # ============ Task Storage (Redis-based) ============
 
 
@@ -187,17 +180,7 @@ async def generate_video(
 
     # Check and consume quota
     try:
-        redis = await get_redis()
-        quota_service = get_quota_service(redis)
-
-        can_generate, reason, info = await quota_service.check_quota(
-            user_id=user_id,
-            count=1,
-        )
-        if not can_generate:
-            raise QuotaExceededError(message=reason, details=info)
-
-        await quota_service.consume_quota(user_id=user_id, count=1)
+        await check_quota_and_consume(user_id)
     except QuotaExceededError:
         raise
     except Exception as e:
