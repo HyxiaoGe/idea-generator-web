@@ -478,6 +478,74 @@ class WebSocketManager:
             },
         )
 
+    # ============ Chat Progress ============
+
+    async def send_chat_progress(
+        self,
+        user_id: str,
+        session_id: str,
+        stage: str,
+        message: str | None = None,
+    ) -> int:
+        """Send chat progress update to user."""
+        return await self.send_to_user(
+            user_id,
+            {
+                "type": "chat:progress",
+                "payload": {
+                    "session_id": session_id,
+                    "stage": stage,
+                    "message": message,
+                },
+            },
+        )
+
+    async def send_chat_complete(
+        self,
+        user_id: str,
+        session_id: str,
+        has_image: bool,
+        duration: float | None = None,
+        message_count: int = 0,
+        result: dict | None = None,
+    ) -> int:
+        """Send chat completion notification."""
+        payload: dict[str, Any] = {
+            "session_id": session_id,
+            "has_image": has_image,
+            "duration": duration,
+            "message_count": message_count,
+        }
+        if result:
+            payload["result"] = result
+        return await self.send_to_user(
+            user_id,
+            {
+                "type": "chat:complete",
+                "payload": payload,
+            },
+        )
+
+    async def send_chat_error(
+        self,
+        user_id: str,
+        session_id: str,
+        error: str,
+        code: str | None = None,
+    ) -> int:
+        """Send chat error notification."""
+        return await self.send_to_user(
+            user_id,
+            {
+                "type": "chat:error",
+                "payload": {
+                    "session_id": session_id,
+                    "error": error,
+                    "code": code,
+                },
+            },
+        )
+
     # ============ Notifications ============
 
     async def send_notification(

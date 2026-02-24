@@ -40,17 +40,21 @@ class ChatRepository:
         resolution: str = "1K",
         provider: str | None = None,
         user_id: UUID | None = None,
+        id: UUID | None = None,
     ) -> ChatSession:
         """Create a new chat session."""
-        chat_session = ChatSession(
-            initial_prompt=initial_prompt,
-            aspect_ratio=aspect_ratio,
-            resolution=resolution,
-            provider=provider,
-            user_id=user_id,
-            status="active",
-            message_count=0,
-        )
+        kwargs: dict = {
+            "initial_prompt": initial_prompt,
+            "aspect_ratio": aspect_ratio,
+            "resolution": resolution,
+            "provider": provider,
+            "user_id": user_id,
+            "status": "active",
+            "message_count": 0,
+        }
+        if id is not None:
+            kwargs["id"] = id
+        chat_session = ChatSession(**kwargs)
         self.session.add(chat_session)
         await self.session.flush()
         return chat_session
@@ -133,6 +137,7 @@ class ChatRepository:
         image_id: UUID | None = None,
         image_url: str | None = None,
         thinking: str | None = None,
+        thought_signature: bytes | None = None,
     ) -> ChatMessage:
         """Create a new chat message."""
         # Get next sequence number
@@ -148,6 +153,7 @@ class ChatRepository:
             image_id=image_id,
             image_url=image_url,
             thinking=thinking,
+            thought_signature=thought_signature,
             sequence_number=sequence_number,
         )
         self.session.add(message)

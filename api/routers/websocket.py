@@ -63,6 +63,9 @@ async def websocket_endpoint(
     - {"type": "pong", "payload": {"server_time": 1234567890}}
     - {"type": "task:progress", "payload": {...}}
     - {"type": "task:complete", "payload": {...}}
+    - {"type": "chat:progress", "payload": {"session_id", "stage", "message"}}
+    - {"type": "chat:complete", "payload": {"session_id", "has_image", "duration", "message_count"}}
+    - {"type": "chat:error", "payload": {"session_id", "error", "code"}}
     - {"type": "notification", "payload": {...}}
     - {"type": "quota:warning", "payload": {...}}
     """

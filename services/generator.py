@@ -88,7 +88,7 @@ def classify_error(error_msg: str) -> str:
         return ERROR_TYPE_TIMEOUT
     elif "quota" in error_lower or "rate" in error_lower:
         return ERROR_TYPE_RATE_LIMITED
-    elif "api_key" in error_lower or "invalid" in error_lower:
+    elif "api_key" in error_lower or "api key" in error_lower or "invalid key" in error_lower:
         return ERROR_TYPE_INVALID_KEY
     elif "safety" in error_lower or "blocked" in error_lower:
         return ERROR_TYPE_SAFETY_BLOCKED

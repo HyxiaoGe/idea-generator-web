@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -146,6 +146,12 @@ class ChatMessage(Base):
     # Thinking content (for assistant responses with reasoning)
     thinking: Mapped[str | None] = mapped_column(
         Text,
+        nullable=True,
+    )
+
+    # Gemini thought_signature for model-generated images (required for multi-turn)
+    thought_signature: Mapped[bytes | None] = mapped_column(
+        LargeBinary,
         nullable=True,
     )
 

@@ -4,411 +4,176 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Nano Banana Lab** is an AI Image & Video Generation API with multi-provider support. It provides RESTful API endpoints for various generation capabilities.
+**Nano Banana Lab** is an AI Image & Video Generation API with multi-provider support. Built with FastAPI, it provides RESTful endpoints for text-to-image, text-to-video, image editing (blend/inpaint/outpaint), and chat-based iterative refinement.
 
-**Core Features:**
-- Multi-provider abstraction layer (Google Gemini, OpenAI, FLUX, Runway, Kling)
-- Intelligent provider routing with strategies (priority, cost, quality, speed)
-- Text-to-image generation with multiple resolution options (1K, 2K, 4K)
-- Text-to-video generation (provider-dependent)
-- Multi-turn chat-based iterative image refinement
-- Batch image generation with progress tracking
-- Search-grounded generation with real-time data integration
-- GitHub OAuth authentication with JWT tokens
-- Redis-based per-user daily quota with cooldown (abuse prevention)
-- Pluggable storage system (local/MinIO/Alibaba OSS)
-- AI-powered prompt library with content moderation
+Key capabilities: multi-provider abstraction (10+ providers), intelligent routing with fallback, async task pattern for long-running operations, optional PostgreSQL with graceful degradation to file storage, Redis-based quota/cooldown, ARQ background task queue, and pluggable storage (local/MinIO/OSS).
+
+## Quick Reference Commands
+
+The project uses **uv** as its package manager. All common operations have **Makefile targets**:
+
+```bash
+# Setup
+make dev                    # Install dev deps + pre-commit hooks
+make install                # Install production deps only
+
+# Development
+make run                    # Dev server with hot reload (port 8000)
+make run-prod               # Production server (4 workers)
+
+# Code Quality
+make lint                   # Ruff check
+make lint-fix               # Ruff check --fix
+make format                 # Ruff format
+make typecheck              # MyPy (api, services, core, database)
+make security               # Bandit security scan
+make check                  # lint + format-check + security (no typecheck)
+make pre-commit             # Run all pre-commit hooks
+
+# Testing
+make test                   # All tests
+make test-unit              # Unit tests only
+make test-integration       # Integration tests only
+make test-cov               # Tests with HTML coverage report
+
+# Run a single test file or specific test
+uv run pytest tests/unit/test_core.py -v
+uv run pytest tests/integration/test_generate.py::test_generate_image -v
+
+# Database
+make migrate                # Apply all migrations (alembic upgrade head)
+make migrate-down           # Rollback one migration
+make migrate-new            # Create new migration (interactive prompt)
+
+# Docker
+make docker-run             # docker-compose up -d (api + arq worker)
+make docker-down            # docker-compose down
+make docker-logs            # Follow logs
+```
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    FastAPI Application                       │
-│                      (api/main.py)                          │
-├─────────────────────────────────────────────────────────────┤
-│   api/routers/          │        api/schemas/               │
-│   ├── health.py         │        ├── common.py              │
-│   ├── auth.py           │        ├── auth.py                │
-│   ├── generate.py       │        ├── generate.py            │
-│   ├── video.py          │        ├── video.py               │
-│   ├── quota.py          │        ├── quota.py               │
-│   ├── chat.py           │        ├── chat.py                │
-│   ├── history.py        │        ├── history.py             │
-│   ├── templates.py      │        ├── templates.py           │
-│   └── ...               │        └── ...                    │
-├─────────────────────────┴───────────────────────────────────┤
-│                    core/ (Configuration)                     │
-│   ├── config.py          - Pydantic Settings                │
-│   ├── exceptions.py      - Custom exceptions                │
-│   ├── redis.py           - Redis connection                 │
-│   └── security.py        - JWT tokens                       │
-├─────────────────────────────────────────────────────────────┤
-│                    database/ (PostgreSQL - Optional)         │
-│   ├── __init__.py        - Connection management            │
-│   ├── models/            - SQLAlchemy ORM models            │
-│   │   ├── user.py        - User (GitHub OAuth)              │
-│   │   ├── image.py       - GeneratedImage (history)         │
-│   │   ├── chat.py        - ChatSession, ChatMessage         │
-│   │   ├── quota.py       - QuotaUsage                       │
-│   │   ├── template.py    - PromptTemplate                   │
-│   │   ├── template_like.py - UserTemplateLike               │
-│   │   ├── template_favorite.py - UserTemplateFavorite       │
-│   │   ├── template_usage.py - UserTemplateUsage             │
-│   │   └── audit.py       - AuditLog, ProviderHealthLog      │
-│   ├── repositories/      - Data access layer                │
-│   │   ├── user_repo.py   - User CRUD                        │
-│   │   ├── image_repo.py  - Image history CRUD               │
-│   │   ├── chat_repo.py   - Chat session CRUD                │
-│   │   ├── template_repo.py - Template library CRUD          │
-│   │   └── ...                                               │
-│   └── migrations/        - Alembic migrations               │
-├─────────────────────────────────────────────────────────────┤
-│                    services/ (Business Logic)                │
-│   ├── provider_router.py - Intelligent provider routing     │
-│   ├── providers/         - Multi-provider abstraction       │
-│   │   ├── base.py        - Base protocols & data classes    │
-│   │   ├── registry.py    - Provider registry                │
-│   │   ├── google.py      - Google Gemini provider           │
-│   │   ├── openai.py      - OpenAI/OpenRouter provider       │
-│   │   ├── flux.py        - FLUX (Black Forest Labs)         │
-│   │   ├── runway.py      - Runway ML (video)                │
-│   │   └── kling.py       - Kling AI (video)                 │
-│   ├── generator.py       - Legacy image generation          │
-│   ├── chat_session.py    - Multi-turn conversations         │
-│   ├── quota_service.py   - Per-user daily quota + cooldown   │
-│   ├── content_filter.py  - Content moderation               │
-│   ├── ai_content_moderator.py - AI-based moderation         │
-│   └── template_generator.py - AI template generation        │
-└─────────────────────────────────────────────────────────────┘
+api/                    FastAPI app, routers (18), schemas (18), dependencies, middleware
+core/                   Config (Pydantic Settings), Redis, JWT security, exceptions
+services/               Business logic, singleton getters in __init__.py
+  providers/            Multi-provider abstraction (10+ providers)
+  provider_router.py    Intelligent routing (priority/cost/quality/speed/round_robin/adaptive/region)
+  generation_task.py    Async task pattern wrapper
+  storage/              Pluggable storage (local/MinIO/OSS)
+database/               Optional PostgreSQL - models (15), repositories, Alembic migrations
+tests/                  Unit (16 files) + integration (8 files), fixtures in conftest.py
+i18n/                   English/Chinese translations
+api/workers.py          ARQ background task definitions
 ```
 
-## Quick Reference Commands
+### Request Flow
 
-```bash
-# Development server
-uvicorn api.main:app --reload
+1. Router receives request → validates with Pydantic schema
+2. Auth dependency extracts user from JWT (if `AUTH_ENABLED`)
+3. Quota service checks daily limit + cooldown via Redis
+4. For generation: `ProviderRouter.route()` selects provider → `execute_with_fallback()` runs with retry
+5. Long-running ops return `task_id` immediately → client polls `/api/tasks/{task_id}`
+6. Results stored via pluggable storage → history saved to DB (if enabled) or file
 
-# Run tests
-pytest
+### Providers
 
-# Run single test file
-pytest tests/unit/test_core.py -v
-
-# Run specific test
-pytest tests/integration/test_generate.py::test_generate_image -v
-
-# Run with coverage
-pytest --cov=api --cov=services --cov-report=html
-
-# Linting
-ruff check .
-ruff format .
-
-# Type checking
-mypy api services core database
-
-# Install dependencies
-pip install -e ".[dev]"
-
-# Docker
-docker-compose up -d
-
-# Database migrations (requires DATABASE_URL)
-alembic upgrade head           # Apply all migrations
-alembic downgrade -1           # Rollback one migration
-alembic revision --autogenerate -m "description"  # Create new migration
-```
-
-## Environment Variables
-
-Required:
-```
-SECRET_KEY                  # JWT signing key (32+ chars)
-REDIS_URL                   # Redis connection URL
-```
-
-At least one provider API key is required:
-```
-GOOGLE_API_KEY              # Google Gemini API key
-PROVIDER_OPENAI_API_KEY     # OpenAI API key (or OpenRouter)
-PROVIDER_BFL_API_KEY        # FLUX (Black Forest Labs) API key
-```
-
-Optional - Provider Configuration:
-```
-PROVIDER_GOOGLE_ENABLED     # Enable Google provider (default: true)
-PROVIDER_GOOGLE_PRIORITY    # Priority (lower = higher priority)
-PROVIDER_OPENAI_ENABLED     # Enable OpenAI provider
-PROVIDER_OPENAI_BASE_URL    # Custom base URL (for OpenRouter, etc.)
-PROVIDER_BFL_ENABLED        # Enable FLUX provider
-DEFAULT_ROUTING_STRATEGY    # priority|cost|quality|speed|round_robin
-ENABLE_FALLBACK             # Enable automatic provider failover
-```
-
-Optional - Auth:
-```
-AUTH_ENABLED                # Enable GitHub OAuth
-```
-
-Optional - PostgreSQL Database:
-```
-DATABASE_ENABLED            # Enable PostgreSQL (default: false)
-DATABASE_URL                # postgresql+asyncpg://user:pass@host:port/db
-DB_POOL_SIZE                # Connection pool size (default: 5)
-DB_MAX_OVERFLOW             # Max overflow connections (default: 10)
-```
-
-## API Endpoints
-
-### Core Generation
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/generate` | Generate image |
-| POST | `/api/generate/batch` | Batch generation |
-| POST | `/api/generate/search` | Search-grounded |
-| POST | `/api/video/generate` | Generate video |
-
-### Chat
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/chat` | Create session |
-| POST | `/api/chat/{id}/message` | Send message |
-| GET | `/api/chat/{id}` | Get history |
-
-### Authentication & API Keys
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/auth/login` | Get GitHub authorization URL |
-| POST | `/api/auth/callback` | Handle OAuth callback |
-| GET | `/api/auth/me` | Get current user |
-| POST | `/api/auth/logout` | Logout user |
-| POST | `/api/auth/refresh` | Refresh JWT token |
-| GET | `/api/auth/api-keys` | List API keys |
-| POST | `/api/auth/api-keys` | Create API key |
-| DELETE | `/api/auth/api-keys/{id}` | Delete API key |
-
-### User Preferences (powered by prefhub)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/preferences` | Get user preferences |
-| PUT | `/api/preferences` | Update user preferences |
-| GET | `/api/preferences/providers` | Get provider preferences |
-| PUT | `/api/preferences/providers` | Update provider preferences |
-
-### Favorites
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/favorites` | List favorites |
-| POST | `/api/favorites` | Add favorite |
-| DELETE | `/api/favorites/{id}` | Remove favorite |
-| POST | `/api/favorites/bulk` | Bulk operations |
-| GET | `/api/favorites/folders` | List folders |
-| POST | `/api/favorites/folders` | Create folder |
-
-### Templates (Prompt Library)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/templates` | List templates (filter/search/sort/paginate) |
-| GET | `/api/templates/categories` | Get categories with counts |
-| GET | `/api/templates/favorites` | User's favorited templates |
-| GET | `/api/templates/recommended` | Recommended templates |
-| POST | `/api/templates` | Create template (admin) |
-| GET | `/api/templates/{id}` | Get template detail |
-| PUT | `/api/templates/{id}` | Update template (admin) |
-| DELETE | `/api/templates/{id}` | Soft-delete template (admin) |
-| POST | `/api/templates/{id}/use` | Record template usage |
-| POST | `/api/templates/{id}/like` | Toggle like |
-| POST | `/api/templates/{id}/favorite` | Toggle favorite |
-| POST | `/api/templates/generate` | AI generate templates (admin) |
-| POST | `/api/templates/batch-generate` | AI batch generate (admin) |
-| POST | `/api/templates/{id}/enhance` | AI enhance prompt (admin) |
-| POST | `/api/templates/{id}/variants` | AI generate variants (admin) |
-
-### Projects
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/projects` | List projects |
-| POST | `/api/projects` | Create project |
-| GET | `/api/projects/{id}` | Get project |
-| PUT | `/api/projects/{id}` | Update project |
-| DELETE | `/api/projects/{id}` | Delete project |
-| GET | `/api/projects/{id}/images` | List project images |
-| POST | `/api/projects/{id}/images` | Add image to project |
-
-### Notifications
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/notifications` | List notifications |
-| GET | `/api/notifications/unread-count` | Get unread count |
-| POST | `/api/notifications/mark-read` | Mark as read |
-| POST | `/api/notifications/mark-all-read` | Mark all as read |
-| DELETE | `/api/notifications/{id}` | Delete notification |
-
-### Analytics
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/analytics/overview` | Overall statistics |
-| GET | `/api/analytics/usage` | Usage statistics |
-| GET | `/api/analytics/costs` | Cost analysis |
-| GET | `/api/analytics/providers` | Provider stats |
-| GET | `/api/analytics/trends` | Trend analysis |
-
-### Search
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/search` | Global search |
-| GET | `/api/search/images` | Search images |
-| GET | `/api/search/prompts` | Search prompts |
-| GET | `/api/search/suggestions` | Search suggestions |
-
-### WebSocket
-| Protocol | Endpoint | Description |
-|----------|----------|-------------|
-| WS | `/api/ws` | Real-time updates |
-
-### Admin (Requires admin privileges)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/admin/users` | List users |
-| GET | `/api/admin/users/{id}` | Get user details |
-| PUT | `/api/admin/users/{id}/tier` | Update user tier |
-| PUT | `/api/admin/users/{id}/quota` | Adjust quota |
-| GET | `/api/admin/providers` | List providers |
-| POST | `/api/admin/providers/{name}/enable` | Enable provider |
-| GET | `/api/admin/system/status` | System status |
-| GET | `/api/admin/system/metrics` | System metrics |
-| POST | `/api/admin/quota/reset/{user_id}` | Reset user quota |
-| POST | `/api/admin/announcements` | Create announcement |
-
-### Supporting Endpoints
-- `/api/health` - Health checks (basic, detailed, ready, live)
-- `/api/quota` - Quota management (status, check, config)
-- `/api/history` - Generation history
-
-## Shared Preferences (prefhub)
-
-User preferences use the [prefhub](https://github.com/HyxiaoGe/prefhub) shared library. Universal fields (language, theme, timezone, notifications) come from `prefhub.schemas.preferences.BasePreferences`; domain-specific fields are defined locally.
-
-- **Schema**: `api/schemas/preferences.py` — `UserPreferences(BasePreferences)` adds `GenerationDefaults` and `ProviderPreferences`
-- **Service**: `services/preferences_service.py` — `IdeaGeneratorPreferencesService` implements `_load_raw`/`_save_raw` via `SettingsRepository`
-- **Storage**: Pattern B — `user_settings.preferences` JSONB column (no migration needed, same column)
-- **Merge logic**: Uses `prefhub.services.preferences.deep_merge` for incremental updates
-- **Enums**: `Language`, `Theme`, `HourCycle` are imported from `prefhub.schemas`, not defined locally
+Image: Google Gemini, OpenAI, FLUX (BFL), Stability, Alibaba, ByteDance, Zhipu, MiniMax
+Video: Runway ML, Kling AI
+Each implements `ImageProvider` or `VideoProvider` protocol from `services/providers/base.py`.
 
 ## Code Patterns
 
-### Service Layer with Singleton Pattern
-Services are accessed via getter functions that return singleton instances:
+### Service Singletons
+Services are accessed via getter functions in `services/__init__.py`:
 ```python
-from services import get_quota_service, get_provider_router
-
-quota = get_quota_service()
-router = get_provider_router()
+from services import get_provider_router, get_quota_service, get_storage_manager
 ```
 
-### Multi-Provider System
-New generation requests should use the `ProviderRouter` for intelligent routing:
+### Async Task Pattern
+Generation endpoints use a task wrapper that returns immediately with a `task_id`:
 ```python
-from services import get_provider_router, GenerationRequest
+from services.generation_task import GenerationTaskService
 
-router = get_provider_router()
-request = GenerationRequest(prompt="...", resolution="1K")
-decision = await router.route(request)
-result = await router.execute_with_fallback(request, decision)
+task_service = GenerationTaskService(redis)
+task_id = await task_service.create_task(user_id, task_type="generate")
+# Client polls GET /api/tasks/{task_id} for status/result
 ```
 
-Routing strategies: `priority`, `cost`, `quality`, `speed`, `round_robin`
+The generate/blend/inpaint/outpaint/search endpoints all follow this pattern.
 
-### Adding a New Provider
-1. Create provider class in `services/providers/` implementing `ImageProvider` or `VideoProvider`
-2. Add registration logic in `ProviderRouter._register_providers()`
-3. Add config settings in `core/config.py`
-
-### Adding a New API Endpoint
-1. Create schema in `api/schemas/`
-2. Create router in `api/routers/`
-3. Export from `__init__.py` files
-4. Register router in `api/main.py`
-5. Add tests in `tests/integration/`
-
-### Error Handling with Retry
-Network operations use automatic retry with exponential backoff:
-- Max attempts: 3
-- Backoff delays: [2s, 4s, 8s]
-- Retryable: Connection errors, timeout, 502/503/504
-
-### Database Access Pattern
-When PostgreSQL is enabled, use repository pattern via dependency injection:
+### Optional Database with Fallback
+Database is optional (`DATABASE_ENABLED=false` by default). Repository dependencies yield `None` when DB is unavailable:
 ```python
-from api.dependencies import get_image_repository
-from database.repositories import ImageRepository
-
 @router.get("/history")
 async def list_history(
     image_repo: Optional[ImageRepository] = Depends(get_image_repository),
 ):
     if image_repo:
-        # Use database
         images = await image_repo.list_by_user(user_id, limit=20)
     else:
-        # Fallback to file storage
         storage = get_storage_manager()
         images = await storage.get_history(limit=20)
 ```
 
-Database is optional - when not configured, services fall back to file-based storage.
+### Custom Exceptions
+`core/exceptions.py` defines `AppException` base with `error_code` (machine-readable for i18n), `message`, and `status_code`. Subclasses: `AuthenticationError` (401), `QuotaExceededError` (429), `ContentBlockedError` (400/403), etc.
+
+### Shared Preferences (prefhub)
+User preferences extend `prefhub.schemas.preferences.BasePreferences` (language, theme, timezone). Domain fields defined in `api/schemas/preferences.py`. Service in `services/preferences_service.py`. Enums (`Language`, `Theme`, `HourCycle`) imported from `prefhub.schemas`, not defined locally.
+
+## External Dependencies
+
+Two git-based dependencies (not on PyPI):
+- **auth-client**: `git+https://github.com/HyxiaoGe/auth-service.git#subdirectory=auth-client` — JWT/OAuth
+- **prefhub**: `git+https://github.com/HyxiaoGe/prefhub.git` — Shared user preferences
+
+## Environment Variables
+
+**Required:** `SECRET_KEY` (JWT, 32+ chars), `REDIS_URL`, and at least one provider API key (`GOOGLE_API_KEY`, `PROVIDER_OPENAI_API_KEY`, or `PROVIDER_BFL_API_KEY`).
+
+**Optional:** `DATABASE_ENABLED`/`DATABASE_URL` (PostgreSQL), `AUTH_ENABLED`/`AUTH_SERVICE_URL` (auth), `PROVIDER_*_ENABLED`/`PROVIDER_*_PRIORITY` (per-provider config), `DEFAULT_ROUTING_STRATEGY`, `ENABLE_FALLBACK`, `ENVIRONMENT` (development/staging/production).
+
+## Code Style
+
+- **Line length:** 100 (enforced by ruff)
+- **Quote style:** double quotes
+- **Python target:** 3.11+
+- **Import sorting:** isort via ruff, first-party packages: `api`, `services`, `core`, `database`, `i18n`
+- **Async:** `asyncio_mode = "auto"` in pytest — all async test functions run automatically
+- **Pre-commit:** ruff check/format, bandit (security), standard hooks (trailing whitespace, private key detection)
 
 ## Testing
 
-Tests use pytest with async support. Fixtures in `tests/conftest.py` provide:
-- `client` / `async_client` - Test clients
-- `mock_redis` - In-memory Redis mock
-- `mock_image_generator`, `mock_quota_service`, etc.
+Fixtures in `tests/conftest.py` provide: `client`/`async_client`, `mock_redis` (in-memory), `mock_image_generator`, `mock_quota_service`, `mock_app_user`/`mock_admin_user`, `auth_headers`, `sample_generate_request`.
 
-```bash
-# Run all tests
-pytest
+Coverage configured for `api`, `services`, `core`, `database` with branch coverage.
 
-# Run specific test
-pytest tests/integration/test_generate.py::test_generate_image -v
+CI runs on Python 3.11 + 3.12 with Redis 7 and PostgreSQL 16 containers.
 
-# With coverage report
-pytest --cov=api --cov=services --cov-report=html
-```
+## API Endpoints
 
-## Deployment
+Core endpoints — use the `ig-backend-api-reference` skill for full reference:
 
-**Required:** Redis (for sessions and quota tracking)
-
-**Optional:** PostgreSQL (for persistent history, chat sessions, analytics)
-
-**Startup:**
-```bash
-uvicorn api.main:app --host 0.0.0.0 --port $PORT
-```
-
-**Database Setup (if using PostgreSQL):**
-```bash
-# Create database
-createdb idea_generator
-
-# Run migrations
-DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/idea_generator alembic upgrade head
-```
-
-**Health check:** `GET /api/health`
+- **Generation:** `POST /api/generate`, `/api/generate/batch`, `/api/generate/search`, `/api/video/generate`
+- **Image editing:** `POST /api/generate/blend`, `/api/generate/inpaint`, `/api/generate/outpaint`, `/api/generate/describe`
+- **Tasks:** `GET /api/tasks/{task_id}` (poll async generation status)
+- **Chat:** `POST /api/chat`, `POST /api/chat/{id}/message`, `GET /api/chat/{id}`
+- **Auth:** `/api/auth/login`, `/api/auth/callback`, `/api/auth/me`, `/api/auth/api-keys`
+- **Templates:** CRUD at `/api/templates` with like/favorite/generate/enhance
+- **Also:** `/api/quota`, `/api/history`, `/api/favorites`, `/api/preferences`, `/api/projects`, `/api/notifications`, `/api/analytics`, `/api/search`, `/api/models`, `/api/admin/*`, `WS /api/ws`
 
 ## Skills Documentation
 
-Claude Code skills 文档，代码变更时需同步更新：
+Claude Code skills — update when code changes affect these areas:
 
-| Skill | 路径 | 内容 |
-|-------|------|------|
-| 项目概览 | `~/.claude/skills/ig-project-overview/SKILL.md` | 项目介绍、功能列表、技术栈 |
-| 系统架构 | `~/.claude/skills/ig-backend-architecture/SKILL.md` | 架构图、多提供商系统、数据流 |
-| 代码导航 | `~/.claude/skills/ig-backend-codebase-guide/SKILL.md` | 目录结构、按功能查找、命名约定 |
-| API 参考 | `~/.claude/skills/ig-backend-api-reference/SKILL.md` | 所有端点列表、请求头、状态码 |
-| 前端对接 | `~/.claude/skills/ig-frontend-api-guide/SKILL.md` | TypeScript 类型、调用示例、SDK |
-| 添加端点 | `~/.claude/skills/ig-backend-add-endpoint/SKILL.md` | 新建 API 端点步骤模板 |
-| 添加模型 | `~/.claude/skills/ig-backend-add-model/SKILL.md` | 新建数据库模型步骤模板 |
-| 添加提供商 | `~/.claude/skills/ig-backend-add-provider/SKILL.md` | 新建 AI 提供商步骤模板 |
+| Skill | Path | Content |
+|-------|------|---------|
+| Project Overview | `~/.claude/skills/ig-project-overview/SKILL.md` | Features, tech stack |
+| Architecture | `~/.claude/skills/ig-backend-architecture/SKILL.md` | Component interaction, data flow |
+| Codebase Guide | `~/.claude/skills/ig-backend-codebase-guide/SKILL.md` | Directory structure, naming conventions |
+| API Reference | `~/.claude/skills/ig-backend-api-reference/SKILL.md` | All endpoints, request/response formats |
+| Frontend Guide | `~/.claude/skills/ig-frontend-api-guide/SKILL.md` | TypeScript types, SDK examples |
+| Add Endpoint | `~/.claude/skills/ig-backend-add-endpoint/SKILL.md` | Step-by-step template |
+| Add Model | `~/.claude/skills/ig-backend-add-model/SKILL.md` | Step-by-step template |
+| Add Provider | `~/.claude/skills/ig-backend-add-provider/SKILL.md` | Step-by-step template |

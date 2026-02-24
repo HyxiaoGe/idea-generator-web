@@ -43,6 +43,7 @@ class SendMessageRequest(BaseModel):
         None, description="Override aspect ratio for this message"
     )
     safety_level: str = Field(default="moderate", description="Safety filter level")
+    enable_thinking: bool = Field(default=False, description="Enable model thinking process")
 
 
 class SendMessageResponse(BaseModel):
@@ -78,3 +79,25 @@ class ListChatsResponse(BaseModel):
 
     sessions: list[ChatSessionInfo] = Field(default_factory=list)
     total: int = Field(default=0)
+
+
+class AsyncChatResponse(BaseModel):
+    """POST /api/chat/{id}/message async mode response."""
+
+    task_id: str = Field(..., description="Task ID for polling")
+    status: str = Field(default="queued", description="Initial task status")
+    message: str = Field(default="Chat message queued", description="Status message")
+
+
+class ChatTaskProgress(BaseModel):
+    """GET /api/chat/task/{task_id} polling response."""
+
+    task_id: str = Field(..., description="Task ID")
+    status: str = Field(..., description="queued / generating / completed / failed")
+    stage: str | None = Field(None, description="loading_history / thinking / saving")
+    progress: float = Field(default=0.0, description="Progress 0.0-1.0")
+    result: SendMessageResponse | None = Field(None, description="Full result when completed")
+    error: str | None = Field(None, description="Error message if failed")
+    error_code: str | None = Field(None, description="Machine-readable error code")
+    started_at: datetime | None = Field(None, description="When task started")
+    completed_at: datetime | None = Field(None, description="When task completed")
