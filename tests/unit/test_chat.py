@@ -97,10 +97,14 @@ def _patch_send_message_deps(mock_redis, mock_chat_repo):
     async def get_mock_redis():
         return mock_redis
 
+    mock_settings = MagicMock()
+    mock_settings.get_google_api_key.return_value = "fake-api-key-for-test"
+
     with (
         patch("api.routers.chat.get_redis", get_mock_redis),
         patch("core.redis.get_redis", get_mock_redis),
         patch("api.routers.chat.check_quota_and_consume", new_callable=AsyncMock),
+        patch("api.routers.chat.get_settings", return_value=mock_settings),
         patch("api.routers.chat.execute_chat_task", new_callable=AsyncMock) as mock_task,
     ):
         from api.dependencies import require_chat_repository
