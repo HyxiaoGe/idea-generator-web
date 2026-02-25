@@ -93,7 +93,7 @@ packages = ["api", "services", "core", "database", "i18n"]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-exclude = ["scripts/"]
+exclude = ["scripts/", "experiments/"]
 
 [tool.ruff.lint]
 select = [
