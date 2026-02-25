@@ -17,8 +17,9 @@ from database import get_session, is_database_available
 from database.repositories import ImageRepository, QuotaRepository
 
 from .provider_router import get_provider_router
-from .providers.base import GenerationRequest, MediaType
+from .providers.base import MediaType, ProviderCapability
 from .providers.registry import get_provider_registry
+from .request_builder import build_provider_request
 from .storage import get_storage_manager
 from .websocket_manager import get_websocket_manager
 
@@ -212,15 +213,16 @@ async def _execute_blend(storage, router, prompt, settings, user_id, task_spec):
             )
         loaded_images.append(img)
 
-    provider_request = _build_request(
+    provider_request = build_provider_request(
         prompt=prompt,
         settings=settings,
         user_id=user_id,
         preferred_provider="google",
         reference_images=loaded_images,
+        required_capability=ProviderCapability.IMAGE_BLEND,
     )
 
-    return await router.execute(
+    return await router.execute_with_fallback(
         request=provider_request,
         media_type=MediaType.IMAGE,
     )
@@ -250,7 +252,7 @@ async def _execute_inpaint(storage, router, prompt, settings, user_id, task_spec
 
     edit_mode = "inpaint_remove" if task_spec.get("remove_mode") else "inpaint_insert"
 
-    provider_request = _build_request(
+    provider_request = build_provider_request(
         prompt=prompt,
         settings=settings,
         user_id=user_id,
@@ -261,9 +263,10 @@ async def _execute_inpaint(storage, router, prompt, settings, user_id, task_spec
         edit_mode=edit_mode,
         mask_mode=task_spec.get("mask_mode", "user_provided"),
         mask_dilation=task_spec.get("mask_dilation", 0.03),
+        required_capability=ProviderCapability.INPAINTING,
     )
 
-    return await router.execute(
+    return await router.execute_with_fallback(
         request=provider_request,
         media_type=MediaType.IMAGE,
     )
@@ -289,7 +292,7 @@ async def _execute_outpaint(storage, router, prompt, settings, user_id, task_spe
             provider="none",
         )
 
-    provider_request = _build_request(
+    provider_request = build_provider_request(
         prompt=prompt,
         settings=settings,
         user_id=user_id,
@@ -298,9 +301,10 @@ async def _execute_outpaint(storage, router, prompt, settings, user_id, task_spe
         reference_images=[source_img],
         mask_image=mask_img,
         edit_mode="outpaint",
+        required_capability=ProviderCapability.OUTPAINTING,
     )
 
-    return await router.execute(
+    return await router.execute_with_fallback(
         request=provider_request,
         media_type=MediaType.IMAGE,
     )
@@ -308,7 +312,7 @@ async def _execute_outpaint(storage, router, prompt, settings, user_id, task_spe
 
 async def _execute_search(router, prompt, settings, user_id, task_spec):
     """Execute search-grounded generation."""
-    provider_request = _build_request(
+    provider_request = build_provider_request(
         prompt=prompt,
         settings=settings,
         user_id=user_id,
@@ -321,42 +325,6 @@ async def _execute_search(router, prompt, settings, user_id, task_spec):
     return await router.execute_with_fallback(
         request=provider_request,
         media_type=MediaType.IMAGE,
-    )
-
-
-def _build_request(
-    prompt: str,
-    settings,
-    user_id: str,
-    preferred_provider: str | None = None,
-    preferred_model: str | None = None,
-    enable_search: bool = False,
-    negative_prompt: str | None = None,
-    reference_images: list | None = None,
-    mask_image=None,
-    edit_mode: str | None = None,
-    mask_mode: str | None = None,
-    mask_dilation: float = 0.03,
-) -> GenerationRequest:
-    """Build a GenerationRequest (same as generate.py's build_provider_request)."""
-    import uuid
-
-    return GenerationRequest(
-        prompt=prompt,
-        negative_prompt=negative_prompt,
-        aspect_ratio=settings.aspect_ratio.value,
-        resolution=settings.resolution.value,
-        safety_level=settings.safety_level.value,
-        preferred_provider=preferred_provider,
-        preferred_model=preferred_model,
-        enable_search=enable_search,
-        reference_images=reference_images,
-        mask_image=mask_image,
-        edit_mode=edit_mode,
-        mask_mode=mask_mode,
-        mask_dilation=mask_dilation,
-        user_id=user_id,
-        request_id=f"gen_{uuid.uuid4().hex[:12]}",
     )
 
 

@@ -8,11 +8,14 @@ API Documentation:
 https://help.aliyun.com/zh/dashscope/developer-reference/tongyi-wanxiang
 """
 
+import base64
 import contextlib
 import logging
 import os
+from io import BytesIO
 
 import httpx
+from PIL import Image
 
 from .base import (
     AuthType,
@@ -80,45 +83,26 @@ ALIBABA_MODELS = [
         strengths=["photorealism", "detail"],
     ),
     ProviderModel(
-        id="wanx-sketch-to-image-v1",
-        name="通义万相 草图生图",
+        id="wanx2.1-imageedit",
+        name="Wanx 2.1 Image Edit",
         provider="alibaba",
         media_type=MediaType.IMAGE,
         capabilities=[
-            ProviderCapability.IMAGE_TO_IMAGE,
-        ],
-        max_resolution="1K",
-        supports_aspect_ratios=["1:1", "16:9", "9:16"],
-        pricing_per_unit=0.02,
-        quality_score=0.85,
-        latency_estimate=12.0,
-        is_default=False,
-        region=ProviderRegion.CHINA,
-        execution_mode=ExecutionMode.ASYNC_TASK,
-        auth_type=AuthType.BEARER_TOKEN,
-        tier="balanced",
-        hidden=True,
-    ),
-    ProviderModel(
-        id="wanx-style-repaint-v1",
-        name="通义万相 风格重绘",
-        provider="alibaba",
-        media_type=MediaType.IMAGE,
-        capabilities=[
+            ProviderCapability.INPAINTING,
+            ProviderCapability.OUTPAINTING,
             ProviderCapability.STYLE_TRANSFER,
-            ProviderCapability.IMAGE_TO_IMAGE,
         ],
-        max_resolution="1K",
-        supports_aspect_ratios=["1:1", "16:9", "9:16"],
-        pricing_per_unit=0.02,
-        quality_score=0.86,
-        latency_estimate=15.0,
+        max_resolution="2K",
+        supports_aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4"],
+        pricing_per_unit=0.03,
+        quality_score=0.87,
+        latency_estimate=18.0,
         is_default=False,
         region=ProviderRegion.CHINA,
         execution_mode=ExecutionMode.ASYNC_TASK,
         auth_type=AuthType.BEARER_TOKEN,
         tier="balanced",
-        hidden=True,
+        strengths=["image-editing", "chinese-style"],
     ),
 ]
 
@@ -126,6 +110,7 @@ ALIBABA_MODELS = [
 DASHSCOPE_MODEL_MAP = {
     "qwen-image": "wanx-v1",
     "wan2.6-t2i": "wan2.6-t2i",
+    "wanx2.1-imageedit": "wanx2.1-imageedit",
 }
 
 # Size mappings for Alibaba API
@@ -208,6 +193,14 @@ class AlibabaProvider(ChinaImageProvider):
         """Convert aspect ratio to size string for API."""
         return SIZE_MAP.get(aspect_ratio, "1024*1024")
 
+    @staticmethod
+    def _image_to_data_url(img: Image.Image) -> str:
+        """Convert a PIL Image to a data: URL for the DashScope API."""
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        return f"data:image/png;base64,{b64}"
+
     async def submit_task(
         self,
         request: GenerationRequest,
@@ -224,6 +217,10 @@ class AlibabaProvider(ChinaImageProvider):
             Task ID string
         """
         client = await self._get_client()
+
+        # Route to image editing if applicable
+        if model.id == "wanx2.1-imageedit":
+            return await self._submit_edit_task(client, request, model)
 
         # Build payload based on model type
         if model.id in ("qwen-image", "wan2.6-t2i"):
@@ -254,15 +251,6 @@ class AlibabaProvider(ChinaImageProvider):
                 json=payload,
             )
 
-        elif model.id == "wanx-sketch-to-image-v1":
-            # Sketch to image (requires reference image)
-            if not request.reference_images:
-                raise ValueError("Sketch-to-image requires a reference image")
-
-            # Note: In production, you'd upload the image first and get a URL
-            # For now, we'll raise an error since this requires additional setup
-            raise NotImplementedError("Sketch-to-image requires image upload, not yet implemented")
-
         else:
             # Default text to image
             payload = {
@@ -280,7 +268,55 @@ class AlibabaProvider(ChinaImageProvider):
                 json=payload,
             )
 
-        # Check response
+        return self._extract_task_id(response)
+
+    async def _submit_edit_task(
+        self,
+        client: httpx.AsyncClient,
+        request: GenerationRequest,
+        model: ProviderModel,
+    ) -> str:
+        """Submit an image editing task (inpaint/outpaint/style transfer)."""
+        if not request.reference_images:
+            raise ValueError("Image editing requires a reference image")
+
+        input_data: dict = {
+            "prompt": request.prompt,
+            "image_url": self._image_to_data_url(request.reference_images[0]),
+        }
+
+        # Determine the function (edit type) based on edit_mode
+        function = "description_edit"  # default: style / description-based edit
+        if request.edit_mode in ("inpaint_insert", "inpaint_remove"):
+            function = "inpainting"
+            if request.mask_image:
+                input_data["mask_url"] = self._image_to_data_url(request.mask_image)
+        elif request.edit_mode == "outpaint":
+            function = "outpainting"
+
+        payload = {
+            "model": DASHSCOPE_MODEL_MAP.get(model.id, model.id),
+            "input": input_data,
+            "parameters": {
+                "function": function,
+                "size": self._get_size(request.aspect_ratio),
+                "n": 1,
+            },
+        }
+
+        if request.negative_prompt:
+            payload["input"]["negative_prompt"] = request.negative_prompt
+
+        response = await client.post(
+            "/services/aigc/image2image/image-synthesis",
+            json=payload,
+        )
+
+        return self._extract_task_id(response)
+
+    @staticmethod
+    def _extract_task_id(response: httpx.Response) -> str:
+        """Extract task_id from a DashScope API response."""
         if response.status_code not in [200, 201]:
             error_data = {}
             with contextlib.suppress(Exception):
@@ -294,8 +330,7 @@ class AlibabaProvider(ChinaImageProvider):
 
         data = response.json()
 
-        # Extract task ID from response
-        # DashScope returns: {"output": {"task_id": "xxx", "task_status": "PENDING"}, "request_id": "xxx"}
+        # DashScope returns: {"output": {"task_id": "xxx", "task_status": "PENDING"}, ...}
         task_id = data.get("output", {}).get("task_id")
         if not task_id:
             raise Exception(f"No task_id in response: {data}")

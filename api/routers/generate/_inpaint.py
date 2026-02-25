@@ -34,6 +34,7 @@ from services import (
     get_friendly_error_message,
     get_provider_router,
 )
+from services.providers.base import ProviderCapability
 from services.storage import get_storage_manager
 
 from ._helpers import build_provider_request
@@ -170,12 +171,13 @@ async def _inpaint_sync(
         edit_mode=edit_mode,
         mask_mode=request.mask_mode.value,
         mask_dilation=request.mask_dilation,
+        required_capability=ProviderCapability.INPAINTING,
     )
 
     router_instance = get_provider_router()
 
     try:
-        result = await router_instance.execute(
+        result = await router_instance.execute_with_fallback(
             request=provider_request,
             media_type=MediaType.IMAGE,
         )

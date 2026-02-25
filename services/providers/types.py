@@ -163,6 +163,7 @@ class GenerationRequest:
     preferred_provider: str | None = None
     preferred_model: str | None = None
     preferred_region: ProviderRegion | None = None  # Region preference for routing
+    required_capability: ProviderCapability | None = None  # Filter providers by capability
     # Features
     enable_thinking: bool = False
     enable_search: bool = False

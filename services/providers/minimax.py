@@ -62,7 +62,6 @@ MINIMAX_MODELS = [
         media_type=MediaType.IMAGE,
         capabilities=[
             ProviderCapability.TEXT_TO_IMAGE,
-            ProviderCapability.UPSCALING,
         ],
         max_resolution="4K",
         supports_aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4"],

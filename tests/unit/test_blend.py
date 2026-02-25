@@ -102,7 +102,7 @@ class TestBlendSuccess:
         storage_mock.save_image = AsyncMock(return_value=_make_storage_obj())
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(return_value=_make_fake_result())
+        router_mock.execute_with_fallback = AsyncMock(return_value=_make_fake_result())
 
         with _patch_blend_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
@@ -130,7 +130,7 @@ class TestBlendSuccess:
         storage_mock.save_image = AsyncMock(return_value=_make_storage_obj())
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(return_value=_make_fake_result())
+        router_mock.execute_with_fallback = AsyncMock(return_value=_make_fake_result())
 
         with _patch_blend_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
@@ -149,7 +149,7 @@ class TestBlendSuccess:
         storage_mock.save_image = AsyncMock(return_value=_make_storage_obj())
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(return_value=_make_fake_result())
+        router_mock.execute_with_fallback = AsyncMock(return_value=_make_fake_result())
 
         with _patch_blend_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
@@ -168,7 +168,7 @@ class TestBlendSuccess:
         storage_mock.save_image = AsyncMock(return_value=_make_storage_obj())
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(return_value=_make_fake_result())
+        router_mock.execute_with_fallback = AsyncMock(return_value=_make_fake_result())
 
         with _patch_blend_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
@@ -179,7 +179,7 @@ class TestBlendSuccess:
         assert response.status_code == 200
 
         # Verify the provider request was built with google
-        call_args = router_mock.execute.call_args
+        call_args = router_mock.execute_with_fallback.call_args
         provider_request = call_args.kwargs.get("request") or call_args[0][0]
         assert provider_request.preferred_provider == "google"
 
@@ -194,7 +194,7 @@ class TestBlendSuccess:
         storage_mock.save_image = AsyncMock(return_value=_make_storage_obj())
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(return_value=_make_fake_result())
+        router_mock.execute_with_fallback = AsyncMock(return_value=_make_fake_result())
 
         image_repo = MagicMock()
         image_repo.create = AsyncMock(return_value=None)
@@ -284,7 +284,7 @@ class TestBlendErrors:
         storage_mock.load_image = AsyncMock(return_value=fake_img)
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(
+        router_mock.execute_with_fallback = AsyncMock(
             return_value=_make_fake_result(success=False, error="Model overloaded")
         )
 
@@ -303,7 +303,9 @@ class TestBlendErrors:
         storage_mock.load_image = AsyncMock(return_value=fake_img)
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(side_effect=ValueError("No providers configured"))
+        router_mock.execute_with_fallback = AsyncMock(
+            side_effect=ValueError("No providers configured")
+        )
 
         with _patch_blend_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
@@ -322,7 +324,7 @@ class TestBlendErrors:
         storage_mock.save_image = AsyncMock(side_effect=Exception("Disk full"))
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(return_value=_make_fake_result())
+        router_mock.execute_with_fallback = AsyncMock(return_value=_make_fake_result())
 
         with _patch_blend_deps(mock_redis, storage_mock, router_mock):
             response = client.post(

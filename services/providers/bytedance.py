@@ -43,8 +43,6 @@ BYTEDANCE_MODELS = [
         media_type=MediaType.IMAGE,
         capabilities=[
             ProviderCapability.TEXT_TO_IMAGE,
-            ProviderCapability.IMAGE_TO_IMAGE,
-            ProviderCapability.UPSCALING,
         ],
         max_resolution="4K",
         supports_aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"],
@@ -476,15 +474,9 @@ class ByteDanceProvider(ChinaImageProvider):
         if mapped_status == "failed":
             error = task_data.get("err_msg") or task_data.get("message")
 
-        # Calculate progress
-        progress = None
-        if mapped_status == "processing":
-            progress = 0.5  # Generic progress for processing state
-
         return TaskInfo(
             task_id=task_id,
             status=mapped_status,
-            progress=progress,
             result_url=result_url,
             result_urls=result_urls,
             error=error,

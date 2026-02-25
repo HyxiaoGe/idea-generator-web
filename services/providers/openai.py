@@ -43,6 +43,7 @@ OPENAI_MODELS = [
         capabilities=[
             ProviderCapability.TEXT_TO_IMAGE,
             ProviderCapability.IMAGE_TO_IMAGE,
+            ProviderCapability.INPAINTING,
         ],
         max_resolution="4K",
         supports_aspect_ratios=["1:1", "16:9", "9:16"],
@@ -51,7 +52,7 @@ OPENAI_MODELS = [
         latency_estimate=10.0,
         is_default=True,
         tier="balanced",
-        strengths=["versatility", "instruction-following"],
+        strengths=["versatility", "instruction-following", "inpainting"],
     ),
     ProviderModel(
         id="gpt-image-1-hd",
@@ -231,6 +232,14 @@ class OpenAIProvider(HTTPProviderMixin, BaseImageProvider):
             return result
 
         result.model = model.id
+
+        # Route to inpaint/edit endpoint if applicable
+        if (
+            model.id.startswith("gpt-image")
+            and request.edit_mode in ("inpaint_insert", "inpaint_remove")
+            and request.reference_images
+        ):
+            return await self._edit_image(request, model, result, start_time)
 
         # Determine API endpoint and parameters based on model
         if model.id.startswith("gpt-image"):
@@ -418,6 +427,151 @@ class OpenAIProvider(HTTPProviderMixin, BaseImageProvider):
                     delay = config.retry_delays[attempt]
                     logger.warning(
                         f"[OpenAI/DALL-E] Exception on attempt {attempt + 1}: {e}. Retrying..."
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                break
+
+        result.error = last_error
+        result.error_type = classify_error(last_error) if last_error else "unknown"
+        result.retryable = is_retryable_error(last_error) if last_error else False
+        result.duration = time.time() - start_time
+        return result
+
+    @staticmethod
+    def _prepare_image_for_upload(img: Image.Image, target_format: str = "PNG") -> bytes:
+        """Convert PIL Image to bytes for multipart upload."""
+        buf = BytesIO()
+        img.save(buf, format=target_format)
+        buf.seek(0)
+        return buf.read()
+
+    @staticmethod
+    def _prepare_mask_for_openai(mask: Image.Image) -> bytes:
+        """Convert mask to OpenAI format (RGBA PNG where transparent = edit area).
+
+        OpenAI expects transparent areas to indicate where editing should occur.
+        Input mask convention: white (255) = edit area, black (0) = keep area.
+        Output: RGBA PNG where edit areas have alpha=0 (transparent).
+        """
+        mask_gray = mask.convert("L")
+        # Create RGBA: fully black image with alpha channel from inverted mask
+        # White in input → alpha 0 (transparent) → edit area
+        # Black in input → alpha 255 (opaque) → keep area
+        from PIL import ImageOps
+
+        inverted = ImageOps.invert(mask_gray)
+        rgba = Image.new("RGBA", mask_gray.size, (0, 0, 0, 255))
+        rgba.putalpha(inverted)
+
+        buf = BytesIO()
+        rgba.save(buf, format="PNG")
+        buf.seek(0)
+        return buf.read()
+
+    async def _edit_image(
+        self,
+        request: GenerationRequest,
+        model: ProviderModel,
+        result: GenerationResult,
+        start_time: float,
+    ) -> GenerationResult:
+        """Edit an image using OpenAI /v1/images/edits (inpainting).
+
+        Supports gpt-image-1 model with reference image + optional mask.
+        """
+        client = await self._get_client()
+
+        # Prepare source image
+        source_img = request.reference_images[0]
+        image_bytes = self._prepare_image_for_upload(source_img)
+
+        # Prepare mask if provided
+        mask_bytes = None
+        if request.mask_image:
+            mask_bytes = self._prepare_mask_for_openai(request.mask_image)
+
+        # Build multipart form data
+        size = self._get_size_for_request(request.aspect_ratio, request.resolution)
+
+        # Execute with retry
+        config = self.RETRY_CONFIG
+        last_error = None
+        for attempt in range(config.max_retries + 1):
+            try:
+                # Build multipart files — must use fresh tuples each attempt
+                files = {
+                    "image": ("image.png", image_bytes, "image/png"),
+                }
+                if mask_bytes:
+                    files["mask"] = ("mask.png", mask_bytes, "image/png")
+
+                data = {
+                    "model": "gpt-image-1",
+                    "prompt": request.prompt,
+                    "n": "1",
+                    "size": size,
+                    "response_format": "b64_json",
+                }
+
+                # The /images/edits endpoint uses multipart, so we must not
+                # send the default Content-Type: application/json header.
+                headers = {
+                    "Authorization": f"Bearer {self._api_key}",
+                }
+                headers.update(self._extra_headers)
+
+                response = await client.post(
+                    "/images/edits",
+                    data=data,
+                    files=files,
+                    headers=headers,
+                )
+
+                if response.status_code == 200:
+                    resp_data = response.json()
+                    if resp_data.get("data") and len(resp_data["data"]) > 0:
+                        image_b64 = resp_data["data"][0].get("b64_json")
+                        if image_b64:
+                            image_data = base64.b64decode(image_b64)
+                            result.image = Image.open(BytesIO(image_data))
+                            result.success = True
+                            result.duration = time.time() - start_time
+                            result.cost = self._estimate_cost(model, request.resolution)
+                            self._record_stats(result.duration)
+                            return result
+
+                # Handle errors
+                error_data = response.json() if response.status_code != 200 else {}
+                error_msg = error_data.get("error", {}).get(
+                    "message", f"HTTP {response.status_code}"
+                )
+                last_error = error_msg
+
+                if self._is_safety_error(error_msg):
+                    result.safety_blocked = True
+                    result.error = "Content blocked by safety filter"
+                    result.error_type = "safety_blocked"
+                    result.duration = time.time() - start_time
+                    return result
+
+                if is_retryable_error(error_msg) and attempt < config.max_retries:
+                    delay = config.retry_delays[attempt]
+                    logger.warning(
+                        f"[OpenAI/Edit] Retryable error on attempt {attempt + 1}: {error_msg}. "
+                        f"Retrying in {delay}s..."
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+
+                break
+
+            except Exception as e:
+                last_error = str(e)
+                if is_retryable_error(last_error) and attempt < config.max_retries:
+                    delay = config.retry_delays[attempt]
+                    logger.warning(
+                        f"[OpenAI/Edit] Exception on attempt {attempt + 1}: {e}. Retrying..."
                     )
                     await asyncio.sleep(delay)
                     continue

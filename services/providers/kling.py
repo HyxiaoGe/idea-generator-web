@@ -12,6 +12,7 @@ import contextlib
 import logging
 import os
 import time
+from collections.abc import Callable
 from io import BytesIO
 
 import httpx
@@ -548,11 +549,12 @@ class KlingProvider(HTTPProviderMixin, BaseVideoProvider):
     async def wait_for_completion(
         self,
         task_id: str,
-        timeout: int = 600,  # Kling can generate up to 3 minutes, so longer timeout
+        timeout: float = 600,  # Kling can generate up to 3 minutes, so longer timeout
         poll_interval: float = 10.0,
+        on_progress: Callable[[float], None] | None = None,
     ) -> dict:
         """Wait for completion with Kling-specific longer timeout."""
-        return await super().wait_for_completion(task_id, timeout, poll_interval)
+        return await super().wait_for_completion(task_id, timeout, poll_interval, on_progress)
 
     async def health_check(self) -> dict:
         """Perform a health check on this provider."""

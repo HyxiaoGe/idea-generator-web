@@ -109,7 +109,7 @@ class TestOutpaintSuccess:
         storage_mock.save_image = AsyncMock(return_value=_make_storage_obj())
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(return_value=_make_fake_result())
+        router_mock.execute_with_fallback = AsyncMock(return_value=_make_fake_result())
 
         with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
@@ -138,7 +138,7 @@ class TestOutpaintSuccess:
         storage_mock.save_image = AsyncMock(return_value=_make_storage_obj())
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(return_value=_make_fake_result())
+        router_mock.execute_with_fallback = AsyncMock(return_value=_make_fake_result())
 
         with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
@@ -159,7 +159,7 @@ class TestOutpaintSuccess:
         storage_mock.save_image = AsyncMock(return_value=_make_storage_obj())
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(return_value=_make_fake_result())
+        router_mock.execute_with_fallback = AsyncMock(return_value=_make_fake_result())
 
         with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
@@ -169,7 +169,7 @@ class TestOutpaintSuccess:
 
         assert response.status_code == 200
 
-        call_args = router_mock.execute.call_args
+        call_args = router_mock.execute_with_fallback.call_args
         provider_request = call_args.kwargs.get("request") or call_args[0][0]
         assert provider_request.preferred_provider == "google"
         assert provider_request.edit_mode == "outpaint"
@@ -184,7 +184,7 @@ class TestOutpaintSuccess:
         storage_mock.save_image = AsyncMock(return_value=_make_storage_obj())
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(return_value=_make_fake_result())
+        router_mock.execute_with_fallback = AsyncMock(return_value=_make_fake_result())
 
         with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
@@ -194,7 +194,7 @@ class TestOutpaintSuccess:
 
         assert response.status_code == 200
 
-        call_args = router_mock.execute.call_args
+        call_args = router_mock.execute_with_fallback.call_args
         provider_request = call_args.kwargs.get("request") or call_args[0][0]
         assert provider_request.mask_image is not None
         assert provider_request.reference_images is not None
@@ -213,7 +213,7 @@ class TestOutpaintSuccess:
         storage_mock.save_image = AsyncMock(return_value=_make_storage_obj())
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(return_value=_make_fake_result())
+        router_mock.execute_with_fallback = AsyncMock(return_value=_make_fake_result())
 
         image_repo = MagicMock()
         image_repo.create = AsyncMock(return_value=None)
@@ -322,7 +322,7 @@ class TestOutpaintErrors:
         storage_mock.load_image = AsyncMock(side_effect=[source_img, mask_img])
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(
+        router_mock.execute_with_fallback = AsyncMock(
             return_value=_make_fake_result(success=False, error="Model overloaded")
         )
 
@@ -343,7 +343,9 @@ class TestOutpaintErrors:
         storage_mock.load_image = AsyncMock(side_effect=[source_img, mask_img])
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(side_effect=ValueError("No providers configured"))
+        router_mock.execute_with_fallback = AsyncMock(
+            side_effect=ValueError("No providers configured")
+        )
 
         with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(
@@ -364,7 +366,7 @@ class TestOutpaintErrors:
         storage_mock.save_image = AsyncMock(side_effect=Exception("Disk full"))
 
         router_mock = MagicMock()
-        router_mock.execute = AsyncMock(return_value=_make_fake_result())
+        router_mock.execute_with_fallback = AsyncMock(return_value=_make_fake_result())
 
         with _patch_outpaint_deps(mock_redis, storage_mock, router_mock):
             response = client.post(

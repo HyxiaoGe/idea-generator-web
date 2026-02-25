@@ -623,36 +623,57 @@ class BaseVideoProvider(BaseProvider, ABC):
         """Estimate cost for video generation (price per second)."""
         return model.pricing_per_unit * duration
 
+    # Polling configuration (override in subclasses as needed)
+    DEFAULT_POLL_INTERVAL: float = 5.0
+    DEFAULT_TIMEOUT: float = 300.0
+    MAX_POLL_INTERVAL: float = 30.0
+
     async def wait_for_completion(
         self,
         task_id: str,
-        timeout: int = 300,
+        timeout: float = 300,
         poll_interval: float = 5.0,
+        on_progress: Callable[[float], None] | None = None,
     ) -> dict:
         """
         Wait for a video generation task to complete.
 
+        Uses exponential backoff (capped at MAX_POLL_INTERVAL) and supports
+        an optional progress callback.
+
         Args:
             task_id: The task ID to wait for
             timeout: Maximum time to wait in seconds
-            poll_interval: Time between status checks
+            poll_interval: Initial time between status checks
+            on_progress: Optional callback invoked with progress (0.0-1.0)
 
         Returns:
             Final task status dict
         """
         start_time = time.time()
+        interval = poll_interval
 
         while time.time() - start_time < timeout:
-            status = await self.get_task_status(task_id)
+            try:
+                status = await self.get_task_status(task_id)
 
-            if status["status"] in ["completed", "failed", "cancelled"]:
-                return status
+                if on_progress and "progress" in status:
+                    on_progress(status["progress"])
 
-            await asyncio.sleep(poll_interval)
+                if status["status"] in ["completed", "failed", "cancelled"]:
+                    return status
+
+                await asyncio.sleep(interval)
+                # Exponential backoff with cap
+                interval = min(interval * 1.5, self.MAX_POLL_INTERVAL)
+
+            except Exception as e:
+                logger.warning(f"Error polling video task {task_id}: {e}")
+                await asyncio.sleep(interval)
 
         return {
             "status": "failed",
-            "error": "Timeout waiting for video generation",
+            "error": f"Timeout waiting for video generation after {timeout}s",
         }
 
     @abstractmethod

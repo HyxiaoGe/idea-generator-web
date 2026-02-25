@@ -3,9 +3,15 @@ FLUX Provider implementation (Black Forest Labs).
 
 This provider integrates with Black Forest Labs' FLUX API for image generation,
 offering high-quality images at competitive pricing.
+
+Supports:
+- Text-to-image (FLUX 2 Pro, 1.1 Pro, Dev, Schnell)
+- Fill (inpainting/outpainting via flux-pro-1.0-fill)
+- Kontext (image-to-image editing via flux-pro-1.1-kontext)
 """
 
 import asyncio
+import base64
 import logging
 import os
 import time
@@ -104,6 +110,41 @@ FLUX_MODELS = [
         tier="fast",
         strengths=["speed", "cheapest"],
     ),
+    ProviderModel(
+        id="flux-fill",
+        name="FLUX Fill",
+        provider="bfl",
+        media_type=MediaType.IMAGE,
+        capabilities=[
+            ProviderCapability.INPAINTING,
+            ProviderCapability.OUTPAINTING,
+        ],
+        max_resolution="2K",
+        supports_aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4"],
+        pricing_per_unit=0.05,
+        quality_score=0.90,
+        latency_estimate=10.0,
+        is_default=False,
+        tier="balanced",
+        strengths=["inpainting", "outpainting"],
+    ),
+    ProviderModel(
+        id="flux-kontext",
+        name="FLUX Kontext",
+        provider="bfl",
+        media_type=MediaType.IMAGE,
+        capabilities=[
+            ProviderCapability.IMAGE_TO_IMAGE,
+        ],
+        max_resolution="2K",
+        supports_aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4"],
+        pricing_per_unit=0.04,
+        quality_score=0.91,
+        latency_estimate=8.0,
+        is_default=False,
+        tier="balanced",
+        strengths=["multi-turn-editing", "style-consistency"],
+    ),
 ]
 
 # Aspect ratio to width/height mapping
@@ -199,13 +240,22 @@ class FluxProvider(HTTPProviderMixin, BaseImageProvider):
 
         return width, height
 
+    @staticmethod
+    def _image_to_base64(img: Image.Image) -> str:
+        """Convert PIL Image to base64-encoded JPEG string."""
+        buf = BytesIO()
+        img.save(buf, format="JPEG")
+        return base64.b64encode(buf.getvalue()).decode()
+
     def _get_api_model_name(self, model_id: str) -> str:
         """Convert internal model ID to API model name."""
         model_map = {
-            "flux-2-pro": "flux-pro-1.1",  # Latest pro model
+            "flux-2-pro": "flux-pro-1.1",
             "flux-1.1-pro": "flux-pro-1.1",
             "flux-dev": "flux-dev",
             "flux-schnell": "flux-schnell",
+            "flux-fill": "flux-pro-1.0-fill",
+            "flux-kontext": "flux-kontext-pro",
         }
         return model_map.get(model_id, "flux-pro-1.1")
 
@@ -233,6 +283,12 @@ class FluxProvider(HTTPProviderMixin, BaseImageProvider):
             return result
 
         result.model = model.id
+
+        # Route to fill or kontext if applicable
+        if model.id == "flux-fill" and request.reference_images:
+            return await self._generate_fill(request, model, result, start_time)
+        if model.id == "flux-kontext" and request.reference_images:
+            return await self._generate_kontext(request, model, result, start_time)
 
         # Get dimensions
         width, height = self._get_dimensions(request.aspect_ratio, request.resolution)
@@ -348,6 +404,165 @@ class FluxProvider(HTTPProviderMixin, BaseImageProvider):
                 if not last_error:
                     last_error = "Generation timed out"
 
+                break
+
+            except Exception as e:
+                last_error = str(e)
+                if is_retryable_error(last_error) and attempt < config.max_retries:
+                    delay = config.retry_delays[attempt]
+                    logger.warning(f"[FLUX] Exception: {e}. Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                    continue
+                break
+
+        result.error = last_error
+        result.error_type = classify_error(last_error) if last_error else "unknown"
+        result.retryable = is_retryable_error(last_error) if last_error else False
+        result.duration = time.time() - start_time
+        return result
+
+    async def _generate_fill(
+        self,
+        request: GenerationRequest,
+        model: ProviderModel,
+        result: GenerationResult,
+        start_time: float,
+    ) -> GenerationResult:
+        """Inpaint/outpaint using FLUX Fill (flux-pro-1.0-fill).
+
+        Sends image + mask as base64, polls for result.
+        """
+        client = await self._get_client()
+        api_model = self._get_api_model_name(model.id)
+
+        image_b64 = self._image_to_base64(request.reference_images[0])
+
+        payload = {
+            "prompt": request.prompt,
+            "image": image_b64,
+        }
+
+        if request.mask_image:
+            mask_b64 = self._image_to_base64(request.mask_image)
+            payload["mask"] = mask_b64
+
+        if request.seed is not None:
+            payload["seed"] = request.seed
+
+        return await self._submit_and_poll(client, api_model, payload, model, result, start_time)
+
+    async def _generate_kontext(
+        self,
+        request: GenerationRequest,
+        model: ProviderModel,
+        result: GenerationResult,
+        start_time: float,
+    ) -> GenerationResult:
+        """Image-to-image editing using FLUX Kontext (flux-kontext-pro).
+
+        Sends reference image as base64 with editing prompt.
+        """
+        client = await self._get_client()
+        api_model = self._get_api_model_name(model.id)
+
+        image_b64 = self._image_to_base64(request.reference_images[0])
+
+        payload = {
+            "prompt": request.prompt,
+            "image": image_b64,
+        }
+
+        if request.seed is not None:
+            payload["seed"] = request.seed
+
+        return await self._submit_and_poll(client, api_model, payload, model, result, start_time)
+
+    async def _submit_and_poll(
+        self,
+        client: httpx.AsyncClient,
+        api_model: str,
+        payload: dict,
+        model: ProviderModel,
+        result: GenerationResult,
+        start_time: float,
+    ) -> GenerationResult:
+        """Submit a task and poll for completion (shared by fill/kontext/text2image)."""
+        config = self.RETRY_CONFIG
+        last_error = None
+
+        for attempt in range(config.max_retries + 1):
+            try:
+                response = await client.post(f"/{api_model}", json=payload)
+
+                if response.status_code != 200:
+                    error_data = (
+                        response.json()
+                        if response.headers.get("content-type", "").startswith("application/json")
+                        else {}
+                    )
+                    error_msg = error_data.get("error", {}).get(
+                        "message", f"HTTP {response.status_code}"
+                    )
+                    last_error = error_msg
+
+                    if is_retryable_error(error_msg) and attempt < config.max_retries:
+                        delay = config.retry_delays[attempt]
+                        logger.warning(
+                            f"[FLUX] Retryable error: {error_msg}. Retrying in {delay}s..."
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    break
+
+                data = response.json()
+                task_id = data.get("id")
+
+                if not task_id:
+                    last_error = "No task ID returned"
+                    break
+
+                # Poll for result
+                poll_url = f"/get_result?id={task_id}"
+                max_polls = 60
+                poll_interval = 2.0
+
+                for _poll in range(max_polls):
+                    await asyncio.sleep(poll_interval)
+                    poll_response = await client.get(poll_url)
+
+                    if poll_response.status_code != 200:
+                        continue
+
+                    poll_data = poll_response.json()
+                    status = poll_data.get("status")
+
+                    if status == "Ready":
+                        image_url = poll_data.get("result", {}).get("sample")
+                        if image_url:
+                            img_response = await client.get(image_url)
+                            if img_response.status_code == 200:
+                                result.image = Image.open(BytesIO(img_response.content))
+                                result.success = True
+                                result.duration = time.time() - start_time
+                                result.cost = self._estimate_cost(model, "1K")
+                                self._record_stats(result.duration)
+                                return result
+
+                        last_error = "Failed to download generated image"
+                        break
+
+                    elif status in ("Failed", "Error"):
+                        last_error = poll_data.get("error", "Generation failed")
+                        if self._is_safety_error(last_error):
+                            result.safety_blocked = True
+                            result.error = "Content blocked by safety filter"
+                            result.error_type = "safety_blocked"
+                            result.duration = time.time() - start_time
+                            return result
+                        break
+
+                if not last_error:
+                    last_error = "Generation timed out"
                 break
 
             except Exception as e:

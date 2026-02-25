@@ -20,6 +20,7 @@ from .providers.base import (
     GenerationRequest,
     GenerationResult,
     MediaType,
+    ProviderCapability,
     ProviderConfig,
     ProviderRegion,
     is_retryable_error,
@@ -271,6 +272,24 @@ class ProviderRouter:
             )
             logger.info("Registered FLUX (BFL) provider")
 
+        # Register Stability AI provider if enabled
+        if settings.provider_stability_enabled and settings.provider_stability_api_key:
+            from .providers.stability import StabilityProvider
+
+            self._registry.register_image_provider(
+                name="stability",
+                display_name="Stability AI",
+                provider_class=StabilityProvider,
+                priority=settings.provider_stability_priority,
+                enabled=True,
+                config=ProviderConfig(
+                    enabled=True,
+                    api_key=settings.provider_stability_api_key,
+                    priority=settings.provider_stability_priority,
+                ),
+            )
+            logger.info("Registered Stability AI provider")
+
         # ============ Chinese Image Providers ============
 
         # Register Alibaba (通义万相) provider if enabled
@@ -349,6 +368,47 @@ class ProviderRouter:
             )
             logger.info("Registered MiniMax provider")
 
+        # ============ Video Providers ============
+
+        # Register Runway provider if enabled
+        if settings.provider_runway_enabled and settings.provider_runway_api_key:
+            from .providers.runway import RunwayProvider
+
+            self._registry.register_video_provider(
+                name="runway",
+                display_name="Runway ML",
+                provider_class=RunwayProvider,
+                priority=settings.provider_runway_priority,
+                enabled=True,
+                config=ProviderConfig(
+                    enabled=True,
+                    api_key=settings.provider_runway_api_key,
+                    priority=settings.provider_runway_priority,
+                ),
+            )
+            logger.info("Registered Runway video provider")
+
+        # Register Kling provider if enabled
+        if settings.provider_kling_enabled and settings.provider_kling_api_key:
+            from .providers.kling import KlingProvider
+
+            self._registry.register_video_provider(
+                name="kling",
+                display_name="Kling AI",
+                provider_class=KlingProvider,
+                priority=settings.provider_kling_priority,
+                enabled=True,
+                config=ProviderConfig(
+                    enabled=True,
+                    api_key=settings.provider_kling_api_key,
+                    priority=settings.provider_kling_priority,
+                    extra={"secret_key": settings.provider_kling_secret_key}
+                    if settings.provider_kling_secret_key
+                    else {},
+                ),
+            )
+            logger.info("Registered Kling video provider")
+
     async def route(
         self,
         request: GenerationRequest,
@@ -371,23 +431,35 @@ class ProviderRouter:
         strategy = strategy or self._settings.default_routing_strategy
         strategy_enum = RoutingStrategy(strategy) if strategy else RoutingStrategy.PRIORITY
 
-        # If user specified a provider, use it
+        # If user specified a provider, use it (but verify capability if required)
         if request.preferred_provider:
             provider = self._get_provider(request.preferred_provider, media_type)
             if provider and provider.is_available:
-                model = (
-                    provider.get_model_by_id(request.preferred_model)
-                    if request.preferred_model and hasattr(provider, "get_model_by_id")
-                    else provider.get_default_model()
-                )
-                return RoutingDecision(
-                    provider_name=provider.name,
-                    model_id=model.id if model else "",
-                    estimated_cost=model.pricing_per_unit if model else 0,
-                    estimated_latency=model.latency_estimate if model else 10,
-                    fallback_providers=self._get_fallback_list(provider.name, media_type),
-                    strategy_used="user_specified",
-                )
+                # Check capability if required
+                if request.required_capability and not self._provider_has_capability(
+                    provider, request.required_capability
+                ):
+                    logger.warning(
+                        "Preferred provider %s lacks capability %s, ignoring preference",
+                        request.preferred_provider,
+                        request.required_capability,
+                    )
+                else:
+                    model = (
+                        provider.get_model_by_id(request.preferred_model)
+                        if request.preferred_model and hasattr(provider, "get_model_by_id")
+                        else provider.get_default_model()
+                    )
+                    return RoutingDecision(
+                        provider_name=provider.name,
+                        model_id=model.id if model else "",
+                        estimated_cost=model.pricing_per_unit if model else 0,
+                        estimated_latency=model.latency_estimate if model else 10,
+                        fallback_providers=self._get_fallback_list(
+                            provider.name, media_type, request.required_capability
+                        ),
+                        strategy_used="user_specified",
+                    )
 
         # Get available providers
         if media_type == MediaType.IMAGE:
@@ -417,6 +489,19 @@ class ProviderRouter:
             if region_providers:
                 available_providers = region_providers
             # If no providers in preferred region, continue with all
+
+        # Filter by required capability
+        if request.required_capability:
+            cap_providers = [
+                p
+                for p in available_providers
+                if self._provider_has_capability(p, request.required_capability)
+            ]
+            if not cap_providers:
+                raise ValueError(
+                    f"No available provider supports {request.required_capability.value}"
+                )
+            available_providers = cap_providers
 
         # Select based on strategy
         if strategy_enum == RoutingStrategy.COST:
@@ -449,7 +534,9 @@ class ProviderRouter:
             model_id=model.id,
             estimated_cost=model.pricing_per_unit,
             estimated_latency=model.latency_estimate,
-            fallback_providers=self._get_fallback_list(provider.name, media_type),
+            fallback_providers=self._get_fallback_list(
+                provider.name, media_type, request.required_capability
+            ),
             strategy_used=strategy_enum.value,
             region=provider_region,
         )
@@ -613,8 +700,7 @@ class ProviderRouter:
                     cost=0,
                 )
                 logger.warning(
-                    f"Provider {provider_name} timed out after {timeout}s, "
-                    f"moving to next fallback"
+                    f"Provider {provider_name} timed out after {timeout}s, moving to next fallback"
                 )
 
                 result = GenerationResult(
@@ -795,14 +881,41 @@ class ProviderRouter:
         # No region preference or no providers in region - select by quality
         return self._select_by_quality(providers, request)
 
-    def _get_fallback_list(self, exclude: str, media_type: MediaType) -> list[str]:
-        """Get fallback provider list excluding the primary."""
+    def _provider_has_capability(self, provider, capability: ProviderCapability) -> bool:
+        """Check if any non-hidden model of a provider supports the given capability."""
+        for model in provider.models:
+            if not model.hidden and model.supports_capability(capability):
+                return True
+        return False
+
+    def _get_fallback_list(
+        self,
+        exclude: str,
+        media_type: MediaType,
+        required_capability: ProviderCapability | None = None,
+    ) -> list[str]:
+        """Get fallback provider list excluding the primary.
+
+        When required_capability is set, only includes providers that support it.
+        """
         if media_type == MediaType.IMAGE:
             fallbacks = self._settings.fallback_image_providers
         else:
             fallbacks = self._settings.fallback_video_providers
 
-        return [p for p in fallbacks if p != exclude]
+        result = [p for p in fallbacks if p != exclude]
+
+        if required_capability:
+            result = [
+                name
+                for name in result
+                if (
+                    (provider := self._get_provider(name, media_type))
+                    and self._provider_has_capability(provider, required_capability)
+                )
+            ]
+
+        return result
 
     def _record_result(self, provider_name: str, result: GenerationResult) -> None:
         """Record result for health tracking."""

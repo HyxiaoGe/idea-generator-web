@@ -79,6 +79,7 @@ from .registry import (
 
 # Video provider implementations
 from .runway import RunwayProvider
+from .stability import StabilityProvider
 from .zhipu import ZhipuProvider
 
 __all__ = [
@@ -140,6 +141,7 @@ __all__ = [
     "GoogleProvider",
     "OpenAIProvider",
     "FluxProvider",
+    "StabilityProvider",
     # Video Providers
     "RunwayProvider",
     "KlingProvider",
