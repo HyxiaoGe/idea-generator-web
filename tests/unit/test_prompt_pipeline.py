@@ -105,17 +105,18 @@ class TestPipelinePassthrough:
 class TestTemplateRendering:
     @pytest.mark.asyncio
     async def test_template_renders_placeholder(self):
-        """Template {{placeholder}} is replaced with user prompt."""
+        """Template prompt_text is used directly as the final prompt."""
         pipeline = PromptPipeline()
 
         template_id = str(uuid4())
         mock_template = MagicMock()
         mock_template.id = template_id
-        mock_template.prompt_template = "A photo of {{subject}} in cyberpunk style"
+        mock_template.prompt_text = "A photo of a cat in cyberpunk style"
+        mock_template.display_name_en = "Cyberpunk Template"
 
         mock_repo = AsyncMock()
         mock_repo.get_by_id.return_value = mock_template
-        mock_repo.increment_use_count.return_value = None
+        mock_repo.record_usage.return_value = None
 
         with patch("services.prompt_pipeline.get_settings") as mock_settings:
             settings = MagicMock()
@@ -131,7 +132,8 @@ class TestTemplateRendering:
             )
 
         assert result.final == "A photo of a cat in cyberpunk style"
-        mock_repo.increment_use_count.assert_awaited_once()
+        assert result.template_used is True
+        mock_repo.record_usage.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_template_not_found(self):
