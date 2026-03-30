@@ -11,7 +11,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     git \
@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y \
 COPY pyproject.toml README.md ./
 
 # Install Python dependencies
-RUN pip install .
+RUN pip install --no-cache-dir .
 
 # Copy application code
 COPY . .

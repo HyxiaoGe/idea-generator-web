@@ -19,6 +19,7 @@ services:
     env_file:
       - .env
     volumes:
+      - .:/app
       - ./outputs:/app/outputs
     restart: unless-stopped
     healthcheck:
@@ -46,6 +47,7 @@ services:
     env_file:
       - .env
     volumes:
+      - .:/app
       - ./outputs:/app/outputs
     restart: unless-stopped
     networks:
