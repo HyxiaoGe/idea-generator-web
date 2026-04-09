@@ -28,6 +28,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    mem_limit: 512m
     networks:
       - nano-banana-network
 
@@ -50,6 +51,7 @@ services:
       - .:/app
       - ./outputs:/app/outputs
     restart: unless-stopped
+    mem_limit: 512m
     networks:
       - nano-banana-network
 
